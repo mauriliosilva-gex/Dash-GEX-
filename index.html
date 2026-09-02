@@ -1,14 +1,94 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/pt.js"></script>
+    
+    <style>
+        .flatpickr-calendar { background: #0f172a !important; border: 1px solid #1e293b !important; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important; font-family: 'JetBrains Mono', monospace !important; }
+        .flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange { background: #22a7f0 !important; border-color: #22a7f0 !important; font-weight: bold; }
+        .flatpickr-day.inRange { background: rgba(34, 167, 240, 0.1) !important; border-color: transparent !important; box-shadow: -5px 0 0 rgba(34, 167, 240, 0.1), 5px 0 0 rgba(34, 167, 240, 0.1) !important; }
+        .flatpickr-months .flatpickr-month { background: #0a0f1c !important; color: white !important; }
+        .flatpickr-weekdays { background: #0a0f1c !important; }
+
+        /* =========================================
+           1. ESTILOS DO RANKING DE RETENÇÃO
+           ========================================= */
+        .row-gold { background: linear-gradient(90deg, #2b1f00 0%, #5c4700 50%, #2b1f00 100%); box-shadow: inset 0 0 0 1px #d4af37, 0 4px 15px rgba(212, 175, 55, 0.15); }
+        .row-silver { background: linear-gradient(90deg, #1a202c 0%, #334155 50%, #1a202c 100%); box-shadow: inset 0 0 0 1px #94a3b8, 0 4px 15px rgba(148, 163, 184, 0.15); }
+        .row-bronze { background: linear-gradient(90deg, #2d1606 0%, #522709 50%, #2d1606 100%); box-shadow: inset 0 0 0 1px #b45309, 0 4px 15px rgba(180, 83, 9, 0.15); }
+        .row-normal { background: rgba(15, 23, 42, 0.6); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
+        html:not(.dark) .row-normal { background: #ffffff; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05), 0 2px 5px rgba(0,0,0,0.02); }
+
+        /* =========================================
+           2. ANIMAÇÃO DE HOVER (TODAS AS ABAS)
+           ========================================= */
+        .linha-animada {
+            transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+        }
+        .linha-animada:hover {
+            transform: scale(1.012); 
+            filter: brightness(1.15); 
+            z-index: 10;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3); 
+            cursor: pointer;
+        }
+
+        /* =========================================
+           3. BADGE SETOR (GLASSMORPHISM/FOSCO)
+           ========================================= */
+        .badge-setor {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 4px 14px;
+            font-size: 0.65rem;
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        html.dark .badge-setor { background: rgba(255, 255, 255, 0.85); color: #000000; box-shadow: 0 0 12px rgba(255, 255, 255, 0.15); }
+        html:not(.dark) .badge-setor { background: rgba(15, 23, 42, 0.85); color: #ffffff; box-shadow: 0 0 12px rgba(0, 0, 0, 0.15); }
+
+        /* =========================================
+           4. CABEÇALHO FIXO SÓLIDO (FIM DA TRANSPARÊNCIA)
+           ========================================= */
+        .cabecalho-fixo {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background-color: #ffffff; /* Fundo sólido Light */
+            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
+        }
+        html.dark .cabecalho-fixo {
+            background-color: #0a0f1c; /* Fundo sólido Dark igual ao painel */
+            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.3);
+        }
+        /* Tapa o buraco invisível no topo deixado pelo border-spacing */
+        .cabecalho-fixo::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: 0;
+            right: 0;
+            height: 10px;
+            background-color: inherit;
+            z-index: -1;
+        }
+    </style>
+    
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dash GEX</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
         tailwind.config = {
@@ -38,11 +118,10 @@
         :root { --bg-page: #f3f6f9; --grid-color: rgba(0,0,0,0.03); --shape-opacity: 0.15; }
         html.dark { --bg-page: #020617; --grid-color: rgba(255,255,255,0.02); --shape-opacity: 1; }
 
-        body { background-color: var(--bg-page); transition: background-color 0.4s ease; -webkit-font-smoothing: antialiased; }
+        body { background-color: var(--bg-page); transition: background-color 0.4s ease; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
         .bg-grid { position: absolute; inset: 0; z-index: -2; background-image: linear-gradient(45deg, var(--grid-color) 1px, transparent 1px), linear-gradient(-45deg, var(--grid-color) 1px, transparent 1px); background-size: 24px 24px; }
         .glass-panel { @apply shadow-lg transition-colors duration-300; }
 
-        /* Botões */
         .tab-btn { @apply flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 cursor-pointer border border-transparent; }
         .tab-btn-inactive { @apply text-gray-500 dark:text-gray-400 bg-transparent hover:text-white hover:bg-gexBlue/80 hover:scale-105 hover:border-gexCyan/50; }
         .tab-btn-active { @apply bg-gradient-to-r from-gexBlue to-gexCyan text-white shadow-[0_4px_15px_rgba(34,167,240,0.4)] scale-105 border-transparent; }
@@ -50,43 +129,15 @@
         .btn-setor-inativo { @apply bg-gray-100 dark:bg-darkBorder text-gray-500 dark:text-gray-400 hover:text-white hover:bg-gexBlue hover:scale-105; }
         .btn-setor-ativo { @apply bg-gexBlue text-white shadow-[0_4px_10px_rgba(27,82,175,0.4)] scale-105; }
 
-        /* Tabelas e Selects */
-        .select-moderno { @apply bg-white/50 dark:bg-darkBorder border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-white text-xs rounded-lg px-2 py-1 outline-none focus:border-gexCyan cursor-pointer; }
-        .linha-tabela { @apply border-b border-lightBorder dark:border-darkBorder hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer; }
-        .linha-tabela.ativa { @apply bg-gexBlue/10 dark:bg-gexBlue/20 border-gexBlue/30; }
+        .select-moderno { @apply bg-white/50 dark:bg-darkBorder border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-white text-sm rounded-lg px-3 py-1 outline-none focus:border-gexCyan cursor-pointer transition-colors; }
+        html.dark .select-moderno { background: rgba(15, 23, 42, 0.8); }
 
-        /* BARRA DE ROLAGEM GROSSA (Notebook) */
         .custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--gex-cyan) #e2e8f0; }
         html.dark .custom-scrollbar { scrollbar-color: var(--gex-cyan) #1e293b; }
         .custom-scrollbar::-webkit-scrollbar { width: 12px !important; display: block !important; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
         html.dark .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--gex-cyan); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: var(--gex-blue); }
-
-        /* PÓDIO FLAT MODERN */
-        .podium-wrapper { display: flex; align-items: flex-end; justify-content: center; gap: 15px; height: 100%; padding: 0 10px; }
-        .podium-item { display: flex; flex-direction: column; align-items: center; width: 30%; position: relative; cursor: pointer; transition: transform 0.2s; }
-        .podium-item:hover { transform: translateY(-3px); }
-        .podium-avatar { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: white; background-color: #1e293b; margin-bottom: 8px; position: relative; z-index: 10; }
-        .avatar-1 { border: 2px solid #facc15; width: 55px; height: 55px; font-size: 18px; box-shadow: 0 4px 10px rgba(250, 204, 21, 0.2);}
-        .avatar-2 { border: 2px solid #cbd5e1; }
-        .avatar-3 { border: 2px solid #f97316; }
-        .podium-name { font-size: 13px; font-weight: 800; color: #64748b; margin-bottom: 8px; text-align: center; white-space: nowrap;}
-        html.dark .podium-name { color: #cbd5e1; }
-        .name-1 { color: #0284c7; font-size: 14px;}
-        html.dark .name-1 { color: #38bdf8; }
-        .podium-block { width: 100%; border-radius: 8px 8px 0 0; display: flex; justify-content: center; position: relative; background: linear-gradient(180deg, rgba(37, 99, 235, 0.2) 0%, rgba(15, 23, 42, 0.05) 100%); border: 1px solid rgba(59, 130, 246, 0.3); border-bottom: none; }
-        html.dark .podium-block { background: linear-gradient(180deg, rgba(37, 99, 235, 0.4) 0%, rgba(15, 23, 42, 0.1) 100%); }
-        .podium-block::after { content: ''; position: absolute; top: -1px; left: 10%; width: 80%; height: 2px; border-radius: 2px; }
-        .block-1 { height: 100px; z-index: 3;} .block-1::after { background: #facc15; }
-        .block-2 { height: 75px; z-index: 2;}  .block-2::after { background: #cbd5e1; }
-        .block-3 { height: 50px; z-index: 1;}  .block-3::after { background: #f97316; }
-        .pos-badge { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; color: white; font-size: 11px; margin-top: 10px; }
-        .pos-badge-1 { background-color: #ca8a04; border: 2px solid #facc15;}
-        .pos-badge-2 { background-color: #64748b; border: 2px solid #cbd5e1;}
-        .pos-badge-3 { background-color: #c2410c; border: 2px solid #fb923c;}
-        .crown-icon { position: absolute; top: -18px; font-size: 20px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
     </style>
 </head>
 
@@ -100,15 +151,11 @@
             <div class="w-[800px] h-[15px] bg-[#1b52af] rounded-full"></div>
         </div>
         <div class="absolute -bottom-[200px] -left-[120px] w-[350px] h-[650px] border-[22px] border-[#1b52af] rounded-full rotate-[35deg]"></div>
-        <div class="absolute bottom-[60px] right-[80px] flex items-center">
-            <div class="w-[80px] h-[80px] border-[15px] border-[#22a7f0] rounded-2xl rotate-45 translate-x-6"></div>
-            <div class="w-[80px] h-[80px] border-[15px] border-[#10b981] rounded-2xl rotate-45 -translate-x-6"></div>
-        </div>
     </div>
 
     <!-- HEADER -->
     <header class="glass-panel bg-white/95 dark:bg-slate-900/95 border-b border-gray-200 dark:border-black sticky top-0 z-50">
-        <div class="max-w-[1600px] mx-auto px-6 py-4 flex justify-between items-center">
+        <div class="max-w-[1700px] mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center gap-4">
                 <img src="logo.jpg" alt="Logo GEX" class="w-12 h-12 rounded-[14px] shadow-sm object-cover border border-gray-200 dark:border-white/10">
                 <div>
@@ -117,25 +164,24 @@
                 </div>
             </div>
             <div class="flex items-center gap-4">
-                <div class="hidden md:flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-black/30 px-3 py-1.5 rounded-full border border-gray-200 dark:border-transparent">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Última att: Agora
-                </div>
-                <button class="bg-gradient-to-r from-gexCyan to-gexBlue hover:opacity-90 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md transition-all flex items-center gap-2" onclick="carregarDadosReais()">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <button class="bg-gradient-to-r from-gexCyan to-gexBlue hover:opacity-90 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md transition-all flex items-center gap-2" onclick="carregarTudo()">
                     Sincronizar
                 </button>
                 <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
                 <button id="theme-toggle" class="p-2 rounded-lg bg-gray-100 dark:bg-black/30 hover:bg-gray-200 dark:hover:bg-black/50 transition-colors">
-                    <svg id="theme-toggle-light-icon" class="hidden w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path></svg>
-                    <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+                    <svg id="theme-toggle-light-icon" class="hidden w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                    </svg>
                 </button>
             </div>
         </div>
     </header>
 
-    <main class="max-w-[1600px] mx-auto w-full p-6 flex-1 flex flex-col gap-6 relative">
-        <!-- NAVEGAÇÃO DE ABAS RESTAURADA -->
-        <div class="w-full flex justify-center mb-2 z-40">
+    <main class="max-w-[1700px] mx-auto w-full p-6 flex-1 flex flex-col gap-6 relative">
+        <div class="w-full flex justify-center mb-4 z-40">
             <nav class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder p-1.5 rounded-full flex gap-2">
                 <button id="tab-btn-retencao" onclick="mudarAba('retencao')" class="tab-btn tab-btn-active">🏆 Retenção</button>
                 <button id="tab-btn-tickets" onclick="mudarAba('tickets')" class="tab-btn tab-btn-inactive">🎫 Tickets</button>
@@ -145,74 +191,56 @@
 
         <!-- ABA: RETENÇÃO -->
         <div id="aba-retencao" class="block space-y-6">
-            <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-2xl p-5">
-                    <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Meta TRV</h3>
-                    <div class="mt-1"><span id="card-meta-trv" class="text-3xl font-extrabold text-gray-900 dark:text-white">...</span></div>
+            <section class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-4 flex flex-col justify-center">
+                    <h3 class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Meta TRV</h3>
+                    <div class="text-2xl font-extrabold text-gray-900 dark:text-white" id="card-meta-trv">...</div>
                 </div>
-                <div class="glass-panel bg-lightCard dark:bg-darkCard border-2 border-gexCyan rounded-2xl p-5 shadow-[0_0_15px_rgba(34,167,240,0.1)]">
-                    <h3 class="text-xs font-bold text-gexCyan uppercase tracking-widest mb-1">TRV Médio Atual</h3>
-                    <div class="mt-1"><span id="card-trv-medio" class="text-3xl font-extrabold text-gray-900 dark:text-white">...</span></div>
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border-2 border-gexCyan rounded-xl p-4 flex flex-col justify-center shadow-[0_0_15px_rgba(34,167,240,0.1)]">
+                    <h3 class="text-[11px] font-bold text-gexCyan uppercase tracking-widest mb-1">TRV Médio Atual</h3>
+                    <div class="text-2xl font-extrabold text-gray-900 dark:text-white" id="card-trv-medio">...</div>
                 </div>
-                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-2xl p-5">
-                    <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">$ Recuperado Total</h3>
-                    <div class="mt-1"><span id="card-recuperado-total" class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">...</span></div>
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-4 flex flex-col justify-center">
+                    <h3 class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Meta do Mês</h3>
+                    <div class="text-2xl font-extrabold text-gray-900 dark:text-white font-mono" id="card-meta-mes">...</div>
                 </div>
-                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-2xl p-5">
-                    <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Meta do Mês</h3>
-                    <div class="mt-1"><span id="card-meta-mes" class="text-3xl font-extrabold text-gray-900 dark:text-white font-mono">...</span></div>
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-4 flex flex-col justify-center">
+                    <h3 class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Recuperado</h3>
+                    <div class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono" id="card-recuperado-total">...</div>
+                </div>
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-4 flex flex-col justify-center">
+                    <h3 class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Faltam</h3>
+                    <div class="text-2xl font-extrabold text-red-500 dark:text-red-400 font-mono" id="card-faltam">...</div>
+                </div>
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-4 flex flex-col justify-center">
+                    <h3 class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">Meta Mínima Casos</h3>
+                    <div class="text-2xl font-extrabold text-gray-900 dark:text-white font-mono" id="card-meta-min-casos">...</div>
                 </div>
             </section>
 
-            <!-- LAYOUT TRAVADO: Gráfico em cima, Pódio em baixo -->
-            <section class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start h-[700px] mb-10">
-                <div class="xl:col-span-5 flex flex-col gap-6 h-[700px]">
-                    <!-- GRÁFICO (Altura forçada 350px) -->
-                    <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl p-5 shrink-0 flex flex-col h-[350px]">
-                        <div class="flex justify-between items-start mb-2 gap-2 shrink-0">
-                            <h2 class="text-base font-bold text-gray-900 dark:text-white">Desempenho</h2>
-                            <div class="flex gap-2">
-                                <select id="grafico-metrica" class="select-moderno" onchange="atualizarDadosGrafico()">
-                                    <option value="trv">TRV (%)</option>
-                                    <option value="tickets">Tickets</option>
-                                </select>
-                                <select id="grafico-visao" class="select-moderno" onchange="atualizarDadosGrafico()">
-                                    <option value="geral">Geral Equipe</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="flex-1 min-h-0 relative w-full mt-2">
-                            <canvas id="mainChart"></canvas>
-                        </div>
+            <section class="flex flex-col gap-6 items-start h-[800px] mb-10">
+                <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl w-full flex flex-col h-full overflow-hidden shadow-2xl">
+                    <div class="px-6 py-5 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
+                        <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Ranking de Desempenho da Equipe</h2>
                     </div>
-
-                    <!-- PÓDIO -->
-                    <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl p-5 flex-1 min-h-0 flex flex-col relative overflow-hidden">
-                        <h2 class="text-base font-bold text-gray-900 dark:text-white mb-2 text-center shrink-0">Top 3 Destaques <span class="text-xs font-normal text-gray-500">(Retenção)</span></h2>
-                        <div class="podium-wrapper" id="podium-container"></div>
-                    </div>
-                </div>
-
-                <!-- TABELA (Altura forçada 700px + Scroll) -->
-                <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl p-0 xl:col-span-7 flex flex-col h-[700px] overflow-hidden">
-                    <div class="px-5 py-4 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
-                        <h2 class="text-base font-bold text-gray-900 dark:text-white">Ranking da Equipe</h2>
-                        <span class="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Clique na linha p/ gráfico</span>
-                    </div>
-                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-                        <table class="w-full text-left">
-                            <thead class="sticky top-0 bg-gray-100/95 dark:bg-slate-800/95 backdrop-blur-md z-10 shadow-sm">
-                                <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest border-b border-lightBorder dark:border-darkBorder">
-                                    <th class="py-3 px-4 w-12 text-center">Pos</th>
-                                    <th class="py-3 px-2">Analista</th>
-                                    <th class="py-3 px-2 text-right">Tickets</th>
-                                    <th class="py-3 px-2 text-right">$ Casos</th>
-                                    <th class="py-3 px-2 text-right">$ Refund</th>
-                                    <th class="py-3 px-2 text-right">$ Recup</th>
-                                    <th class="py-3 px-4 text-center">% TRV</th>
+                    
+                    <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4">
+                        <table class="w-full text-left border-separate border-spacing-y-2 min-w-[1200px]">
+                            <thead class="z-20">
+                                <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+                                    <th class="cabecalho-fixo py-3 px-2 w-14 text-center">Pos</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-left">Analista</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Tickets</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-right">$ Casos</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-right">$ Refund</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-right">$ Recup</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center">Status Vol</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center">Meta TRV</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center">% TRV</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center">Status TRV</th>
                                 </tr>
                             </thead>
-                            <tbody class="text-sm" id="tabela-retencao-body">
+                            <tbody id="tabela-retencao-body">
                             </tbody>
                         </table>
                     </div>
@@ -220,32 +248,102 @@
             </section>
         </div>
 
-        <!-- ABA: TICKETS RESTAURADA -->
+        <!-- ABA: TICKETS -->
         <div id="aba-tickets" class="hidden space-y-6">
-            <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-2xl p-6">
-                <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Acompanhamento de Tickets (Meta 400)</h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">Visualização diária do volume de resoluções de toda a equipe.</p>
-                <div class="flex items-center justify-center p-20 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
-                    <p class="text-gray-400 dark:text-gray-500 font-mono">Tabela completa de tickets virá do Banco de Dados aqui.</p>
+            <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl p-0 flex flex-col h-[700px] overflow-hidden">
+                <div class="px-5 py-4 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
+                    <div class="flex items-center gap-2">
+                        <button id="btn-sub-tk-atual" onclick="mudarSubAbaTk('atual')" class="btn-setor btn-setor-ativo text-sm px-6 py-2">Tickets Atual</button>
+                        <button id="btn-sub-tk-geral" onclick="mudarSubAbaTk('geral')" class="btn-setor btn-setor-inativo text-sm px-6 py-2">Tickets Geral</button>
+                    </div>
+                </div>
+
+                <div id="tela-tk-atual" class="flex-1 flex flex-col min-h-0">
+                    <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-100/30 dark:bg-black/20 shrink-0">
+                        <h3 class="text-sm font-bold text-gray-600 dark:text-gray-400">Visão Semanal (Seg a Dom)</h3>
+                        <div class="flex gap-2">
+                            <button id="btn-filtro-semana-atual" onclick="carregarSemanaAtual()" class="bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm">Semana Atual</button>
+                            <button id="btn-filtro-semana-passada" onclick="carregarSemanaPassada()" class="bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold transition-all">Semana Passada</button>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4">
+                        <table class="w-full text-left border-separate border-spacing-y-2">
+                            <thead class="z-20">
+                                <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                    <th class="cabecalho-fixo py-3 px-4 min-w-[150px] pl-6">Analista</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Seg</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Ter</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Qua</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Qui</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Sex</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center text-orange-500">Sáb</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center text-orange-500">Dom</th>
+                                    <th class="cabecalho-fixo py-3 px-4 text-center">Total</th>
+                                    <th class="cabecalho-fixo py-3 px-4 text-center pr-6">Meta %</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm" id="tabela-tickets-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="tela-tk-geral" class="hidden flex-1 flex flex-col min-h-0">
+                    <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/20 shrink-0">
+                        <div class="flex items-center gap-2">
+                            <button onclick="filtrarTkGeral('TODOS')" id="btn-f-tk-TODOS" class="btn-setor btn-setor-ativo">Todos</button>
+                            <button onclick="filtrarTkGeral('RET')" id="btn-f-tk-RET" class="btn-setor btn-setor-inativo">Retenção</button>
+                            <button onclick="filtrarTkGeral('SAC')" id="btn-f-tk-SAC" class="btn-setor btn-setor-inativo">SAC</button>
+                            <button onclick="filtrarTkGeral('BKO')" id="btn-f-tk-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
+                        </div>
+                        <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
+                            <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            <input type="text" id="calendario-tickets-geral" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wider">
+                            <button id="btn-aplicar-geral" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Aplicar</button>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4">
+                        <table class="w-full text-left border-separate border-spacing-y-2">
+                            <thead class="z-20">
+                                <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest" id="thead-tk-geral-dinamico">
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm" id="tabela-tickets-geral-body"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- ABA: QUALIDADE RESTAURADA -->
+        <!-- ABA: QUALIDADE -->
         <div id="aba-qualidade" class="hidden space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div class="glass-panel bg-lightCard dark:bg-darkCard border-2 border-gexCyan rounded-2xl p-6 shadow-[0_0_15px_rgba(34,167,240,0.1)]">
-                    <h3 id="media-qualidade-label" class="text-xs font-bold text-gexCyan uppercase tracking-widest mb-2">Média da Equipe (Geral)</h3>
-                    <div class="mt-1 flex items-end gap-2">
-                        <span id="media-qualidade-val" class="text-4xl font-extrabold text-gray-900 dark:text-white font-mono">0.0</span>
-                        <span class="text-sm font-bold text-gray-500 mb-1">/ 100</span>
+            <div class="flex justify-between items-end mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-1 gap-6 w-1/3">
+                    <div class="glass-panel bg-lightCard dark:bg-darkCard border-2 border-gexCyan rounded-2xl p-6 shadow-[0_0_15px_rgba(34,167,240,0.1)]">
+                        <h3 id="media-qualidade-label" class="text-xs font-bold text-gexCyan uppercase tracking-widest mb-2">Média da Equipe (Geral)</h3>
+                        <div class="mt-1 flex items-end gap-2">
+                            <span id="media-qualidade-val" class="text-4xl font-extrabold text-gray-900 dark:text-white font-mono">0.0</span>
+                            <span class="text-sm font-bold text-gray-500 mb-1">/ 100</span>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-2xl p-6">
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
-                    <div>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Notas de Monitoria por Analista</h2>
+            
+            <section class="flex flex-col gap-6 items-start h-[800px] mb-10">
+                <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl w-full flex flex-col h-full overflow-hidden shadow-2xl">
+                    <div class="px-6 py-5 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
+                        <div class="flex items-center gap-4">
+                            <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Notas de Monitoria por Analista</h2>
+                            <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
+                            
+                            <div class="flex items-center gap-2">
+                                <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Mês:</label>
+                                <select id="filtro-mes-qualidade" class="select-moderno text-gexCyan font-bold tracking-wider min-w-[150px]">
+                                    <option value="">Carregando...</option>
+                                </select>
+                            </div>
+                        </div>
                         <div class="flex items-center gap-2">
                             <button id="btn-qual-TODOS" onclick="filtrarQualidade('TODOS')" class="btn-setor btn-setor-ativo">Todos</button>
                             <button id="btn-qual-RET" onclick="filtrarQualidade('RET')" class="btn-setor btn-setor-inativo">Retenção</button>
@@ -253,22 +351,22 @@
                             <button id="btn-qual-BKO" onclick="filtrarQualidade('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
                         </div>
                     </div>
+                    
+                    <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4">
+                        <table class="w-full text-left border-separate border-spacing-y-2 min-w-[600px]">
+                            <thead class="z-20">
+                                <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+                                    <th class="cabecalho-fixo py-3 px-3 text-left pl-6">Analista</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center">Setor</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center pr-6">Nota Qualidade (0-100)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-qualidade-body">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
-                        <thead>
-                            <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest border-b border-lightBorder dark:border-darkBorder">
-                                <th class="pb-3 w-16 text-center">Pos</th>
-                                <th class="pb-3">Analista</th>
-                                <th class="pb-3 text-center">Setor</th>
-                                <th class="pb-3 text-center">Nota Qualidade (0-100)</th>
-                            </tr>
-                        </thead>
-                        <tbody class="text-sm" id="tabela-qualidade-body">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            </section>
         </div>
     </main>
 
@@ -277,16 +375,14 @@
             document.documentElement.classList.toggle('dark');
             localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
             if (document.documentElement.classList.contains('dark')) {
-                document.getElementById('theme-toggle-light-icon').classList.remove('hidden'); 
+                document.getElementById('theme-toggle-light-icon').classList.remove('hidden');
                 document.getElementById('theme-toggle-dark-icon').classList.add('hidden');
             } else {
-                document.getElementById('theme-toggle-light-icon').classList.add('hidden'); 
+                document.getElementById('theme-toggle-light-icon').classList.add('hidden');
                 document.getElementById('theme-toggle-dark-icon').classList.remove('hidden');
             }
-            atualizarCoresGrafico();
         });
 
-        // FUNÇÃO DE ABAS RESTAURADA
         function mudarAba(abaId) {
             ['retencao', 'tickets', 'qualidade'].forEach(id => {
                 document.getElementById(`aba-${id}`).classList.add('hidden');
@@ -301,129 +397,266 @@
         }
 
         let dadosAgentes = [];
+        let dadosQualidade = [];
+        let mesesQualidade = [];
+        let mesQualidadeAtivo = '';
         let setorQualAtivo = 'TODOS';
 
-        const fmtDolar = (val) => {
-            if(isNaN(val) || val === null || val === undefined) val = 0;
-            return '$ ' + Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        };
-        const fmtTrv = (val) => {
-            if(isNaN(val) || val === null || val === undefined) val = 0;
-            return Number(val).toFixed(2) + '%'; 
-        };
-        const getInitial = (name) => {
-            if(!name || typeof name !== 'string') return "AG";
-            return name.substring(0, 2).toUpperCase();
-        };
-        const getName = (name) => {
-            if(!name || typeof name !== 'string') return "Agente";
-            return name.split(' ')[0];
+        const fmtDolar = val => '$ ' + Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmtTrv = val => Number(val || 0).toFixed(2) + '%';
+        
+        const formatStatus = (text) => {
+            if (!text) return '<span class="text-gray-500 font-bold">-</span>';
+            const cleanText = text.replace(/^[✅❌⚠️]\s*/, '');
+            const lower = cleanText.toLowerCase();
+
+            if (lower.includes('batendo') || lower.includes('conseguiu')) {
+                return `<span class="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">✅ ${cleanText}</span>`;
+            } else if (lower.includes('atenção')) {
+                return `<span class="bg-yellow-500/10 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">⚠️ ${cleanText}</span>`;
+            } else if (lower.includes('abaixo') || lower.includes('falta')) {
+                return `<span class="bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">❌ ${cleanText}</span>`;
+            }
+            return `<span class="text-gray-400 text-xs font-bold whitespace-nowrap">${cleanText}</span>`;
         };
 
-        async function carregarDadosReais() {
+        function carregarTudo() {
+            carregarDadosReais('');
+            carregarTickets('');
+            carregarTicketsGeral('');
+            carregarQualidade('');
+        }
+
+        // ==========================================
+        // DADOS RETENÇÃO
+        // ==========================================
+        async function carregarDadosReais(parametrosUrl = '') {
             try {
                 const btnSync = document.querySelector('button.bg-gradient-to-r');
-                if(btnSync) btnSync.innerHTML = '⏳ Sincronizando...';
+                if (btnSync) btnSync.innerHTML = '⏳ Sincronizando...';
 
-                const response = await fetch('/api/retencao');
+                const response = await fetch('/api/retencao' + parametrosUrl);
                 const data = await response.json();
 
                 if (data.success) {
                     dadosAgentes = data.agentes;
+
                     document.getElementById('card-meta-trv').innerText = fmtTrv(data.globais.meta_trv);
                     document.getElementById('card-trv-medio').innerText = fmtTrv(data.globais.trv_medio);
-                    document.getElementById('card-recuperado-total').innerText = fmtDolar(data.globais.recuperado_total);
                     document.getElementById('card-meta-mes').innerText = fmtDolar(data.globais.meta_mes);
+                    document.getElementById('card-recuperado-total').innerText = fmtDolar(data.globais.recuperado_total);
+                    document.getElementById('card-faltam').innerText = fmtDolar(data.globais.faltam);
+                    document.getElementById('card-meta-min-casos').innerText = fmtDolar(data.globais.meta_minima_casos);
 
-                    renderTabelasIniciais();
-                    renderChart();
+                    renderTabelaRetencaoPremium();
 
-                    if(btnSync) { btnSync.innerHTML = '✅ OK!'; setTimeout(() => btnSync.innerHTML = 'Sincronizar', 2000); }
-                } else {
-                    usarDadosTeste();
+                    if (btnSync) { btnSync.innerHTML = '✅ OK!'; setTimeout(() => btnSync.innerHTML = 'Sincronizar', 2000); }
                 }
-            } catch (error) {
-                usarDadosTeste(); 
-            }
+            } catch (error) { console.error("Erro comunicação:", error.message); }
         }
 
-        function usarDadosTeste() {
-            dadosAgentes = [];
-            for(let i = 1; i <= 25; i++) {
-                dadosAgentes.push({ 
-                    id: i, nome: `Agente T. ${i}`, time: 'RET', tickets: 50, 
-                    casos_atual: 25000, refund: 5000, trv: 60.0 - i, qual: 80.0, 
-                    hist_tickets: [10,10,10,10,10], hist_trv: [50,50,50,50,50], score: 100 - i 
-                });
-            }
-            renderTabelasIniciais();
-            renderChart();
-        }
-
-        function renderTabelasIniciais() {
+        function renderTabelaRetencaoPremium() {
             const tbRetencao = document.getElementById('tabela-retencao-body');
-            const selectAgente = document.getElementById('grafico-visao');
-            const podiumContainer = document.getElementById('podium-container');
-            
+            if (!tbRetencao) return;
+
             let retencaoData = dadosAgentes.filter(a => a.time === 'RET');
-            
-            selectAgente.innerHTML = '<option value="geral">Visão: Geral Equipe</option>';
-            retencaoData.forEach(a => { selectAgente.innerHTML += `<option value="${a.id}">${a.nome}</option>`; });
 
             tbRetencao.innerHTML = retencaoData.map((a, i) => {
                 const recuperado = (a.casos_atual || 0) - (a.refund || 0);
-                let posEl = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-[10px]">${i + 1}º</span>`;
-                if (i === 0) posEl = `🥇`; if (i === 1) posEl = `🥈`; if (i === 2) posEl = `🥉`;
 
-                const trvColor = a.trv >= 60 ? 'text-emerald-500' : a.trv >= 50 ? 'text-yellow-500' : 'text-red-500';
+                let trClass = 'row-normal linha-animada';
+                let posEl = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-800 text-gray-400 font-bold text-xs border border-gray-600">${i + 1}º</span>`;
+                let nameClass = 'text-gray-100 dark:text-white';
+                let trvColor = a.trv >= 70 ? 'text-emerald-400' : a.trv >= 60 ? 'text-yellow-400' : 'text-red-400';
+
+                if (i === 0) {
+                    trClass = 'row-gold font-bold linha-animada'; nameClass = 'text-yellow-400 text-[15px]'; trvColor = 'text-yellow-300';
+                    posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
+                                <span class="text-[8px] font-black text-yellow-500 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
+                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-yellow-200 to-yellow-600 text-black font-black text-base shadow-[0_0_10px_rgba(234,179,8,0.5)] border border-yellow-200">1</span>
+                             </div>`;
+                } else if (i === 1) {
+                    trClass = 'row-silver font-bold linha-animada'; nameClass = 'text-gray-200 text-[15px]'; trvColor = 'text-gray-200';
+                    posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
+                                <span class="text-[8px] font-black text-gray-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
+                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-400 text-black font-black text-base shadow-[0_0_10px_rgba(156,163,175,0.5)] border border-gray-200">2</span>
+                             </div>`;
+                } else if (i === 2) {
+                    trClass = 'row-bronze font-bold linha-animada'; nameClass = 'text-orange-300 text-[15px]'; trvColor = 'text-orange-300';
+                    posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
+                                <span class="text-[8px] font-black text-orange-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
+                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-orange-200 to-orange-700 text-white font-black text-base shadow-[0_0_10px_rgba(249,115,22,0.5)] border border-orange-300">3</span>
+                             </div>`;
+                }
 
                 return `
-                <tr id="linha-agt-${a.id}" class="linha-tabela" onclick="filtrarGraficoPorAgente(${a.id})">
-                    <td class="py-2.5 px-4 text-center text-lg">${posEl}</td>
-                    <td class="py-2.5 px-2 font-bold text-gray-900 dark:text-white whitespace-nowrap">${a.nome}</td>
-                    <td class="py-2.5 px-2 text-right font-mono text-gray-600 dark:text-gray-400">${a.tickets || 0}</td>
-                    <td class="py-2.5 px-2 text-right font-mono font-medium text-gray-600 dark:text-gray-400">${fmtDolar(a.casos_atual)}</td>
-                    <td class="py-2.5 px-2 text-right font-mono font-medium text-red-500 dark:text-red-400">${fmtDolar(a.refund)}</td>
-                    <td class="py-2.5 px-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${fmtDolar(recuperado)}</td>
-                    <td class="py-2.5 px-4 text-center font-mono font-bold ${trvColor}">${fmtTrv(a.trv)}</td>
+                <tr class="ranking-row ${trClass}">
+                    <td class="py-3 px-2 text-center rounded-l-xl align-middle">${posEl}</td>
+                    <td class="py-3 px-3 font-bold ${nameClass} whitespace-nowrap text-[14px] align-middle">${a.nome}</td>
+                    <td class="py-3 px-2 text-center font-mono font-black text-gexCyan text-[15px] align-middle">${a.tickets || 0}</td>
+                    <td class="py-3 px-3 text-right font-mono font-medium text-gray-300 text-[13px] align-middle">${fmtDolar(a.casos_atual)}</td>
+                    <td class="py-3 px-3 text-right font-mono font-medium text-gray-300 text-[13px] align-middle">${fmtDolar(a.refund)}</td>
+                    <td class="py-3 px-3 text-right font-mono font-bold text-emerald-400 text-[13px] align-middle">${fmtDolar(recuperado)}</td>
+                    <td class="py-3 px-3 text-center align-middle">${formatStatus(a.status_vol)}</td>
+                    <td class="py-3 px-3 text-center font-mono font-medium text-gray-400 text-[13px] align-middle">${fmtTrv(a.meta_trv_agente)}</td>
+                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] ${trvColor} align-middle">${fmtTrv(a.trv)}</td>
+                    <td class="py-3 px-3 text-center rounded-r-xl align-middle">${formatStatus(a.status_trv)}</td>
                 </tr>`;
             }).join('');
-
-            if(retencaoData.length >= 3) {
-                const p1 = retencaoData[0]; const p2 = retencaoData[1]; const p3 = retencaoData[2];
-                podiumContainer.innerHTML = `
-                    <div class="podium-item" onclick="filtrarGraficoPorAgente(${p2.id})">
-                        <div class="podium-avatar avatar-2">${getInitial(p2.nome)}</div>
-                        <div class="podium-name">${getName(p2.nome)}</div>
-                        <div class="podium-block block-2"><div class="pos-badge pos-badge-2">2</div></div>
-                    </div>
-                    <div class="podium-item" style="z-index: 10;" onclick="filtrarGraficoPorAgente(${p1.id})">
-                        <span class="crown-icon">👑</span>
-                        <div class="podium-avatar avatar-1">${getInitial(p1.nome)}</div>
-                        <div class="podium-name name-1">${getName(p1.nome)}</div>
-                        <div class="podium-block block-1"><div class="pos-badge pos-badge-1">1</div></div>
-                    </div>
-                    <div class="podium-item" onclick="filtrarGraficoPorAgente(${p3.id})">
-                        <div class="podium-avatar avatar-3">${getInitial(p3.nome)}</div>
-                        <div class="podium-name">${getName(p3.nome)}</div>
-                        <div class="podium-block block-3"><div class="pos-badge pos-badge-3">3</div></div>
-                    </div>
-                `;
-            }
-            filtrarQualidade('TODOS');
         }
 
-        // FUNÇÕES DE QUALIDADE RESTAURADAS
+        // ==========================================
+        // TICKETS GERAL
+        // ==========================================
+        let dadosTkGeral = [];
+        let filtroTkGeralSetor = 'TODOS';
+
+        function mudarSubAbaTk(aba) {
+            document.getElementById('tela-tk-atual').classList.add('hidden');
+            document.getElementById('tela-tk-geral').classList.add('hidden');
+            document.getElementById('btn-sub-tk-atual').classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+            document.getElementById('btn-sub-tk-geral').classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+            document.getElementById(`tela-tk-${aba}`).classList.remove('hidden');
+            document.getElementById(`btn-sub-tk-${aba}`).classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+            if (aba === 'geral' && dadosTkGeral.length === 0) carregarTicketsGeral('');
+        }
+
+        async function carregarTickets(parametrosUrl = '') {
+            try {
+                const response = await fetch('/api/tickets' + parametrosUrl);
+                const data = await response.json();
+                if (data.success) renderTabelaTickets(data.agentes);
+            } catch (error) { }
+        }
+
+        function renderTabelaTickets(dados) {
+            const tbody = document.getElementById('tabela-tickets-body');
+            if (!tbody) return;
+            tbody.innerHTML = dados.map(a => {
+                const formatCell = val => (val === 0 || val === '-') ? `<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>` : `<span class="font-mono text-gray-700 dark:text-gray-300 font-medium">${val}</span>`;
+                const metaColor = a.meta >= 60 ? 'text-emerald-500' : (a.meta >= 40 ? 'text-yellow-500' : 'text-red-500');
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-3 px-4 font-bold text-gray-900 dark:text-white rounded-l-xl pl-6">${a.nome}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.seg)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.ter)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.qua)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.qui)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.sex)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.sab)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.dom)}</td>
+                    <td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td>
+                    <td class="py-3 px-4 text-center font-mono font-bold ${metaColor} rounded-r-xl pr-6">${a.meta}%</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function carregarSemanaAtual() {
+            document.getElementById('btn-filtro-semana-atual').className = "bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm";
+            document.getElementById('btn-filtro-semana-passada').className = "bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold transition-all";
+            carregarTickets('');
+        }
+
+        function carregarSemanaPassada() {
+            document.getElementById('btn-filtro-semana-passada').className = "bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm";
+            document.getElementById('btn-filtro-semana-atual').className = "bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold transition-all";
+
+            const hoje = new Date();
+            const diaDaSemana = hoje.getDay();
+            const difParaSegunda = hoje.getDate() - diaDaSemana + (diaDaSemana === 0 ? -6 : 1) - 7;
+            const segunda = new Date(hoje.getFullYear(), hoje.getMonth(), difParaSegunda, 0, 0, 0);
+            const domingo = new Date(segunda);
+            domingo.setDate(segunda.getDate() + 6);
+            domingo.setHours(23, 59, 59);
+
+            carregarTickets(`?since=${Math.floor(segunda.getTime() / 1000)}&until=${Math.floor(domingo.getTime() / 1000)}`);
+        }
+
+        async function carregarTicketsGeral(parametrosUrl = '') {
+            try {
+                const response = await fetch('/api/tickets-geral' + parametrosUrl);
+                const data = await response.json();
+                if (data.success) {
+                    dadosTkGeral = data.agentes;
+                    renderTabelaTkGeral();
+                }
+            } catch (error) { }
+        }
+
+        function filtrarTkGeral(setor) {
+            filtroTkGeralSetor = setor;
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+                const btn = document.getElementById(`btn-f-tk-${b}`);
+                if (btn) {
+                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+                }
+            });
+            renderTabelaTkGeral();
+        }
+
+        function renderTabelaTkGeral() {
+            const thead = document.getElementById('thead-tk-geral-dinamico');
+            const tbody = document.getElementById('tabela-tickets-geral-body');
+            if (!tbody || !thead) return;
+
+            let lista = filtroTkGeralSetor === 'TODOS' ? dadosTkGeral : dadosTkGeral.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
+            if (lista.length === 0) { tbody.innerHTML = ''; return; }
+
+            const numSemanas = lista[0].semanas.length;
+            let theadHTML = `<th class="cabecalho-fixo py-3 px-4 min-w-[150px] pl-6">Analista</th>`;
+            for (let i = 0; i < numSemanas; i++) {
+                theadHTML += `<th class="cabecalho-fixo py-3 px-2 text-center">Semana ${i + 1}</th>`;
+            }
+            theadHTML += `<th class="cabecalho-fixo py-3 px-4 text-center">Total</th><th class="cabecalho-fixo py-3 px-4 text-center pr-6">Meta %</th>`;
+            thead.innerHTML = theadHTML;
+
+            tbody.innerHTML = lista.map(a => {
+                const formatCell = val => (val === 0 || val === '-') ? `<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>` : `<span class="font-mono text-gray-700 dark:text-gray-300 font-medium">${val}</span>`;
+                const metaColor = a.meta >= 60 ? 'text-emerald-500' : (a.meta >= 40 ? 'text-yellow-500' : 'text-red-500');
+
+                let tdHTML = `<td class="py-3 px-4 font-bold text-gray-900 dark:text-white rounded-l-xl pl-6">${a.nome}</td>`;
+                for (let i = 0; i < numSemanas; i++) tdHTML += `<td class="py-3 px-2 text-center">${formatCell(a.semanas[i])}</td>`;
+                tdHTML += `<td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-mono font-bold ${metaColor} rounded-r-xl pr-6">${a.meta}%</td>`;
+
+                return `<tr class="ranking-row row-normal linha-animada">${tdHTML}</tr>`;
+            }).join('');
+        }
+
+        // ==========================================
+        // DADOS DA QUALIDADE
+        // ==========================================
+        async function carregarQualidade(mes = '') {
+            try {
+                const response = await fetch(`/api/qualidade?mes=${encodeURIComponent(mes)}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    dadosQualidade = data.agentes;
+                    mesesQualidade = data.meses;
+                    mesQualidadeAtivo = data.mesAtual;
+
+                    const selectMes = document.getElementById('filtro-mes-qualidade');
+                    if (selectMes && mesesQualidade.length > 0) {
+                        if (selectMes.options.length <= 1) { 
+                            selectMes.innerHTML = mesesQualidade.map(m => `<option value="${m}" ${m === mesQualidadeAtivo ? 'selected' : ''}>${m}</option>`).join('');
+                        }
+                    } else if (selectMes && mesesQualidade.length === 0) {
+                         selectMes.innerHTML = `<option value="">Nenhum dado</option>`;
+                    }
+
+                    renderTabelaQualidade();
+                }
+            } catch (error) { console.error("Erro Qualidade:", error); }
+        }
+
         function filtrarQualidade(setor) {
             setorQualAtivo = setor;
             ['TODOS', 'RET', 'SAC', 'BKO'].forEach(b => {
                 const btn = document.getElementById(`btn-qual-${b}`);
-                if(btn) {
-                    if (b === setor) {
-                        btn.classList.remove('btn-setor-inativo'); btn.classList.add('btn-setor-ativo');
-                    } else {
-                        btn.classList.remove('btn-setor-ativo'); btn.classList.add('btn-setor-inativo');
-                    }
+                if (btn) {
+                    if (b === setor) { btn.classList.remove('btn-setor-inativo'); btn.classList.add('btn-setor-ativo'); }
+                    else { btn.classList.remove('btn-setor-ativo'); btn.classList.add('btn-setor-inativo'); }
                 }
             });
             renderTabelaQualidade();
@@ -431,114 +664,79 @@
 
         function renderTabelaQualidade() {
             const tbQualidade = document.getElementById('tabela-qualidade-body');
-            if(!tbQualidade) return;
-            let qualData = setorQualAtivo === 'TODOS' ? [...dadosAgentes] : dadosAgentes.filter(a => a.time === setorQualAtivo);
-            qualData.sort((a,b) => b.qual - a.qual);
+            if (!tbQualidade) return;
+            
+            let qualData = setorQualAtivo === 'TODOS' ? [...dadosQualidade] : dadosQualidade.filter(a => a.time.includes(setorQualAtivo));
+            
+            qualData.sort((a, b) => a.nome.localeCompare(b.nome));
 
-            let media = 0;
-            if(qualData.length > 0) {
-                media = qualData.reduce((acc, curr) => acc + curr.qual, 0) / qualData.length;
-            }
-            document.getElementById('media-qualidade-val').innerText = media.toFixed(1);
-            document.getElementById('media-qualidade-label').innerText = `MÉDIA DA EQUIPE (${setorQualAtivo === 'TODOS' ? 'GERAL' : setorQualAtivo})`;
+            let media = qualData.length > 0 ? qualData.reduce((acc, curr) => acc + curr.qual, 0) / qualData.length : 0;
+            const elMediaVal = document.getElementById('media-qualidade-val');
+            if (elMediaVal) elMediaVal.innerText = media.toFixed(1);
 
-            if(qualData.length === 0){
-                tbQualidade.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-gray-500 dark:text-gray-400">Nenhum analista encontrado neste setor.</td></tr>`;
+            if (qualData.length === 0) {
+                tbQualidade.innerHTML = `<tr><td colspan="3" class="py-6 text-center text-gray-500">Nenhuma nota encontrada para este filtro.</td></tr>`;
                 return;
             }
 
-            tbQualidade.innerHTML = qualData.map((a, i) => {
-                let posEl = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400 font-bold text-xs">${i + 1}º</span>`;
-                if (i === 0) posEl = `🥇`; if (i === 1) posEl = `🥈`; if (i === 2) posEl = `🥉`;
+            tbQualidade.innerHTML = qualData.map((a) => {
+                const badgeTime = `<span class="badge-setor">${a.time}</span>`;
 
-                const badgeTime = setorQualAtivo === 'TODOS' 
-                    ? `<span class="text-[9px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-gexBlue dark:text-gexCyan font-bold tracking-wider">${a.time}</span>` 
-                    : `<span class="text-[9px] px-2 py-0.5 rounded bg-gray-100 dark:bg-darkBorder text-gray-500 font-bold tracking-wider">${a.time}</span>`;
+                let corNota = 'text-gexCyan drop-shadow-[0_0_8px_rgba(34,167,240,0.4)]'; 
+                if (a.qual < 70) {
+                    corNota = 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]'; 
+                } else if (a.qual < 90) {
+                    corNota = 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]'; 
+                }
 
                 return `
-                <tr class="linha-tabela">
-                    <td class="py-4 text-center text-xl">${posEl}</td>
-                    <td class="py-4 font-bold text-gray-900 dark:text-white">${a.nome}</td>
-                    <td class="py-4 text-center">${badgeTime}</td>
-                    <td class="py-4 text-center font-mono font-black text-lg text-gray-900 dark:text-white">${a.qual.toFixed(1)}</td>
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-4 px-3 pl-6 font-bold text-gray-100 dark:text-white whitespace-nowrap text-[14px] align-middle rounded-l-xl">${a.nome}</td>
+                    <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-lg ${corNota} align-middle rounded-r-xl pr-6">${a.qual.toFixed(1)}</td>
                 </tr>`;
             }).join('');
         }
 
-        let mainChart = null;
-        function renderChart() {
-            if(mainChart) { mainChart.destroy(); }
-            const canvas = document.getElementById('mainChart');
-            if(!canvas) return;
-            const ctx = canvas.getContext('2d');
-            mainChart = new Chart(ctx, {
-                type: 'line',
-                data: { labels: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], datasets: [] },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } } },
-                    scales: { y: { beginAtZero: true }, x: { grid: { display: false } } },
-                    interaction: { mode: 'index', intersect: false }
-                }
-            });
-            atualizarDadosGrafico();
-        }
-
-        function filtrarGraficoPorAgente(id) { document.getElementById('grafico-visao').value = id; atualizarDadosGrafico(); }
-
-        function atualizarDadosGrafico() {
-            if (!mainChart) return;
-            const metrica = document.getElementById('grafico-metrica').value;
-            const visao = document.getElementById('grafico-visao').value;
-            document.querySelectorAll('.linha-tabela').forEach(el => el.classList.remove('ativa'));
-
-            let titulo = '', dados = [];
-            let configLinha = { borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, fill: true, tension: 0.3 };
-
-            if (visao === 'geral') {
-                if (metrica === 'trv') { titulo = 'Média TRV da Equipe (%)'; dados = [58, 62, 65, 68, 68.5]; } 
-                else { titulo = 'Total Tickets da Equipe'; dados = [80, 160, 240, 320, 400]; configLinha.borderColor = '#22a7f0'; configLinha.backgroundColor = 'rgba(34, 167, 240, 0.1)'; }
-            } else {
-                const idAgente = parseInt(visao);
-                const agente = dadosAgentes.find(a => a.id === idAgente);
-                if(agente) {
-                    const linha = document.getElementById(`linha-agt-${idAgente}`);
-                    if (linha) linha.classList.add('ativa');
-                    if (metrica === 'trv') { 
-                        titulo = `TRV Diário - ${agente.nome} (%)`; 
-                        dados = agente.hist_trv || [0,0,0,0,0]; 
-                    } else { 
-                        titulo = `Tickets Diários - ${agente.nome}`; 
-                        dados = agente.hist_tickets || [0,0,0,0,0]; 
-                        configLinha.borderColor = '#22a7f0'; 
-                        configLinha.backgroundColor = 'rgba(34, 167, 240, 0.1)'; 
-                    }
-                } else {
-                    titulo = "Dados indisponíveis"; dados = [0,0,0,0,0];
-                }
-            }
-            mainChart.data.datasets = [{ label: titulo, data: dados, ...configLinha }];
-            atualizarCoresGrafico();
-        }
-
-        function atualizarCoresGrafico() {
-            if (!mainChart) return;
-            const isDark = document.documentElement.classList.contains('dark');
-            const textColor = isDark ? '#cbd5e1' : '#1f2937';
-            mainChart.options.plugins.legend.labels.color = textColor;
-            mainChart.options.scales.x.ticks.color = textColor;
-            mainChart.options.scales.y.ticks.color = textColor;
-            mainChart.options.scales.y.grid.color = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
-            mainChart.update();
-        }
-
+        let calTkGeral;
         document.addEventListener('DOMContentLoaded', () => {
             if (document.documentElement.classList.contains('dark')) {
                 document.getElementById('theme-toggle-light-icon').classList.remove('hidden');
             } else {
                 document.getElementById('theme-toggle-dark-icon').classList.remove('hidden');
             }
-            carregarDadosReais(); 
+
+            carregarTudo();
+
+            const inputTkGeral = document.getElementById('calendario-tickets-geral');
+            if (inputTkGeral) {
+                calTkGeral = flatpickr(inputTkGeral, { mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark" });
+            }
+
+            const btnAplicarGeral = document.getElementById('btn-aplicar-geral');
+            if (btnAplicarGeral) {
+                btnAplicarGeral.addEventListener('click', () => {
+                    if (!calTkGeral) return;
+                    const datas = calTkGeral.selectedDates;
+                    if (datas.length < 2) return alert("⚠️ Selecione INÍCIO e FIM.");
+
+                    const dFim = datas[1];
+                    dFim.setHours(23, 59, 59);
+
+                    btnAplicarGeral.innerHTML = '⏳';
+                    setTimeout(() => {
+                        btnAplicarGeral.innerHTML = 'Aplicar';
+                        carregarTicketsGeral(`?since=${Math.floor(datas[0].getTime() / 1000)}&until=${Math.floor(dFim.getTime() / 1000)}`);
+                    }, 500);
+                });
+            }
+
+            const selMesQual = document.getElementById('filtro-mes-qualidade');
+            if (selMesQual) {
+                selMesQual.addEventListener('change', (e) => {
+                    carregarQualidade(e.target.value);
+                });
+            }
         });
     </script>
 </body>
