@@ -14,72 +14,30 @@
         .flatpickr-months .flatpickr-month { background: #0a0f1c !important; color: white !important; }
         .flatpickr-weekdays { background: #0a0f1c !important; }
 
-        /* =========================================
-           1. ESTILOS DO RANKING DE RETENÇÃO
-           ========================================= */
+        /* Estilos do Ranking com Bordas Corrigidas Definitivamente */
+        .ranking-row { border-radius: 0.75rem; overflow: hidden; }
+        .ranking-row td:first-child { border-top-left-radius: 0.75rem; border-bottom-left-radius: 0.75rem; }
+        .ranking-row td:last-child { border-top-right-radius: 0.75rem; border-bottom-right-radius: 0.75rem; }
+        /* Remove fundos extras das células que causam as pontas brancas */
+        .ranking-row td { background-color: transparent !important; }
+
         .row-gold { background: linear-gradient(90deg, #2b1f00 0%, #5c4700 50%, #2b1f00 100%); box-shadow: inset 0 0 0 1px #d4af37, 0 4px 15px rgba(212, 175, 55, 0.15); }
         .row-silver { background: linear-gradient(90deg, #1a202c 0%, #334155 50%, #1a202c 100%); box-shadow: inset 0 0 0 1px #94a3b8, 0 4px 15px rgba(148, 163, 184, 0.15); }
         .row-bronze { background: linear-gradient(90deg, #2d1606 0%, #522709 50%, #2d1606 100%); box-shadow: inset 0 0 0 1px #b45309, 0 4px 15px rgba(180, 83, 9, 0.15); }
+        
         .row-normal { background: rgba(15, 23, 42, 0.6); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
         html:not(.dark) .row-normal { background: #ffffff; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05), 0 2px 5px rgba(0,0,0,0.02); }
 
-        /* =========================================
-           2. ANIMAÇÃO DE HOVER (TODAS AS ABAS)
-           ========================================= */
-        .linha-animada {
-            transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.25s ease, box-shadow 0.25s ease;
-            position: relative;
-        }
-        .linha-animada:hover {
-            transform: scale(1.012); 
-            filter: brightness(1.15); 
-            z-index: 10;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3); 
-            cursor: pointer;
-        }
+        .linha-animada { transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.25s ease, box-shadow 0.25s ease; position: relative; }
+        .linha-animada:hover { transform: scale(1.012); filter: brightness(1.15); z-index: 10; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3); cursor: pointer; }
 
-        /* =========================================
-           3. BADGE SETOR (GLASSMORPHISM/FOSCO)
-           ========================================= */
-        .badge-setor {
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            border-radius: 12px;
-            padding: 4px 14px;
-            font-size: 0.65rem;
-            font-weight: 900;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            transition: all 0.3s ease;
-        }
+        .badge-setor { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 4px 14px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; transition: all 0.3s ease; }
         html.dark .badge-setor { background: rgba(255, 255, 255, 0.85); color: #000000; box-shadow: 0 0 12px rgba(255, 255, 255, 0.15); }
         html:not(.dark) .badge-setor { background: rgba(15, 23, 42, 0.85); color: #ffffff; box-shadow: 0 0 12px rgba(0, 0, 0, 0.15); }
 
-        /* =========================================
-           4. CABEÇALHO FIXO SÓLIDO (FIM DA TRANSPARÊNCIA)
-           ========================================= */
-        .cabecalho-fixo {
-            position: sticky;
-            top: 0;
-            z-index: 20;
-            background-color: #ffffff; /* Fundo sólido Light */
-            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
-        }
-        html.dark .cabecalho-fixo {
-            background-color: #0a0f1c; /* Fundo sólido Dark igual ao painel */
-            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.3);
-        }
-        /* Tapa o buraco invisível no topo deixado pelo border-spacing */
-        .cabecalho-fixo::before {
-            content: '';
-            position: absolute;
-            top: -10px;
-            left: 0;
-            right: 0;
-            height: 10px;
-            background-color: inherit;
-            z-index: -1;
-        }
+        .cabecalho-fixo { position: sticky; top: 0; z-index: 20; background-color: #ffffff; box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05); }
+        html.dark .cabecalho-fixo { background-color: #0a0f1c; box-shadow: 0 4px 6px -2px rgba(0,0,0,0.3); }
+        .cabecalho-fixo::before { content: ''; position: absolute; top: -10px; left: 0; right: 0; height: 10px; background-color: inherit; z-index: -1; }
     </style>
     
     <meta charset="UTF-8" />
@@ -97,7 +55,7 @@
                 extend: {
                     fontFamily: { sans: ['Roboto', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
                     colors: {
-                        lightBg: '#f3f6f9', lightCard: '#ffffff', lightBorder: '#e5e7eb',
+                        lightBg: '#ffffff', lightCard: '#ffffff', lightBorder: '#e5e7eb',
                         darkBg: '#020617', darkCard: '#0f172a', darkBorder: '#1e293b',
                         gexBlue: '#1b52af', gexCyan: '#22a7f0',
                     }
@@ -115,19 +73,25 @@
     </script>
 
     <style type="text/tailwindcss">
-        :root { --bg-page: #f3f6f9; --grid-color: rgba(0,0,0,0.03); --shape-opacity: 0.15; }
+        :root { --bg-page: #ffffff; --grid-color: rgba(0,0,0,0.03); --shape-opacity: 0.15; }
         html.dark { --bg-page: #020617; --grid-color: rgba(255,255,255,0.02); --shape-opacity: 1; }
 
         body { background-color: var(--bg-page); transition: background-color 0.4s ease; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
         .bg-grid { position: absolute; inset: 0; z-index: -2; background-image: linear-gradient(45deg, var(--grid-color) 1px, transparent 1px), linear-gradient(-45deg, var(--grid-color) 1px, transparent 1px); background-size: 24px 24px; }
-        .glass-panel { @apply shadow-lg transition-colors duration-300; }
+        
+        html:not(.dark) .glass-panel { background-color: #fafafa !important; border: 1px solid #e5e7eb; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
 
         .tab-btn { @apply flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 cursor-pointer border border-transparent; }
-        .tab-btn-inactive { @apply text-gray-500 dark:text-gray-400 bg-transparent hover:text-white hover:bg-gexBlue/80 hover:scale-105 hover:border-gexCyan/50; }
+        .tab-btn-inactive { @apply text-gray-500 dark:text-gray-400 bg-transparent hover:text-gray-800 dark:hover:text-white hover:bg-gexBlue/20 dark:hover:bg-gexBlue/80 hover:scale-105; }
         .tab-btn-active { @apply bg-gradient-to-r from-gexBlue to-gexCyan text-white shadow-[0_4px_15px_rgba(34,167,240,0.4)] scale-105 border-transparent; }
-        .btn-setor { @apply px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-300 cursor-pointer border border-transparent; }
-        .btn-setor-inativo { @apply bg-gray-100 dark:bg-darkBorder text-gray-500 dark:text-gray-400 hover:text-white hover:bg-gexBlue hover:scale-105; }
-        .btn-setor-ativo { @apply bg-gexBlue text-white shadow-[0_4px_10px_rgba(27,82,175,0.4)] scale-105; }
+        
+        .btn-setor { @apply px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer rounded-xl shadow-sm border border-transparent; }
+
+        html.dark .btn-setor-inativo { background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%); color: #0f172a; opacity: 0.8; }
+        html.dark .btn-setor-ativo { background: linear-gradient(135deg, #1b52af 0%, #22a7f0 100%); color: #ffffff; opacity: 1; box-shadow: 0 0 12px rgba(34, 167, 240, 0.4); transform: scale(1.05); }
+
+        html:not(.dark) .btn-setor-inativo { background: linear-gradient(135deg, #1e293b 0%, #475569 100%); color: #ffffff; opacity: 0.9; }
+        html:not(.dark) .btn-setor-ativo { background: linear-gradient(135deg, #1b52af 0%, #22a7f0 100%); color: #ffffff; opacity: 1; box-shadow: 0 4px 12px rgba(27, 82, 175, 0.3); transform: scale(1.05); }
 
         .select-moderno { @apply bg-white/50 dark:bg-darkBorder border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-white text-sm rounded-lg px-3 py-1 outline-none focus:border-gexCyan cursor-pointer transition-colors; }
         html.dark .select-moderno { background: rgba(15, 23, 42, 0.8); }
@@ -138,6 +102,18 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
         html.dark .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--gex-cyan); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
+        
+        /* CONTRASTE ALTO: Textos Pretos no Claro, Brancos no Escuro */
+        .texto-contraste { @apply text-black dark:text-white font-bold text-[14px]; }
+        .texto-contraste-sm { @apply text-black dark:text-white font-medium text-[13px]; }
+        .texto-contraste-xs { @apply text-black dark:text-white font-bold text-xs; }
+        
+        /* TOP 3: SEMPRE BRANCO */
+        .texto-top3 { @apply text-white font-bold text-[14px] !important; }
+        .texto-top3-sm { @apply text-white font-medium text-[13px] !important; }
+        .texto-top3-xs { @apply text-white font-bold text-xs !important; }
+
+        .pos-badge { @apply inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-900 dark:bg-white text-white dark:text-black font-black text-[11px] shadow-sm; }
     </style>
 </head>
 
@@ -154,21 +130,21 @@
     </div>
 
     <!-- HEADER -->
-    <header class="glass-panel bg-white/95 dark:bg-slate-900/95 border-b border-gray-200 dark:border-black sticky top-0 z-50">
+    <header class="bg-[#020617] border-b border-black sticky top-0 z-50 transition-colors shadow-lg">
         <div class="max-w-[1700px] mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center gap-4">
-                <img src="logo.jpg" alt="Logo GEX" class="w-12 h-12 rounded-[14px] shadow-sm object-cover border border-gray-200 dark:border-white/10">
+                <img src="logo.jpg" alt="Logo GEX" class="w-12 h-12 rounded-[14px] shadow-sm object-cover border border-white/10">
                 <div>
-                    <h1 class="text-[26px] font-black tracking-tight text-gray-900 dark:text-white leading-none">Dash GEX</h1>
-                    <p class="text-[13px] text-gray-500 dark:text-gray-400 font-medium mt-1">Acompanhamento de Performance e Metas</p>
+                    <h1 class="text-[26px] font-black tracking-tight text-white leading-none">Dash GEX</h1>
+                    <p class="text-[13px] text-gray-400 font-medium mt-1">Acompanhamento de Performance e Metas</p>
                 </div>
             </div>
             <div class="flex items-center gap-4">
                 <button class="bg-gradient-to-r from-gexCyan to-gexBlue hover:opacity-90 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md transition-all flex items-center gap-2" onclick="carregarTudo()">
                     Sincronizar
                 </button>
-                <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
-                <button id="theme-toggle" class="p-2 rounded-lg bg-gray-100 dark:bg-black/30 hover:bg-gray-200 dark:hover:bg-black/50 transition-colors">
+                <div class="w-px h-6 bg-gray-800 mx-2"></div>
+                <button id="theme-toggle" class="p-2 rounded-lg bg-black/30 hover:bg-black/50 transition-colors">
                     <svg id="theme-toggle-light-icon" class="hidden w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
                     </svg>
@@ -224,8 +200,8 @@
                         <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Ranking de Desempenho da Equipe</h2>
                     </div>
                     
-                    <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4">
-                        <table class="w-full text-left border-separate border-spacing-y-2 min-w-[1200px]">
+                    <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4 mt-2">
+                        <table class="w-full text-left border-separate min-w-[1200px]" style="border-spacing: 0 0.5rem;">
                             <thead class="z-20">
                                 <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
                                     <th class="cabecalho-fixo py-3 px-2 w-14 text-center">Pos</th>
@@ -253,21 +229,33 @@
             <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl p-0 flex flex-col h-[700px] overflow-hidden">
                 <div class="px-5 py-4 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
                     <div class="flex items-center gap-2">
-                        <button id="btn-sub-tk-atual" onclick="mudarSubAbaTk('atual')" class="btn-setor btn-setor-ativo text-sm px-6 py-2">Tickets Atual</button>
-                        <button id="btn-sub-tk-geral" onclick="mudarSubAbaTk('geral')" class="btn-setor btn-setor-inativo text-sm px-6 py-2">Tickets Geral</button>
+                        <button id="btn-sub-tk-atual" onclick="mudarSubAbaTk('atual')" class="btn-setor btn-setor-ativo">Tickets Atual</button>
+                        <button id="btn-sub-tk-semanal" onclick="mudarSubAbaTk('semanal')" class="btn-setor btn-setor-inativo">Visão Mensal</button>
+                        <button id="btn-sub-tk-geral" onclick="mudarSubAbaTk('geral')" class="btn-setor btn-setor-inativo">Tickets Geral</button>
                     </div>
                 </div>
 
+                <!-- SUB-ABA 1: ATUAL -->
                 <div id="tela-tk-atual" class="flex-1 flex flex-col min-h-0">
-                    <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-100/30 dark:bg-black/20 shrink-0">
-                        <h3 class="text-sm font-bold text-gray-600 dark:text-gray-400">Visão Semanal (Seg a Dom)</h3>
+                    <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/20 shrink-0">
+                        <div class="flex items-center gap-4">
+                            <h3 class="text-sm font-bold text-gray-600 dark:text-gray-400">Semana (Seg a Dom)</h3>
+                            <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="filtrarTkAtual('TODOS')" id="btn-f-tk-atual-TODOS" class="btn-setor btn-setor-ativo">Todos</button>
+                                <button onclick="filtrarTkAtual('RET')" id="btn-f-tk-atual-RET" class="btn-setor btn-setor-inativo">Retenção</button>
+                                <button onclick="filtrarTkAtual('SAC')" id="btn-f-tk-atual-SAC" class="btn-setor btn-setor-inativo">SAC</button>
+                                <button onclick="filtrarTkAtual('BKO')" id="btn-f-tk-atual-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
+                                <button onclick="filtrarTkAtual('SMS')" id="btn-f-tk-atual-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                            </div>
+                        </div>
                         <div class="flex gap-2">
                             <button id="btn-filtro-semana-atual" onclick="carregarSemanaAtual()" class="bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm">Semana Atual</button>
                             <button id="btn-filtro-semana-passada" onclick="carregarSemanaPassada()" class="bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold transition-all">Semana Passada</button>
                         </div>
                     </div>
-                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4">
-                        <table class="w-full text-left border-separate border-spacing-y-2">
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4 mt-2">
+                        <table class="w-full text-left border-separate" style="border-spacing: 0 0.5rem;">
                             <thead class="z-20">
                                 <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     <th class="cabecalho-fixo py-3 px-4 min-w-[150px] pl-6">Analista</th>
@@ -287,6 +275,51 @@
                     </div>
                 </div>
 
+                <!-- SUB-ABA 2: VISAO MENSAL -->
+                <div id="tela-tk-semanal" class="hidden flex-1 flex flex-col min-h-0">
+                    <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex flex-col gap-3 bg-gray-100/30 dark:bg-black/20 shrink-0">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-4">
+                                <h3 class="text-sm font-bold text-gray-600 dark:text-gray-400">Fechamento Mensal por Semanas</h3>
+                                <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
+                                <div class="flex items-center gap-2">
+                                    <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Mês:</label>
+                                    <select id="mes-tickets-semanais" class="select-moderno text-gexCyan font-bold tracking-wider min-w-[150px]"></select>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center gap-2">
+                                <button onclick="filtrarTkSemanal('TODOS')" id="btn-f-tk-sem-TODOS" class="btn-setor btn-setor-ativo">Todos</button>
+                                <button onclick="filtrarTkSemanal('RET')" id="btn-f-tk-sem-RET" class="btn-setor btn-setor-inativo">Retenção</button>
+                                <button onclick="filtrarTkSemanal('SAC')" id="btn-f-tk-sem-SAC" class="btn-setor btn-setor-inativo">SAC</button>
+                                <button onclick="filtrarTkSemanal('BKO')" id="btn-f-tk-sem-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
+                                <button onclick="filtrarTkSemanal('SMS')" id="btn-f-tk-sem-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                            </div>
+                        </div>
+                        <div id="botoes-semanas-container" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4 mt-2">
+                        <table class="w-full text-left border-separate" style="border-spacing: 0 0.5rem;">
+                            <thead class="z-20">
+                                <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest" id="tr-header-semanal">
+                                    <th class="cabecalho-fixo py-3 px-4 min-w-[150px] pl-6">Analista</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Seg</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Ter</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Qua</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Qui</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center">Sex</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center text-orange-500">Sáb</th>
+                                    <th class="cabecalho-fixo py-3 px-2 text-center text-orange-500">Dom</th>
+                                    <th class="cabecalho-fixo py-3 px-4 text-center">Total</th>
+                                    <th class="cabecalho-fixo py-3 px-4 text-center pr-6 text-gexCyan">Média/dia</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm" id="tabela-tickets-semanal-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SUB-ABA 3: GERAL -->
                 <div id="tela-tk-geral" class="hidden flex-1 flex flex-col min-h-0">
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/20 shrink-0">
                         <div class="flex items-center gap-2">
@@ -294,6 +327,7 @@
                             <button onclick="filtrarTkGeral('RET')" id="btn-f-tk-RET" class="btn-setor btn-setor-inativo">Retenção</button>
                             <button onclick="filtrarTkGeral('SAC')" id="btn-f-tk-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                             <button onclick="filtrarTkGeral('BKO')" id="btn-f-tk-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
+                            <button onclick="filtrarTkGeral('SMS')" id="btn-f-tk-SMS" class="btn-setor btn-setor-inativo">SMS</button>
                         </div>
                         <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
                             <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -303,8 +337,8 @@
                             <button id="btn-aplicar-geral" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Aplicar</button>
                         </div>
                     </div>
-                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4">
-                        <table class="w-full text-left border-separate border-spacing-y-2">
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4 mt-2">
+                        <table class="w-full text-left border-separate" style="border-spacing: 0 0.5rem;">
                             <thead class="z-20">
                                 <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest" id="thead-tk-geral-dinamico">
                                 </tr>
@@ -349,16 +383,22 @@
                             <button id="btn-qual-RET" onclick="filtrarQualidade('RET')" class="btn-setor btn-setor-inativo">Retenção</button>
                             <button id="btn-qual-SAC" onclick="filtrarQualidade('SAC')" class="btn-setor btn-setor-inativo">SAC</button>
                             <button id="btn-qual-BKO" onclick="filtrarQualidade('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
+                            <button id="btn-qual-SMS" onclick="filtrarQualidade('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
                         </div>
                     </div>
                     
-                    <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4">
-                        <table class="w-full text-left border-separate border-spacing-y-2 min-w-[600px]">
+                    <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4 mt-2">
+                        <table class="w-full text-left border-separate min-w-[600px]" style="border-spacing: 0 0.5rem;">
                             <thead class="z-20">
                                 <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-                                    <th class="cabecalho-fixo py-3 px-3 text-left pl-6">Analista</th>
+                                    <th class="cabecalho-fixo py-3 px-2 w-14 text-center">Pos</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-left pl-2">Analista</th>
                                     <th class="cabecalho-fixo py-3 px-3 text-center">Setor</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center pr-6">Nota Qualidade (0-100)</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 1</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 2</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 3</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 4</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center pr-6">Média Final</th>
                                 </tr>
                             </thead>
                             <tbody id="tabela-qualidade-body">
@@ -405,24 +445,33 @@
         const fmtDolar = val => '$ ' + Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const fmtTrv = val => Number(val || 0).toFixed(2) + '%';
         
-        const formatStatus = (text) => {
+        // Status com cores de alto contraste, e suporte para Top 3 (Sempre Branco)
+        const formatStatus = (text, isTop3 = false) => {
             if (!text) return '<span class="text-gray-500 font-bold">-</span>';
             const cleanText = text.replace(/^[✅❌⚠️]\s*/, '');
             const lower = cleanText.toLowerCase();
 
             if (lower.includes('batendo') || lower.includes('conseguiu')) {
-                return `<span class="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">✅ ${cleanText}</span>`;
+                return `<span class="bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">✅ ${cleanText}</span>`;
             } else if (lower.includes('atenção')) {
-                return `<span class="bg-yellow-500/10 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">⚠️ ${cleanText}</span>`;
+                return `<span class="bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">⚠️ ${cleanText}</span>`;
             } else if (lower.includes('abaixo') || lower.includes('falta')) {
-                return `<span class="bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">❌ ${cleanText}</span>`;
+                return `<span class="bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">❌ ${cleanText}</span>`;
             }
-            return `<span class="text-gray-400 text-xs font-bold whitespace-nowrap">${cleanText}</span>`;
+            
+            const textColor = isTop3 ? 'texto-top3-sm' : 'texto-contraste-sm';
+            return `<span class="${textColor} whitespace-nowrap">${cleanText}</span>`;
         };
 
         function carregarTudo() {
             carregarDadosReais('');
             carregarTickets('');
+            
+            const selectMesSemanal = document.getElementById('mes-tickets-semanais');
+            if (selectMesSemanal && selectMesSemanal.value) {
+                gerarBotoesSemanas(selectMesSemanal.value);
+            }
+            
             carregarTicketsGeral('');
             carregarQualidade('');
         }
@@ -463,26 +512,31 @@
 
             tbRetencao.innerHTML = retencaoData.map((a, i) => {
                 const recuperado = (a.casos_atual || 0) - (a.refund || 0);
+                const isTop3 = i < 3;
 
                 let trClass = 'row-normal linha-animada';
-                let posEl = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-800 text-gray-400 font-bold text-xs border border-gray-600">${i + 1}º</span>`;
-                let nameClass = 'text-gray-100 dark:text-white';
-                let trvColor = a.trv >= 70 ? 'text-emerald-400' : a.trv >= 60 ? 'text-yellow-400' : 'text-red-400';
+                let posEl = `<span class="pos-badge">${i + 1}º</span>`;
+                
+                // Textos Pretos no Claro / Brancos no Escuro
+                let nameClass = 'texto-contraste'; 
+                let textClassData = 'texto-contraste-sm';
+                let trvColor = a.trv >= 70 ? 'text-emerald-600 dark:text-emerald-500' : a.trv >= 60 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500';
 
+                // Top 3 Força tudo Branco!
                 if (i === 0) {
-                    trClass = 'row-gold font-bold linha-animada'; nameClass = 'text-yellow-400 text-[15px]'; trvColor = 'text-yellow-300';
+                    trClass = 'row-gold font-bold linha-animada'; nameClass = 'texto-top3 text-yellow-400'; trvColor = 'text-yellow-400'; textClassData = 'texto-top3-sm';
                     posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
                                 <span class="text-[8px] font-black text-yellow-500 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
                                 <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-yellow-200 to-yellow-600 text-black font-black text-base shadow-[0_0_10px_rgba(234,179,8,0.5)] border border-yellow-200">1</span>
                              </div>`;
                 } else if (i === 1) {
-                    trClass = 'row-silver font-bold linha-animada'; nameClass = 'text-gray-200 text-[15px]'; trvColor = 'text-gray-200';
+                    trClass = 'row-silver font-bold linha-animada'; nameClass = 'texto-top3 text-gray-100'; trvColor = 'text-gray-100'; textClassData = 'texto-top3-sm';
                     posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
                                 <span class="text-[8px] font-black text-gray-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
                                 <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-400 text-black font-black text-base shadow-[0_0_10px_rgba(156,163,175,0.5)] border border-gray-200">2</span>
                              </div>`;
                 } else if (i === 2) {
-                    trClass = 'row-bronze font-bold linha-animada'; nameClass = 'text-orange-300 text-[15px]'; trvColor = 'text-orange-300';
+                    trClass = 'row-bronze font-bold linha-animada'; nameClass = 'texto-top3 text-orange-200'; trvColor = 'text-orange-200'; textClassData = 'texto-top3-sm';
                     posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
                                 <span class="text-[8px] font-black text-orange-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
                                 <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-orange-200 to-orange-700 text-white font-black text-base shadow-[0_0_10px_rgba(249,115,22,0.5)] border border-orange-300">3</span>
@@ -491,53 +545,80 @@
 
                 return `
                 <tr class="ranking-row ${trClass}">
-                    <td class="py-3 px-2 text-center rounded-l-xl align-middle">${posEl}</td>
-                    <td class="py-3 px-3 font-bold ${nameClass} whitespace-nowrap text-[14px] align-middle">${a.nome}</td>
+                    <td class="py-3 px-2 text-center align-middle">${posEl}</td>
+                    <td class="py-3 px-3 ${nameClass} whitespace-nowrap align-middle">${a.nome}</td>
                     <td class="py-3 px-2 text-center font-mono font-black text-gexCyan text-[15px] align-middle">${a.tickets || 0}</td>
-                    <td class="py-3 px-3 text-right font-mono font-medium text-gray-300 text-[13px] align-middle">${fmtDolar(a.casos_atual)}</td>
-                    <td class="py-3 px-3 text-right font-mono font-medium text-gray-300 text-[13px] align-middle">${fmtDolar(a.refund)}</td>
-                    <td class="py-3 px-3 text-right font-mono font-bold text-emerald-400 text-[13px] align-middle">${fmtDolar(recuperado)}</td>
-                    <td class="py-3 px-3 text-center align-middle">${formatStatus(a.status_vol)}</td>
-                    <td class="py-3 px-3 text-center font-mono font-medium text-gray-400 text-[13px] align-middle">${fmtTrv(a.meta_trv_agente)}</td>
+                    <td class="py-3 px-3 text-right font-mono ${textClassData} align-middle">${fmtDolar(a.casos_atual)}</td>
+                    <td class="py-3 px-3 text-right font-mono ${textClassData} align-middle">${fmtDolar(a.refund)}</td>
+                    <td class="py-3 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-[13px] align-middle">${fmtDolar(recuperado)}</td>
+                    <td class="py-3 px-3 text-center align-middle">${formatStatus(a.status_vol, isTop3)}</td>
+                    <td class="py-3 px-3 text-center font-mono ${textClassData} align-middle">${fmtTrv(a.meta_trv_agente)}</td>
                     <td class="py-3 px-3 text-center font-mono font-black text-[15px] ${trvColor} align-middle">${fmtTrv(a.trv)}</td>
-                    <td class="py-3 px-3 text-center rounded-r-xl align-middle">${formatStatus(a.status_trv)}</td>
+                    <td class="py-3 px-3 text-center align-middle">${formatStatus(a.status_trv, isTop3)}</td>
                 </tr>`;
             }).join('');
         }
 
         // ==========================================
-        // TICKETS GERAL
+        // GESTÃO DE ABAS - TICKETS
         // ==========================================
-        let dadosTkGeral = [];
-        let filtroTkGeralSetor = 'TODOS';
-
         function mudarSubAbaTk(aba) {
-            document.getElementById('tela-tk-atual').classList.add('hidden');
-            document.getElementById('tela-tk-geral').classList.add('hidden');
-            document.getElementById('btn-sub-tk-atual').classList.replace('btn-setor-ativo', 'btn-setor-inativo');
-            document.getElementById('btn-sub-tk-geral').classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+            ['atual', 'semanal', 'geral'].forEach(id => {
+                document.getElementById(`tela-tk-${id}`).classList.add('hidden');
+                document.getElementById(`btn-sub-tk-${id}`).classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+            });
             document.getElementById(`tela-tk-${aba}`).classList.remove('hidden');
             document.getElementById(`btn-sub-tk-${aba}`).classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+            
             if (aba === 'geral' && dadosTkGeral.length === 0) carregarTicketsGeral('');
         }
+
+        // ==========================================
+        // 1. TICKETS ATUAL
+        // ==========================================
+        let dadosTkAtual = [];
+        let filtroTkAtualSetor = 'TODOS';
 
         async function carregarTickets(parametrosUrl = '') {
             try {
                 const response = await fetch('/api/tickets' + parametrosUrl);
                 const data = await response.json();
-                if (data.success) renderTabelaTickets(data.agentes);
+                if (data.success) {
+                    dadosTkAtual = data.agentes;
+                    renderTabelaTickets();
+                }
             } catch (error) { }
         }
 
-        function renderTabelaTickets(dados) {
+        function filtrarTkAtual(setor) {
+            filtroTkAtualSetor = setor;
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+                const btn = document.getElementById(`btn-f-tk-atual-${b}`);
+                if (btn) {
+                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+                }
+            });
+            renderTabelaTickets();
+        }
+
+        function renderTabelaTickets() {
             const tbody = document.getElementById('tabela-tickets-body');
             if (!tbody) return;
-            tbody.innerHTML = dados.map(a => {
-                const formatCell = val => (val === 0 || val === '-') ? `<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>` : `<span class="font-mono text-gray-700 dark:text-gray-300 font-medium">${val}</span>`;
-                const metaColor = a.meta >= 60 ? 'text-emerald-500' : (a.meta >= 40 ? 'text-yellow-500' : 'text-red-500');
+            
+            let lista = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
+            
+            if (lista.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente encontrado neste setor.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = lista.map(a => {
+                const formatCell = val => (val === 0 || val === '-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${val}</span>`;
+                const metaColor = a.meta >= 60 ? 'text-emerald-600 dark:text-emerald-500' : (a.meta >= 40 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500');
                 return `
                 <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-3 px-4 font-bold text-gray-900 dark:text-white rounded-l-xl pl-6">${a.nome}</td>
+                    <td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>
                     <td class="py-3 px-2 text-center">${formatCell(a.seg)}</td>
                     <td class="py-3 px-2 text-center">${formatCell(a.ter)}</td>
                     <td class="py-3 px-2 text-center">${formatCell(a.qua)}</td>
@@ -546,7 +627,7 @@
                     <td class="py-3 px-2 text-center">${formatCell(a.sab)}</td>
                     <td class="py-3 px-2 text-center">${formatCell(a.dom)}</td>
                     <td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td>
-                    <td class="py-3 px-4 text-center font-mono font-bold ${metaColor} rounded-r-xl pr-6">${a.meta}%</td>
+                    <td class="py-3 px-4 text-center font-mono font-bold ${metaColor} pr-6">${a.meta}%</td>
                 </tr>`;
             }).join('');
         }
@@ -571,6 +652,152 @@
 
             carregarTickets(`?since=${Math.floor(segunda.getTime() / 1000)}&until=${Math.floor(domingo.getTime() / 1000)}`);
         }
+
+        // ==========================================
+        // 2. TICKETS MENSAL 
+        // ==========================================
+        let diasFiltroSemanal = 7; 
+        let dadosTkSemanal = []; 
+        let filtroTkSemanalSetor = 'TODOS'; 
+
+        function gerarBotoesSemanas(anoMes) {
+            const parts = anoMes.split('-');
+            const ano = parseInt(parts[0]);
+            const mes = parseInt(parts[1]) - 1; 
+            
+            const semanas = [];
+            let dataAtual = new Date(ano, mes, 1);
+            const ultimoDia = new Date(ano, mes + 1, 0);
+
+            while (dataAtual <= ultimoDia) {
+                let inicioSemana = new Date(dataAtual);
+                while (dataAtual.getDay() !== 0 && dataAtual < ultimoDia) {
+                    dataAtual.setDate(dataAtual.getDate() + 1);
+                }
+                let fimSemana = new Date(dataAtual);
+                let dias = Math.round((fimSemana - inicioSemana) / (1000 * 60 * 60 * 24)) + 1;
+                
+                semanas.push({ inicio: inicioSemana, fim: fimSemana, dias: dias });
+                dataAtual.setDate(dataAtual.getDate() + 1);
+            }
+
+            const container = document.getElementById('botoes-semanas-container');
+            if(!container) return;
+            container.innerHTML = '';
+
+            semanas.forEach((sem, index) => {
+                const btn = document.createElement('button');
+                const strInicio = String(sem.inicio.getDate()).padStart(2, '0') + '/' + String(sem.inicio.getMonth()+1).padStart(2, '0');
+                const strFim = String(sem.fim.getDate()).padStart(2, '0') + '/' + String(sem.fim.getMonth()+1).padStart(2, '0');
+                
+                btn.className = `btn-setor text-[11px] px-3 py-1.5 ${index === 0 ? 'btn-setor-ativo' : 'btn-setor-inativo'}`;
+                btn.innerText = `Sem ${strInicio} - ${strFim}`;
+                
+                btn.onclick = async () => {
+                    Array.from(container.children).forEach(c => c.classList.replace('btn-setor-ativo', 'btn-setor-inativo'));
+                    btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+                    
+                    const dFim = new Date(sem.fim);
+                    dFim.setHours(23, 59, 59, 999);
+                    const since = Math.floor(sem.inicio.getTime() / 1000);
+                    const until = Math.floor(dFim.getTime() / 1000);
+                    
+                    let dataSegunda = new Date(sem.inicio);
+                    const day = dataSegunda.getDay();
+                    dataSegunda.setDate(dataSegunda.getDate() - day + (day === 0 ? -6 : 1)); 
+                    
+                    const nomesDias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+                    let htmlCab = '<th class="cabecalho-fixo py-3 px-4 min-w-[150px] pl-6 align-middle">Analista</th>';
+                    for(let i=0; i<7; i++) {
+                        let d = new Date(dataSegunda);
+                        d.setDate(d.getDate() + i);
+                        let strD = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth()+1).padStart(2, '0');
+                        let cor = (i >= 5) ? 'text-orange-600 dark:text-orange-500' : '';
+                        htmlCab += `<th class="cabecalho-fixo py-1.5 px-2 text-center align-middle ${cor}">
+                                        <div class="flex flex-col items-center leading-tight">
+                                            <span>${nomesDias[i]}</span>
+                                            <span class="text-[9px] font-bold opacity-60 mt-0.5">${strD}</span>
+                                        </div>
+                                    </th>`;
+                    }
+                    htmlCab += '<th class="cabecalho-fixo py-3 px-4 text-center align-middle">Total</th><th class="cabecalho-fixo py-3 px-4 text-center pr-6 text-gexCyan align-middle">Média/dia</th>';
+                    document.getElementById('tr-header-semanal').innerHTML = htmlCab;
+                    
+                    const originalText = btn.innerText;
+                    btn.innerText = '⏳ Buscando...';
+                    await carregarTicketsSemanal(`?since=${since}&until=${until}`, sem.dias);
+                    btn.innerText = originalText;
+                };
+                
+                container.appendChild(btn);
+                
+                if(index === 0) {
+                    btn.click();
+                }
+            });
+        }
+
+        async function carregarTicketsSemanal(parametrosUrl = '', dias = 7) {
+            try {
+                diasFiltroSemanal = dias;
+                const response = await fetch('/api/tickets' + parametrosUrl);
+                const data = await response.json();
+                if (data.success) {
+                    dadosTkSemanal = data.agentes; 
+                    renderTabelaTicketsSemanal(); 
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        function filtrarTkSemanal(setor) {
+            filtroTkSemanalSetor = setor;
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+                const btn = document.getElementById(`btn-f-tk-sem-${b}`);
+                if (btn) {
+                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+                }
+            });
+            renderTabelaTicketsSemanal();
+        }
+
+        function renderTabelaTicketsSemanal() {
+            const tbody = document.getElementById('tabela-tickets-semanal-body');
+            if (!tbody) return;
+            
+            let lista = filtroTkSemanalSetor === 'TODOS' ? dadosTkSemanal : dadosTkSemanal.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
+            
+            if (lista.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente encontrado neste setor.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = lista.map(a => {
+                const formatCell = val => (val === 0 || val === '-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${val}</span>`;
+                
+                const mediaDia = (a.total / diasFiltroSemanal).toFixed(1);
+                
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.seg)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.ter)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.qua)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.qui)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.sex)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.sab)}</td>
+                    <td class="py-3 px-2 text-center">${formatCell(a.dom)}</td>
+                    <td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td>
+                    <td class="py-3 px-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 pr-6">${mediaDia}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // ==========================================
+        // 3. TICKETS GERAL
+        // ==========================================
+        let dadosTkGeral = [];
+        let filtroTkGeralSetor = 'TODOS';
 
         async function carregarTicketsGeral(parametrosUrl = '') {
             try {
@@ -612,12 +839,12 @@
             thead.innerHTML = theadHTML;
 
             tbody.innerHTML = lista.map(a => {
-                const formatCell = val => (val === 0 || val === '-') ? `<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>` : `<span class="font-mono text-gray-700 dark:text-gray-300 font-medium">${val}</span>`;
-                const metaColor = a.meta >= 60 ? 'text-emerald-500' : (a.meta >= 40 ? 'text-yellow-500' : 'text-red-500');
+                const formatCell = val => (val === 0 || val === '-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${val}</span>`;
+                const metaColor = a.meta >= 60 ? 'text-emerald-600 dark:text-emerald-500' : (a.meta >= 40 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500');
 
-                let tdHTML = `<td class="py-3 px-4 font-bold text-gray-900 dark:text-white rounded-l-xl pl-6">${a.nome}</td>`;
+                let tdHTML = `<td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>`;
                 for (let i = 0; i < numSemanas; i++) tdHTML += `<td class="py-3 px-2 text-center">${formatCell(a.semanas[i])}</td>`;
-                tdHTML += `<td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-mono font-bold ${metaColor} rounded-r-xl pr-6">${a.meta}%</td>`;
+                tdHTML += `<td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-mono font-bold ${metaColor} pr-6">${a.meta}%</td>`;
 
                 return `<tr class="ranking-row row-normal linha-animada">${tdHTML}</tr>`;
             }).join('');
@@ -652,7 +879,7 @@
 
         function filtrarQualidade(setor) {
             setorQualAtivo = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
                 const btn = document.getElementById(`btn-qual-${b}`);
                 if (btn) {
                     if (b === setor) { btn.classList.remove('btn-setor-inativo'); btn.classList.add('btn-setor-ativo'); }
@@ -668,32 +895,48 @@
             
             let qualData = setorQualAtivo === 'TODOS' ? [...dadosQualidade] : dadosQualidade.filter(a => a.time.includes(setorQualAtivo));
             
-            qualData.sort((a, b) => a.nome.localeCompare(b.nome));
+            qualData.sort((a, b) => b.qual - a.qual);
 
             let media = qualData.length > 0 ? qualData.reduce((acc, curr) => acc + curr.qual, 0) / qualData.length : 0;
             const elMediaVal = document.getElementById('media-qualidade-val');
             if (elMediaVal) elMediaVal.innerText = media.toFixed(1);
 
             if (qualData.length === 0) {
-                tbQualidade.innerHTML = `<tr><td colspan="3" class="py-6 text-center text-gray-500">Nenhuma nota encontrada para este filtro.</td></tr>`;
+                tbQualidade.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-gray-500 font-bold">Nenhuma nota encontrada para este filtro.</td></tr>`;
                 return;
             }
 
-            tbQualidade.innerHTML = qualData.map((a) => {
+            const formatNotaCiclo = (n) => {
+                if (n === null || n === undefined) return '<span class="texto-contraste-sm opacity-50">-</span>';
+                let cor = 'text-gexCyan';
+                if (n < 70) cor = 'text-red-600 dark:text-red-500';
+                else if (n < 90) cor = 'text-yellow-600 dark:text-yellow-500';
+                return `<span class="font-mono font-bold ${cor}">${n.toFixed(1)}</span>`;
+            };
+
+            tbQualidade.innerHTML = qualData.map((a, i) => {
                 const badgeTime = `<span class="badge-setor">${a.time}</span>`;
 
                 let corNota = 'text-gexCyan drop-shadow-[0_0_8px_rgba(34,167,240,0.4)]'; 
                 if (a.qual < 70) {
-                    corNota = 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]'; 
+                    corNota = 'text-red-600 dark:text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]'; 
                 } else if (a.qual < 90) {
-                    corNota = 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]'; 
+                    corNota = 'text-yellow-600 dark:text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]'; 
                 }
+
+                let posEl = `<span class="pos-badge">${i + 1}º</span>`;
 
                 return `
                 <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-4 px-3 pl-6 font-bold text-gray-100 dark:text-white whitespace-nowrap text-[14px] align-middle rounded-l-xl">${a.nome}</td>
+                    <td class="py-3 px-2 text-center align-middle w-14">${posEl}</td>
+                    <td class="py-4 px-3 pl-2 texto-contraste whitespace-nowrap align-middle">${a.nome}</td>
                     <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
-                    <td class="py-4 px-3 text-center font-mono font-black text-lg ${corNota} align-middle rounded-r-xl pr-6">${a.qual.toFixed(1)}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5">${formatNotaCiclo(a.c1)}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5">${formatNotaCiclo(a.c2)}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5">${formatNotaCiclo(a.c3)}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-r border-white/5">${formatNotaCiclo(a.c4)}</td>
+                    
+                    <td class="py-4 px-3 text-center font-mono font-black text-lg ${corNota} align-middle pr-6">${a.qual.toFixed(1)}</td>
                 </tr>`;
             }).join('');
         }
@@ -704,6 +947,31 @@
                 document.getElementById('theme-toggle-light-icon').classList.remove('hidden');
             } else {
                 document.getElementById('theme-toggle-dark-icon').classList.remove('hidden');
+            }
+
+            const selectMesSemanal = document.getElementById('mes-tickets-semanais');
+            if (selectMesSemanal) {
+                const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                let htmlMeses = '';
+                let dataDropdown = new Date();
+                
+                for (let i = 0; i < 12; i++) { 
+                    let ano = dataDropdown.getFullYear();
+                    let mes = dataDropdown.getMonth();
+                    let val = `${ano}-${String(mes + 1).padStart(2, '0')}`;
+                    let label = `${mesesNomes[mes]} de ${ano}`;
+                    
+                    htmlMeses += `<option value="${val}">${label}</option>`;
+                    dataDropdown.setMonth(dataDropdown.getMonth() - 1);
+                }
+                
+                selectMesSemanal.innerHTML = htmlMeses;
+
+                selectMesSemanal.addEventListener('change', () => {
+                    if (selectMesSemanal.value) {
+                        gerarBotoesSemanas(selectMesSemanal.value);
+                    }
+                });
             }
 
             carregarTudo();
@@ -737,6 +1005,8 @@
                     carregarQualidade(e.target.value);
                 });
             }
+
+            setInterval(carregarTudo, 30 * 60 * 1000);
         });
     </script>
 </body>
