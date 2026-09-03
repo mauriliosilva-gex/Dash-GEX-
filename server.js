@@ -306,19 +306,15 @@ app.get('/api/qualidade', async (req, res) => {
 
         if (rows.length < 4) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
 
-        // ---------------------------------------------------------
-        // 🔧 MAPEAMENTO EXATO DA PLANILHA DE QUALIDADE
-        // A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8
-        // ---------------------------------------------------------
-        const idxSetor = 1; // Coluna B (Ex: Retenção - Email)
-        const idxNome  = 2; // Coluna C (Ex: Adevânia Silva)
-        const idxNota  = 5; // Coluna F (Ex: 100)
-        const idxMes   = 8; // Coluna I (Ex: setembro-2026)
+        const idxSetor = 1; // Coluna B
+        const idxNome  = 2; // Coluna C
+        const idxCiclo = 3; // Coluna D (Monitoria / Ciclo 1 a 4)
+        const idxNota  = 5; // Coluna F
+        const idxMes   = 8; // Coluna I
 
         let mesesSet = new Set();
         let monitoriasGerais = [];
 
-        // O loop começa em 4 porque os dados começam na Linha 5
         for (let i = 4; i < rows.length; i++) {
             const row = rows[i];
             const nomeRaw = String(row[idxNome] || '').trim();
@@ -326,45 +322,44 @@ app.get('/api/qualidade', async (req, res) => {
             
             if (!nomeRaw || !mesRaw) continue;
             
-            // Remove acentos para bater perfeitamente no sistema
             const nomeFormatado = normalizeNome(nomeRaw);
-
             mesesSet.add(mesRaw);
 
             let notaStr = String(row[idxNota] || '0').replace('%', '').replace(',', '.');
             let nota = parseFloat(notaStr) || 0;
+            
+            // Lê o número do ciclo (Coluna D)
+            let cicloNum = parseInt(row[idxCiclo]) || 1;
 
-            // Traduz setor para sigla oficial
             let setorRaw = String(row[idxSetor] || '').toUpperCase();
-            let siglaSetor = 'RET'; // Padrão
+            let siglaSetor = 'RET'; 
             if (setorRaw.includes('SAC')) siglaSetor = 'SAC';
             else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) siglaSetor = 'BKO';
             else if (setorRaw.includes('SMS')) siglaSetor = 'SMS';
 
-            monitoriasGerais.push({ 
-                mes: mesRaw, 
-                nome: nomeFormatado, 
-                time: siglaSetor, 
-                qual: nota 
-            });
+            monitoriasGerais.push({ mes: mesRaw, nome: nomeFormatado, time: siglaSetor, qual: nota, ciclo: cicloNum });
         }
 
         const meses = Array.from(mesesSet).sort((a, b) => b.localeCompare(a)); 
         const mesSelecionado = req.query.mes || (meses.length > 0 ? meses[0] : '');
-
         const monitoriasDoMes = monitoriasGerais.filter(m => m.mes === mesSelecionado);
 
         const agentesAgrupados = {};
         monitoriasDoMes.forEach(m => {
-            if (!agentesAgrupados[m.nome]) agentesAgrupados[m.nome] = { nome: m.nome, time: m.time, soma: 0, count: 0 };
+            if (!agentesAgrupados[m.nome]) agentesAgrupados[m.nome] = { nome: m.nome, time: m.time, soma: 0, count: 0, ciclos: {} };
             agentesAgrupados[m.nome].soma += m.qual;
             agentesAgrupados[m.nome].count++;
+            agentesAgrupados[m.nome].ciclos[`c${m.ciclo}`] = m.qual; // Salva a nota no ciclo específico
         });
 
         const resultados = Object.values(agentesAgrupados).map(a => ({ 
             nome: a.nome, 
             time: a.time, 
-            qual: a.soma / a.count 
+            qual: a.soma / a.count,
+            c1: a.ciclos['c1'] !== undefined ? a.ciclos['c1'] : null,
+            c2: a.ciclos['c2'] !== undefined ? a.ciclos['c2'] : null,
+            c3: a.ciclos['c3'] !== undefined ? a.ciclos['c3'] : null,
+            c4: a.ciclos['c4'] !== undefined ? a.ciclos['c4'] : null
         }));
         
         res.json({ success: true, meses: meses, mesAtual: mesSelecionado, agentes: resultados });
