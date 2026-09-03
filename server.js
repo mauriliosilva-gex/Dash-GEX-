@@ -313,14 +313,31 @@ app.get('/api/qualidade', async (req, res) => {
         
         const sheetIdQualidade = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
         
+        // 1. LER ABA DE MONITORIAS
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_MONITORIA'!A1:Z5000` });
         const rows = response.data.values || [];
 
         if (rows.length < 4) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
 
+        // 2. LER NOVA ABA DE LINKS DO DRIVE MÁGICA
+        let linksDriveAgentes = {};
+        try {
+            const responseLinks = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'LINKS_AGENTES'!A1:B200` });
+            const rowsLinks = responseLinks.data.values || [];
+            
+            rowsLinks.forEach(row => {
+                const nomeAgent = normalizeNome(String(row[0] || '').trim());
+                const linkDrive = String(row[1] || '').trim();
+                if (nomeAgent && linkDrive.startsWith('http')) {
+                    linksDriveAgentes[nomeAgent] = linkDrive;
+                }
+            });
+        } catch (e) { console.log("Aba LINKS_AGENTES vazia ou não encontrada."); }
+
+        // Mapeamento das colunas
         const idxSetor = 1; // Coluna B
         const idxNome  = 2; // Coluna C
-        const idxCiclo = 3; // Coluna D (Monitoria / Ciclo 1 a 4)
+        const idxCiclo = 3; // Coluna D (Ciclos)
         const idxNota  = 5; // Coluna F
         const idxMes   = 8; // Coluna I
 
@@ -339,8 +356,6 @@ app.get('/api/qualidade', async (req, res) => {
 
             let notaStr = String(row[idxNota] || '0').replace('%', '').replace(',', '.');
             let nota = parseFloat(notaStr) || 0;
-            
-            // Lê o número do ciclo (Coluna D)
             let cicloNum = parseInt(row[idxCiclo]) || 1;
 
             let setorRaw = String(row[idxSetor] || '').toUpperCase();
@@ -349,7 +364,7 @@ app.get('/api/qualidade', async (req, res) => {
             else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) siglaSetor = 'BKO';
             else if (setorRaw.includes('SMS')) siglaSetor = 'SMS';
 
-            monitoriasGerais.push({ mes: mesRaw, nome: nomeFormatado, time: siglaSetor, qual: nota, ciclo: cicloNum });
+            monitoriasGerais.push({ mes: mesRaw, nome: nomeFormatado, time: siglaSetor, qual: nota, ciclo: cicloNum, nomeOriginal: nomeRaw });
         }
 
         const meses = Array.from(mesesSet).sort((a, b) => b.localeCompare(a)); 
@@ -358,28 +373,69 @@ app.get('/api/qualidade', async (req, res) => {
 
         const agentesAgrupados = {};
         monitoriasDoMes.forEach(m => {
-            if (!agentesAgrupados[m.nome]) agentesAgrupados[m.nome] = { nome: m.nome, time: m.time, soma: 0, count: 0, ciclos: {} };
+            if (!agentesAgrupados[m.nome]) agentesAgrupados[m.nome] = { nome: m.nome, time: m.time, soma: 0, count: 0, ciclos: {}, nomeOriginal: m.nomeOriginal };
             agentesAgrupados[m.nome].soma += m.qual;
             agentesAgrupados[m.nome].count++;
-            agentesAgrupados[m.nome].ciclos[`c${m.ciclo}`] = m.qual; // Salva a nota no ciclo específico
+            agentesAgrupados[m.nome].ciclos[`c${m.ciclo}`] = m.qual; 
         });
 
-        const resultados = Object.values(agentesAgrupados).map(a => ({ 
-            nome: a.nome, 
-            time: a.time, 
-            qual: a.soma / a.count,
-            c1: a.ciclos['c1'] !== undefined ? a.ciclos['c1'] : null,
-            c2: a.ciclos['c2'] !== undefined ? a.ciclos['c2'] : null,
-            c3: a.ciclos['c3'] !== undefined ? a.ciclos['c3'] : null,
-            c4: a.ciclos['c4'] !== undefined ? a.ciclos['c4'] : null
-        }));
+        const resultados = Object.values(agentesAgrupados).map(a => {
+            let linkPastaDrive = '#';
+            const nomeBuscadoOriginal = String(a.nomeOriginal || '').trim();
+            const nomeBuscadoNormalizado = normalizeNome(nomeBuscadoOriginal);
+            
+            // 1. Tenta achar pelo nome EXATO normalizado
+            if (linksDriveAgentes[nomeBuscadoNormalizado]) {
+                linkPastaDrive = linksDriveAgentes[nomeBuscadoNormalizado];
+            } else {
+                // 2. Busca inteligente por maior similaridade de palavras
+                // Isso resolve o problema de "Luana Souza" vs "Luana Alves" e erros de digitação leves
+                const palavrasBuscadas = nomeBuscadoNormalizado.split(' ').filter(p => p.length > 0);
+                
+                let melhorChave = null;
+                let maiorPontuacao = 0;
+
+                for (const chaveLink of Object.keys(linksDriveAgentes)) {
+                    const palavrasChave = chaveLink.split(' ').filter(p => p.length > 0);
+                    let pontuacaoAtual = 0;
+
+                    // Verifica se o primeiro nome bate (É obrigatório para evitar absurdos)
+                    if (palavrasBuscadas.length > 0 && palavrasChave.length > 0 && palavrasBuscadas[0] === palavrasChave[0]) {
+                        pontuacaoAtual += 10; // Bônus gigante pro primeiro nome bater
+                        
+                        // Conta quantas outras palavras (sobrenomes) batem
+                        for (let i = 1; i < palavrasBuscadas.length; i++) {
+                            if (palavrasChave.includes(palavrasBuscadas[i])) {
+                                pontuacaoAtual += 1;
+                            }
+                        }
+                    }
+
+                    if (pontuacaoAtual > maiorPontuacao) {
+                        maiorPontuacao = pontuacaoAtual;
+                        melhorChave = chaveLink;
+                    }
+                }
+
+                // Só associa se a pontuação for suficiente (pelo menos o primeiro nome bateu e desempatou)
+                if (melhorChave && maiorPontuacao > 0) {
+                    linkPastaDrive = linksDriveAgentes[melhorChave];
+                }
+            }
+
+            return { 
+                nome: a.nomeOriginal.toUpperCase(), time: a.time, qual: a.soma / a.count,
+                c1: a.ciclos['c1'] !== undefined ? a.ciclos['c1'] : null,
+                c2: a.ciclos['c2'] !== undefined ? a.ciclos['c2'] : null,
+                c3: a.ciclos['c3'] !== undefined ? a.ciclos['c3'] : null,
+                c4: a.ciclos['c4'] !== undefined ? a.ciclos['c4'] : null,
+                link: linkPastaDrive
+            };
+        });
         
         res.json({ success: true, meses: meses, mesAtual: mesSelecionado, agentes: resultados });
 
-    } catch (error) { 
-        console.error("❌ Erro em Qualidade:", error.message);
-        res.status(500).json({ success: false, error: error.message }); 
-    }
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
 
 // ==========================================
