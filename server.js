@@ -276,8 +276,20 @@ app.get('/api/retencao', async (req, res) => {
                 tickets: ticketsAgente.totalMes, 
                 hist_tickets: ticketsAgente.hist_tickets, 
                 meta_casos: meta_casos, casos_atual: casosAtual, refund: refund, recuperado: recuperado, meta_trv_agente: meta_trv_agente,
-                trv: trv, status_vol: status_vol, status_trv: status_trv, qual: 0, score: trv, hist_trv: hist_trv
+                trv: trv, status_vol: status_vol, status_trv: status_trv, qual: 0, score: 0, hist_trv: hist_trv
             };
+        });
+
+        // 🌟 NOVO CÁLCULO DE RANKING PESADO (50% % TRV + 50% $ CASOS)
+        const maxTrv = Math.max(...agentes.map(a => a.trv), 1);
+        const maxCasos = Math.max(...agentes.map(a => a.casos_atual), 1);
+
+        agentes.forEach(a => {
+            const pctTrvRelativo = maxTrv > 0 ? (a.trv / maxTrv) : 0;
+            const pctCasosRelativo = maxCasos > 0 ? (a.casos_atual / maxCasos) : 0;
+            
+            // Média equilibrada entre o TRV% e o $ Volume de Casos
+            a.score = ((pctTrvRelativo + pctCasosRelativo) / 2) * 100;
         });
 
         agentes.sort((a, b) => b.score - a.score);
