@@ -14,11 +14,10 @@
         .flatpickr-months .flatpickr-month { background: #0a0f1c !important; color: white !important; }
         .flatpickr-weekdays { background: #0a0f1c !important; }
 
-        /* Estilos do Ranking com Bordas Corrigidas Definitivamente */
+        /* Estilos do Ranking e Destaques */
         .ranking-row { border-radius: 0.75rem; overflow: hidden; }
         .ranking-row td:first-child { border-top-left-radius: 0.75rem; border-bottom-left-radius: 0.75rem; }
         .ranking-row td:last-child { border-top-right-radius: 0.75rem; border-bottom-right-radius: 0.75rem; }
-        /* Remove fundos extras das células que causam as pontas brancas */
         .ranking-row td { background-color: transparent !important; }
 
         .row-gold { background: linear-gradient(90deg, #2b1f00 0%, #5c4700 50%, #2b1f00 100%); box-shadow: inset 0 0 0 1px #d4af37, 0 4px 15px rgba(212, 175, 55, 0.15); }
@@ -103,17 +102,24 @@
         html.dark .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--gex-cyan); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
         
-        /* CONTRASTE ALTO: Textos Pretos no Claro, Brancos no Escuro */
         .texto-contraste { @apply text-black dark:text-white font-bold text-[14px]; }
         .texto-contraste-sm { @apply text-black dark:text-white font-medium text-[13px]; }
         .texto-contraste-xs { @apply text-black dark:text-white font-bold text-xs; }
         
-        /* TOP 3: SEMPRE BRANCO */
         .texto-top3 { @apply text-white font-bold text-[14px] !important; }
         .texto-top3-sm { @apply text-white font-medium text-[13px] !important; }
         .texto-top3-xs { @apply text-white font-bold text-xs !important; }
 
         .pos-badge { @apply inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-900 dark:bg-white text-white dark:text-black font-black text-[11px] shadow-sm; }
+
+        /* Especial Qualidade - Ouro em Notas 100 */
+        .qualidade-ouro { 
+            background: linear-gradient(90deg, #2b1f00 0%, #5c4700 50%, #2b1f00 100%) !important; 
+            color: #ffffff !important;
+            box-shadow: inset 0 0 0 1px #d4af37 !important;
+            border-radius: 0.75rem;
+        }
+
     </style>
 </head>
 
@@ -391,14 +397,14 @@
                         <table class="w-full text-left border-separate min-w-[600px]" style="border-spacing: 0 0.5rem;">
                             <thead class="z-20">
                                 <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-                                    <th class="cabecalho-fixo py-3 px-2 w-14 text-center">Pos</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-left pl-2">Analista</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-left pl-6">Analista</th>
                                     <th class="cabecalho-fixo py-3 px-3 text-center">Setor</th>
                                     <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 1</th>
                                     <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 2</th>
                                     <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 3</th>
                                     <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 4</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center pr-6">Média Final</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center">Média Final</th>
+                                    <th class="cabecalho-fixo py-3 px-3 text-center pr-6">Detalhes</th>
                                 </tr>
                             </thead>
                             <tbody id="tabela-qualidade-body">
@@ -445,7 +451,6 @@
         const fmtDolar = val => '$ ' + Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const fmtTrv = val => Number(val || 0).toFixed(2) + '%';
         
-        // Status com cores de alto contraste, e suporte para Top 3 (Sempre Branco)
         const formatStatus = (text, isTop3 = false) => {
             if (!text) return '<span class="text-gray-500 font-bold">-</span>';
             const cleanText = text.replace(/^[✅❌⚠️]\s*/, '');
@@ -517,12 +522,10 @@
                 let trClass = 'row-normal linha-animada';
                 let posEl = `<span class="pos-badge">${i + 1}º</span>`;
                 
-                // Textos Pretos no Claro / Brancos no Escuro
                 let nameClass = 'texto-contraste'; 
                 let textClassData = 'texto-contraste-sm';
                 let trvColor = a.trv >= 70 ? 'text-emerald-600 dark:text-emerald-500' : a.trv >= 60 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500';
 
-                // Top 3 Força tudo Branco!
                 if (i === 0) {
                     trClass = 'row-gold font-bold linha-animada'; nameClass = 'texto-top3 text-yellow-400'; trvColor = 'text-yellow-400'; textClassData = 'texto-top3-sm';
                     posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
@@ -902,41 +905,67 @@
             if (elMediaVal) elMediaVal.innerText = media.toFixed(1);
 
             if (qualData.length === 0) {
-                tbQualidade.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-gray-500 font-bold">Nenhuma nota encontrada para este filtro.</td></tr>`;
+                tbQualidade.innerHTML = `<tr><td colspan="9" class="py-6 text-center text-gray-500 font-bold">Nenhuma nota encontrada para este filtro.</td></tr>`;
                 return;
             }
 
+            const theadQual = document.querySelector('#aba-qualidade thead tr');
+            if(theadQual && !theadQual.innerHTML.includes('Detalhes')) {
+                theadQual.innerHTML += '<th class="cabecalho-fixo py-3 px-3 text-center pr-6">Detalhes</th>';
+            }
+
+            // FUNÇÃO MÁGICA DE GABARITO NO CICLO:
+            // Retorna não apenas a string HTML da célula, mas também se foi nota 100 para colorir o fundo
             const formatNotaCiclo = (n) => {
-                if (n === null || n === undefined) return '<span class="texto-contraste-sm opacity-50">-</span>';
+                if (n === null || n === undefined) return { html: '<span class="texto-contraste-sm opacity-50">-</span>', is100: false };
+                
+                if (n === 100) return { html: '<span class="font-mono font-bold text-white text-[14px]">100.0</span>', is100: true };
+                
                 let cor = 'text-gexCyan';
                 if (n < 70) cor = 'text-red-600 dark:text-red-500';
                 else if (n < 90) cor = 'text-yellow-600 dark:text-yellow-500';
-                return `<span class="font-mono font-bold ${cor}">${n.toFixed(1)}</span>`;
+                return { html: `<span class="font-mono font-bold ${cor}">${n.toFixed(1)}</span>`, is100: false };
             };
 
             tbQualidade.innerHTML = qualData.map((a, i) => {
                 const badgeTime = `<span class="badge-setor">${a.time}</span>`;
 
-                let corNota = 'text-gexCyan drop-shadow-[0_0_8px_rgba(34,167,240,0.4)]'; 
-                if (a.qual < 70) {
-                    corNota = 'text-red-600 dark:text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]'; 
-                } else if (a.qual < 90) {
-                    corNota = 'text-yellow-600 dark:text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]'; 
+                let trClass = 'row-normal linha-animada';
+                let nameClass = 'texto-contraste';
+
+                // CRIA O BOTÃO DE LINK (AZUL NO MODO CLARO)
+                let btnDetalhes = `<a href="${a.link}" target="_blank" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-gradient-to-r from-gexBlue to-gexCyan dark:from-[#1e293b] dark:to-[#334155] text-white dark:text-gray-200 border border-transparent dark:border-gray-600 text-[11px] font-black transition-all hover:scale-105 shadow-[0_4px_10px_rgba(34,167,240,0.4)] dark:shadow-sm" style="text-decoration: none;">📄 Drive</a>`;                 
+                if (!a.link || a.link === '#') {
+                    btnDetalhes = `<span class="text-gray-400 dark:text-gray-600 text-[10px] font-bold">Sem link</span>`;
                 }
 
-                let posEl = `<span class="pos-badge">${i + 1}º</span>`;
+                // AVALIA AS NOTAS DOS CICLOS
+                const c1 = formatNotaCiclo(a.c1);
+                const c2 = formatNotaCiclo(a.c2);
+                const c3 = formatNotaCiclo(a.c3);
+                const c4 = formatNotaCiclo(a.c4);
+
+                // SE TIROU 100 NA MÉDIA FINAL, FICA TUDO DOURADO E GANHA ESTRELA!
+                let isGabaritoFinal = a.qual === 100;
+                let estrelaHtml = isGabaritoFinal ? '<span class="text-yellow-500 text-lg ml-1">⭐</span>' : '';
+                
+                let tdQualidadeFinalClass = `py-4 px-3 text-center align-middle ${isGabaritoFinal ? 'qualidade-ouro border border-yellow-500/50' : ''}`;
+                let textoQualFinal = isGabaritoFinal ? 
+                    `<span class="font-mono font-black text-white text-[16px] drop-shadow-md">${a.qual.toFixed(1)}</span>` : 
+                    `<span class="font-mono font-black text-lg ${a.qual < 70 ? 'text-red-600 dark:text-red-500' : a.qual < 90 ? 'text-yellow-600 dark:text-yellow-500' : 'text-gexCyan'} align-middle">${a.qual.toFixed(1)}</span>`;
 
                 return `
-                <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-3 px-2 text-center align-middle w-14">${posEl}</td>
-                    <td class="py-4 px-3 pl-2 texto-contraste whitespace-nowrap align-middle">${a.nome}</td>
+                <tr class="ranking-row ${trClass}">
+                    <td class="py-4 px-3 pl-6 ${nameClass} whitespace-nowrap align-middle rounded-l-xl flex items-center gap-1">${a.nome}${estrelaHtml}</td>
                     <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
-                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5">${formatNotaCiclo(a.c1)}</td>
-                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5">${formatNotaCiclo(a.c2)}</td>
-                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5">${formatNotaCiclo(a.c3)}</td>
-                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-r border-white/5">${formatNotaCiclo(a.c4)}</td>
                     
-                    <td class="py-4 px-3 text-center font-mono font-black text-lg ${corNota} align-middle pr-6">${a.qual.toFixed(1)}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5 ${c1.is100 ? 'qualidade-ouro' : ''}">${c1.html}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5 ${c2.is100 ? 'qualidade-ouro' : ''}">${c2.html}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-white/5 ${c3.is100 ? 'qualidade-ouro' : ''}">${c3.html}</td>
+                    <td class="py-4 px-3 text-center align-middle bg-black/5 dark:bg-white/5 border-l border-r border-white/5 ${c4.is100 ? 'qualidade-ouro' : ''}">${c4.html}</td>
+                    
+                    <td class="${tdQualidadeFinalClass}">${textoQualFinal}</td>
+                    <td class="py-4 px-3 text-center align-middle rounded-r-xl pr-6">${btnDetalhes}</td>
                 </tr>`;
             }).join('');
         }
