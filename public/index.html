@@ -126,22 +126,33 @@
         <div class="absolute -bottom-[200px] -left-[120px] w-[350px] h-[650px] border-[22px] border-[#1b52af] rounded-full rotate-[35deg]"></div>
     </div>
 
-    <!-- HEADER -->
+    <!-- HEADER COM INFORMAÇÕES DE LOGIN -->
     <header class="bg-[#020617] border-b border-black sticky top-0 z-50 transition-colors shadow-lg">
         <div class="max-w-[1700px] mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center gap-4">
-                <img src="logo.jpg" alt="Logo GEX" class="w-12 h-12 rounded-[14px] shadow-sm object-cover border border-white/10">
+                <img src="/logo.jpg" alt="Logo GEX" class="w-12 h-12 rounded-[14px] shadow-sm object-cover border border-white/10">
                 <div>
                     <h1 class="text-[26px] font-black tracking-tight text-white leading-none">Dash GEX</h1>
                     <p class="text-[13px] text-gray-400 font-medium mt-1">Acompanhamento de Performance e Metas</p>
                 </div>
             </div>
+            
             <div class="flex items-center gap-4">
+                <div class="text-right hidden md:block">
+                    <div id="header-user-name" class="text-sm font-bold text-white leading-tight">Carregando...</div>
+                    <div id="header-user-role" class="text-[10px] text-gexCyan font-black uppercase tracking-wider">Aguarde</div>
+                </div>
+                
+                <a href="/logout" class="p-2 bg-red-500/20 hover:bg-red-500/40 text-red-500 rounded-lg transition-colors shadow-sm" title="Sair do Sistema">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                </a>
+                
+                <div class="w-px h-6 bg-gray-800 mx-1"></div>
+                
                 <button class="bg-gradient-to-r from-gexCyan to-gexBlue hover:opacity-90 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md transition-all flex items-center gap-2" onclick="carregarTudo()">
                     Sincronizar
                 </button>
-                <div class="w-px h-6 bg-gray-800 mx-2"></div>
-                <button id="theme-toggle" class="p-2 rounded-lg bg-black/30 hover:bg-black/50 transition-colors">
+                <button id="theme-toggle" class="p-2 rounded-lg bg-black/30 hover:bg-black/50 transition-colors ml-2">
                     <svg id="theme-toggle-light-icon" class="hidden w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
                     </svg>
@@ -229,6 +240,9 @@
                         <button id="btn-sub-tk-atual" onclick="mudarSubAbaTk('atual')" class="btn-setor btn-setor-ativo">Tickets Atual</button>
                         <button id="btn-sub-tk-semanal" onclick="mudarSubAbaTk('semanal')" class="btn-setor btn-setor-inativo">Visão Mensal</button>
                         <button id="btn-sub-tk-geral" onclick="mudarSubAbaTk('geral')" class="btn-setor btn-setor-inativo">Tickets Geral</button>
+                        
+                        <!-- NOVO BOTÃO DE DISTRIBUIÇÃO -->
+                        <button id="btn-sub-tk-distribuicao" onclick="mudarSubAbaTk('distribuicao')" class="btn-setor btn-setor-inativo">📊 Distribuição / Status</button>
                     </div>
                 </div>
 
@@ -344,70 +358,232 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- SUB-ABA 4: DISTRIBUIÇÃO E STATUS (NOVIDADE) -->
+                <div id="tela-tk-distribuicao" class="hidden flex-1 flex flex-col min-h-0 bg-[#020617]">
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                        
+                        <!-- Bloco 1: Status de Casos Real-Time -->
+                        <div class="glass-panel bg-white dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-lg">
+                            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20 flex justify-between items-center">
+                                <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">📑 Resumo de Casos por Agente (Tempo Real)</h3>
+                                <button onclick="carregarDistribuicao()" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1.5 rounded transition-colors shadow-sm">🔄 Recarregar</button>
+                            </div>
+                            <div class="p-4 overflow-x-auto">
+                                <table class="w-full text-left border-separate min-w-[800px]" style="border-spacing: 0 0.5rem;">
+                                    <thead>
+                                        <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                            <th class="py-2 px-3 pl-4">Agente</th>
+                                            <th class="py-2 px-3 text-center">🔴 Oculto / Resolvido?</th>
+                                            <th class="py-2 px-3 text-center">🟡 Aguardando</th>
+                                            <th class="py-2 px-3 text-center">💤 Parado (>3 dias)</th>
+                                            <th class="py-2 px-3 text-center">⚙️ Em Andamento</th>
+                                            <th class="py-2 px-3 text-center font-black text-gexCyan">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabela-casos-body" class="text-sm"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Bloco 2: Distribuição por Caixas de Entrada -->
+                        <div class="glass-panel bg-white dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-lg">
+                            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20 flex justify-between items-center">
+                                <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">📊 Distribuição de Casos por Caixa (Times)</h3>
+                            </div>
+                            <div class="p-4 overflow-x-auto">
+                                <table class="w-full text-left border-separate min-w-[800px]" style="border-spacing: 0 0.5rem;">
+                                    <thead>
+                                        <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest" id="thead-dist-dinamico">
+                                            <!-- Dinâmico -->
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabela-dist-body" class="text-sm"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                
             </div>
         </div>
 
-        <!-- ABA: QUALIDADE -->
+        <!-- ABA: QUALIDADE (AGORA COM SUB-ABAS) -->
         <div id="aba-qualidade" class="hidden space-y-6">
-            <div class="flex justify-between items-end mb-4">
-                <div class="grid grid-cols-1 md:grid-cols-1 gap-6 w-1/3">
-                    <div class="glass-panel bg-lightCard dark:bg-darkCard border-2 border-gexCyan rounded-2xl p-6 shadow-[0_0_15px_rgba(34,167,240,0.1)]">
-                        <h3 id="media-qualidade-label" class="text-xs font-bold text-gexCyan uppercase tracking-widest mb-2">Média da Equipe (Geral)</h3>
-                        <div class="mt-1 flex items-end gap-2">
-                            <span id="media-qualidade-val" class="text-4xl font-extrabold text-gray-900 dark:text-white font-mono">0.0</span>
-                            <span class="text-sm font-bold text-gray-500 mb-1">/ 100</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
             
-            <section class="flex flex-col gap-6 items-start h-[800px] mb-10">
-                <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl w-full flex flex-col h-full overflow-hidden shadow-2xl">
-                    <div class="px-6 py-5 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
-                        <div class="flex items-center gap-4">
-                            <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Notas de Monitoria por Analista</h2>
-                            <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
-                            
-                            <div class="flex items-center gap-2">
-                                <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Mês:</label>
-                                <select id="filtro-mes-qualidade" class="select-moderno text-gexCyan font-bold tracking-wider min-w-[150px]">
-                                    <option value="">Carregando...</option>
-                                </select>
+            <!-- SUB-MENU DE QUALIDADE -->
+            <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl px-5 py-4 flex items-center gap-2 shadow-sm shrink-0">
+                <button id="btn-sub-qual-monitoria" onclick="mudarSubAbaQual('monitoria')" class="btn-setor btn-setor-ativo">Notas de Monitoria</button>
+                <button id="btn-sub-qual-sinalizacoes" onclick="mudarSubAbaQual('sinalizacoes')" class="btn-setor btn-setor-inativo">🚨 Sinalizações</button>
+            </div>
+
+            <!-- TELA 1: NOTAS DE MONITORIA -->
+            <div id="tela-qual-monitoria" class="block space-y-6">
+                <div class="flex justify-between items-end mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-1 gap-6 w-1/3">
+                        <div class="glass-panel bg-lightCard dark:bg-darkCard border-2 border-gexCyan rounded-2xl p-6 shadow-[0_0_15px_rgba(34,167,240,0.1)]">
+                            <h3 id="media-qualidade-label" class="text-xs font-bold text-gexCyan uppercase tracking-widest mb-2">Média da Equipe (Geral)</h3>
+                            <div class="mt-1 flex items-end gap-2">
+                                <span id="media-qualidade-val" class="text-4xl font-extrabold text-gray-900 dark:text-white font-mono">0.0</span>
+                                <span class="text-sm font-bold text-gray-500 mb-1">/ 100</span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <button id="btn-qual-TODOS" onclick="filtrarQualidade('TODOS')" class="btn-setor btn-setor-ativo">Todos</button>
-                            <button id="btn-qual-RET" onclick="filtrarQualidade('RET')" class="btn-setor btn-setor-inativo">Retenção</button>
-                            <button id="btn-qual-SAC" onclick="filtrarQualidade('SAC')" class="btn-setor btn-setor-inativo">SAC</button>
-                            <button id="btn-qual-BKO" onclick="filtrarQualidade('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
-                            <button id="btn-qual-SMS" onclick="filtrarQualidade('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
-                        </div>
-                    </div>
-                    
-                    <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4 mt-2">
-                        <table class="w-full text-left border-separate min-w-[600px]" style="border-spacing: 0 0.5rem;">
-                            <thead class="z-20">
-                                <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-                                    <th class="cabecalho-fixo py-3 px-3 text-left pl-6">Analista</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center">Setor</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 1</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 2</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 3</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 4</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center">Média Final</th>
-                                    <th class="cabecalho-fixo py-3 px-3 text-center pr-6">Detalhes</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabela-qualidade-body">
-                            </tbody>
-                        </table>
                     </div>
                 </div>
-            </section>
+                
+                <section class="flex flex-col gap-6 items-start h-[800px] mb-10">
+                    <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl w-full flex flex-col h-full overflow-hidden shadow-2xl">
+                        <div class="px-6 py-5 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
+                            <div class="flex items-center gap-4">
+                                <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Notas de Monitoria por Analista</h2>
+                                <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
+                                
+                                <div class="flex items-center gap-2">
+                                    <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Mês:</label>
+                                    <select id="filtro-mes-qualidade" class="select-moderno text-gexCyan font-bold tracking-wider min-w-[150px]">
+                                        <option value="">Carregando...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-qual-TODOS" onclick="filtrarQualidade('TODOS')" class="btn-setor btn-setor-ativo">Todos</button>
+                                <button id="btn-qual-RET" onclick="filtrarQualidade('RET')" class="btn-setor btn-setor-inativo">Retenção</button>
+                                <button id="btn-qual-SAC" onclick="filtrarQualidade('SAC')" class="btn-setor btn-setor-inativo">SAC</button>
+                                <button id="btn-qual-BKO" onclick="filtrarQualidade('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
+                                <button id="btn-qual-SMS" onclick="filtrarQualidade('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
+                            </div>
+                        </div>
+                        
+                        <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4 mt-2">
+                            <table class="w-full text-left border-separate min-w-[600px]" style="border-spacing: 0 0.5rem;">
+                                <thead class="z-20">
+                                    <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+                                        <th class="cabecalho-fixo py-3 px-3 text-left pl-6">Analista</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center">Setor</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 1</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 2</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 3</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center text-gexCyan">Ciclo 4</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center">Média Final</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center pr-6">Detalhes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-qualidade-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- TELA 2: SINALIZAÇÕES -->
+            <div id="tela-qual-sinalizacoes" class="hidden space-y-6">
+                <section class="flex flex-col gap-6 items-start h-[800px] mb-10">
+                    <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl w-full flex flex-col h-full overflow-hidden shadow-2xl">
+                        <div class="px-6 py-5 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
+                            <div class="flex items-center gap-4">
+                                <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Registro de Sinalizações</h2>
+                                <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
+                                <div class="flex items-center gap-2">
+                                    <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Mês:</label>
+                                    <select id="filtro-mes-sinalizacoes" class="select-moderno text-gexCyan font-bold tracking-wider min-w-[150px]">
+                                        <option value="">Carregando...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-sin-TODOS" onclick="filtrarSinalizacoes('TODOS')" class="btn-setor btn-setor-ativo">Todos</button>
+                                <button id="btn-sin-RET" onclick="filtrarSinalizacoes('RET')" class="btn-setor btn-setor-inativo">Retenção</button>
+                                <button id="btn-sin-SAC" onclick="filtrarSinalizacoes('SAC')" class="btn-setor btn-setor-inativo">SAC</button>
+                                <button id="btn-sin-BKO" onclick="filtrarSinalizacoes('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
+                                <button id="btn-sin-SMS" onclick="filtrarSinalizacoes('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
+                            </div>
+                        </div>
+                        
+                        <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4 mt-2">
+                            <table class="w-full text-left border-separate min-w-[600px]" style="border-spacing: 0 0.5rem;">
+                                <thead class="z-20">
+                                    <tr class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+                                        <th class="cabecalho-fixo py-3 px-3 text-left pl-6">Analista</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center">Setor</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center">Ciclo 1</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center">Ciclo 2</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center">Ciclo 3</th>
+                                        <th class="cabecalho-fixo py-3 px-3 text-center">Ciclo 4</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-sinalizacoes-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </div>
     </main>
 
+    <!-- MODAL SINALIZAÇÕES -->
+    <div id="modal-sinalizacoes" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-sin-titulo">Sinalizações</h3>
+                <button onclick="fecharModalSin()" class="text-gray-500 hover:text-red-500 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-sin-conteudo"></div>
+        </div>
+    </div>
+
     <script>
+        let usuarioAtual = null;
+
+        // 🧠 NOVA INTELIGÊNCIA: Verifica se a linha pertence ao agente logado
+        function matchAgente(nomePlanilha) {
+            if (!usuarioAtual || usuarioAtual.role === 'admin') return true;
+            
+            const partes = usuarioAtual.nome.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(' ').filter(p => p.length > 0);
+            const p1 = partes[0];
+            const p2 = partes.length > 1 ? partes[1] : '';
+            const alvo = nomePlanilha.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+            if (p2 && alvo.includes(p1) && alvo.includes(p2)) return true;
+            if (alvo.includes(p1)) return true;
+            return false;
+        }
+
+        async function iniciarApp() {
+            try {
+                const res = await fetch('/api/me');
+                if (res.status === 401) { window.location.href = '/login'; return; }
+                
+                const data = await res.json();
+                usuarioAtual = data.user;
+                
+                document.getElementById('header-user-name').innerText = usuarioAtual.nome;
+                document.getElementById('header-user-role').innerText = usuarioAtual.role === 'admin' ? 'Coordenador / ADM' : 'Visão Analista';
+                
+                configurarPermissoes();
+                carregarTudo();
+            } catch (e) { console.error("Erro auth", e); }
+        }
+
+        // Esconde os botões e abas se não for ADM
+        function configurarPermissoes() {
+            if (usuarioAtual.role === 'agente') {
+                const abaTk = document.getElementById('tab-btn-tickets');
+                if (abaTk) abaTk.style.display = 'none';
+
+                document.querySelectorAll('.btn-setor').forEach(btn => {
+                    if (btn.id.match(/-TODOS|-RET|-SAC|-BKO|-SMS/)) btn.style.display = 'none';
+                });
+            } else {
+                const abaTk = document.getElementById('tab-btn-tickets');
+                if (abaTk) abaTk.style.display = 'flex';
+            }
+        }
+
         document.getElementById('theme-toggle').addEventListener('click', function () {
             document.documentElement.classList.toggle('dark');
             localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -422,15 +598,55 @@
 
         function mudarAba(abaId) {
             ['retencao', 'tickets', 'qualidade'].forEach(id => {
-                document.getElementById(`aba-${id}`).classList.add('hidden');
-                document.getElementById(`aba-${id}`).classList.remove('block');
-                document.getElementById(`tab-btn-${id}`).classList.remove('tab-btn-active');
-                document.getElementById(`tab-btn-${id}`).classList.add('tab-btn-inactive');
+                const elAba = document.getElementById(`aba-${id}`);
+                if(elAba) {
+                    elAba.classList.add('hidden');
+                    elAba.classList.remove('block');
+                }
+                const btnAba = document.getElementById(`tab-btn-${id}`);
+                if(btnAba){
+                    btnAba.classList.remove('tab-btn-active');
+                    btnAba.classList.add('tab-btn-inactive');
+                }
             });
-            document.getElementById(`aba-${abaId}`).classList.remove('hidden');
-            document.getElementById(`aba-${abaId}`).classList.add('block');
-            document.getElementById(`tab-btn-${abaId}`).classList.remove('tab-btn-inactive');
-            document.getElementById(`tab-btn-${abaId}`).classList.add('tab-btn-active');
+            const abaAtiva = document.getElementById(`aba-${abaId}`);
+            if(abaAtiva){
+                abaAtiva.classList.remove('hidden');
+                abaAtiva.classList.add('block');
+            }
+            const btnAtiva = document.getElementById(`tab-btn-${abaId}`);
+            if(btnAtiva){
+                btnAtiva.classList.remove('tab-btn-inactive');
+                btnAtiva.classList.add('tab-btn-active');
+            }
+            
+            // Força a atualização da distribuição se o admin abrir os tickets
+            if (abaId === 'tickets' && !dadosDistribuicao && usuarioAtual && usuarioAtual.role === 'admin') carregarDistribuicao();
+        }
+
+        function mudarSubAbaQual(aba) {
+            ['monitoria', 'sinalizacoes'].forEach(id => {
+                document.getElementById(`tela-qual-${id}`).classList.add('hidden');
+                document.getElementById(`tela-qual-${id}`).classList.remove('block');
+                document.getElementById(`btn-sub-qual-${id}`).classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+            });
+            document.getElementById(`tela-qual-${aba}`).classList.remove('hidden');
+            document.getElementById(`tela-qual-${aba}`).classList.add('block');
+            document.getElementById(`btn-sub-qual-${aba}`).classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+            
+            if (aba === 'sinalizacoes' && dadosSinalizacoes.length === 0) carregarSinalizacoes('');
+        }
+
+        function mudarSubAbaTk(aba) {
+            ['atual', 'semanal', 'geral', 'distribuicao'].forEach(id => {
+                document.getElementById(`tela-tk-${id}`).classList.add('hidden');
+                document.getElementById(`btn-sub-tk-${id}`).classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+            });
+            document.getElementById(`tela-tk-${aba}`).classList.remove('hidden');
+            document.getElementById(`btn-sub-tk-${aba}`).classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+            
+            if (aba === 'geral' && dadosTkGeral.length === 0) carregarTicketsGeral('');
+            if (aba === 'distribuicao' && !dadosDistribuicao) carregarDistribuicao();
         }
 
         let dadosAgentes = [];
@@ -461,15 +677,17 @@
 
         function carregarTudo() {
             carregarDadosReais('');
-            carregarTickets('');
-            
-            const selectMesSemanal = document.getElementById('mes-tickets-semanais');
-            if (selectMesSemanal && selectMesSemanal.value) {
-                gerarBotoesSemanas(selectMesSemanal.value);
-            }
-            
-            carregarTicketsGeral('');
             carregarQualidade('');
+            carregarSinalizacoes('');
+            
+            if(usuarioAtual && usuarioAtual.role === 'admin') {
+                carregarTickets('');
+                carregarTicketsGeral('');
+                const selectMesSemanal = document.getElementById('mes-tickets-semanais');
+                if (selectMesSemanal && selectMesSemanal.value) {
+                    gerarBotoesSemanas(selectMesSemanal.value);
+                }
+            }
         }
 
         // ==========================================
@@ -504,11 +722,12 @@
             const tbRetencao = document.getElementById('tabela-retencao-body');
             if (!tbRetencao) return;
 
-            let retencaoData = dadosAgentes.filter(a => a.time === 'RET');
+            // 🔒 Aplica o Filtro do Agente Logado
+            let retencaoData = dadosAgentes.filter(a => a.time === 'RET' && matchAgente(a.nome));
 
             tbRetencao.innerHTML = retencaoData.map((a, i) => {
                 const recuperado = (a.casos_atual || 0) - (a.refund || 0);
-                const isTop3 = i < 3;
+                const isTop3 = i < 3 && usuarioAtual.role === 'admin';
 
                 let trClass = 'row-normal linha-animada';
                 let posEl = `<span class="pos-badge">${i + 1}º</span>`;
@@ -517,24 +736,26 @@
                 let textClassData = 'texto-contraste-sm';
                 let trvColor = a.trv >= 70 ? 'text-emerald-600 dark:text-emerald-500' : a.trv >= 60 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500';
 
-                if (i === 0) {
-                    trClass = 'row-gold font-bold linha-animada'; nameClass = 'texto-top3 text-yellow-400'; trvColor = 'text-yellow-400'; textClassData = 'texto-top3-sm';
-                    posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
-                                <span class="text-[8px] font-black text-yellow-500 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
-                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-yellow-200 to-yellow-600 text-black font-black text-base shadow-[0_0_10px_rgba(234,179,8,0.5)] border border-yellow-200">1</span>
-                             </div>`;
-                } else if (i === 1) {
-                    trClass = 'row-silver font-bold linha-animada'; nameClass = 'texto-top3 text-gray-100'; trvColor = 'text-gray-100'; textClassData = 'texto-top3-sm';
-                    posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
-                                <span class="text-[8px] font-black text-gray-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
-                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-400 text-black font-black text-base shadow-[0_0_10px_rgba(156,163,175,0.5)] border border-gray-200">2</span>
-                             </div>`;
-                } else if (i === 2) {
-                    trClass = 'row-bronze font-bold linha-animada'; nameClass = 'texto-top3 text-orange-200'; trvColor = 'text-orange-200'; textClassData = 'texto-top3-sm';
-                    posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
-                                <span class="text-[8px] font-black text-orange-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
-                                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-orange-200 to-orange-700 text-white font-black text-base shadow-[0_0_10px_rgba(249,115,22,0.5)] border border-orange-300">3</span>
-                             </div>`;
+                if (isTop3) {
+                    if (i === 0) {
+                        trClass = 'row-gold font-bold linha-animada'; nameClass = 'texto-top3 text-yellow-400'; trvColor = 'text-yellow-400'; textClassData = 'texto-top3-sm';
+                        posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
+                                    <span class="text-[8px] font-black text-yellow-500 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-yellow-200 to-yellow-600 text-black font-black text-base shadow-[0_0_10px_rgba(234,179,8,0.5)] border border-yellow-200">1</span>
+                                 </div>`;
+                    } else if (i === 1) {
+                        trClass = 'row-silver font-bold linha-animada'; nameClass = 'texto-top3 text-gray-100'; trvColor = 'text-gray-100'; textClassData = 'texto-top3-sm';
+                        posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
+                                    <span class="text-[8px] font-black text-gray-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-400 text-black font-black text-base shadow-[0_0_10px_rgba(156,163,175,0.5)] border border-gray-200">2</span>
+                                 </div>`;
+                    } else if (i === 2) {
+                        trClass = 'row-bronze font-bold linha-animada'; nameClass = 'texto-top3 text-orange-200'; trvColor = 'text-orange-200'; textClassData = 'texto-top3-sm';
+                        posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
+                                    <span class="text-[8px] font-black text-orange-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-orange-200 to-orange-700 text-white font-black text-base shadow-[0_0_10px_rgba(249,115,22,0.5)] border border-orange-300">3</span>
+                                 </div>`;
+                    }
                 }
 
                 return `
@@ -551,20 +772,6 @@
                     <td class="py-3 px-3 text-center align-middle">${formatStatus(a.status_trv, isTop3)}</td>
                 </tr>`;
             }).join('');
-        }
-
-        // ==========================================
-        // GESTÃO DE ABAS - TICKETS
-        // ==========================================
-        function mudarSubAbaTk(aba) {
-            ['atual', 'semanal', 'geral'].forEach(id => {
-                document.getElementById(`tela-tk-${id}`).classList.add('hidden');
-                document.getElementById(`btn-sub-tk-${id}`).classList.replace('btn-setor-ativo', 'btn-setor-inativo');
-            });
-            document.getElementById(`tela-tk-${aba}`).classList.remove('hidden');
-            document.getElementById(`btn-sub-tk-${aba}`).classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-            
-            if (aba === 'geral' && dadosTkGeral.length === 0) carregarTicketsGeral('');
         }
 
         // ==========================================
@@ -845,7 +1052,7 @@
         }
 
         // ==========================================
-        // DADOS DA QUALIDADE
+        // DADOS DA QUALIDADE E SINALIZACOES
         // ==========================================
         async function carregarQualidade(mes = '') {
             try {
@@ -887,7 +1094,9 @@
             const tbQualidade = document.getElementById('tabela-qualidade-body');
             if (!tbQualidade) return;
             
+            // 🔒 Aplica o Filtro do Agente Logado
             let qualData = setorQualAtivo === 'TODOS' ? [...dadosQualidade] : dadosQualidade.filter(a => a.time.includes(setorQualAtivo));
+            qualData = qualData.filter(a => matchAgente(a.nome));
             
             qualData.sort((a, b) => b.qual - a.qual);
 
@@ -900,34 +1109,28 @@
                 return;
             }
 
-            const theadQual = document.querySelector('#aba-qualidade thead tr');
+            const theadQual = document.querySelector('#tela-qual-monitoria thead tr');
             if(theadQual && !theadQual.innerHTML.includes('Detalhes')) {
                 theadQual.innerHTML += '<th class="cabecalho-fixo py-3 px-3 text-center pr-6">Detalhes</th>';
             }
 
             tbQualidade.innerHTML = qualData.map((a) => {
-                // Verifica se a média final é 100 para aplicar a regra da Linha Inteira Dourada (Imagem 2)
                 let isGabaritoFinal = a.qual === 100;
 
                 let trClass = isGabaritoFinal ? 'row-gold font-bold linha-animada' : 'row-normal linha-animada';
                 let nameClass = isGabaritoFinal ? 'text-white font-bold' : 'texto-contraste';
                 let dashClass = isGabaritoFinal ? 'text-white opacity-50' : 'texto-contraste-sm opacity-50';
 
-                // Lógica de Renderização de Cada Ciclo
                 const formatNotaCiclo = (n) => {
                     if (n === null || n === undefined) return `<span class="${dashClass}">-</span>`;
                     
                     if (isGabaritoFinal) {
-                        // Se a linha toda é dourada, o 100 é só um texto branco (Imagem 2)
                         return `<span class="font-mono font-bold text-white text-[14px]">${n.toFixed(1)}</span>`;
                     }
-                    
                     if (n === 100) {
-                        // Se a linha é normal, mas tirou 100 no ciclo, vira um bloco dourado (Imagem 3)
                         return `<div class="inline-flex items-center justify-center w-20 py-1 bg-gradient-to-r from-[#2b1f00] via-[#5c4700] to-[#2b1f00] text-white font-mono font-bold text-[14px] rounded-lg shadow-[inset_0_0_0_1px_#d4af37] mx-auto">100.0</div>`;
                     }
                     
-                    // Nota normal colorida
                     let cor = 'text-gexCyan';
                     if (n < 70) cor = 'text-red-600 dark:text-red-500';
                     else if (n < 90) cor = 'text-yellow-600 dark:text-yellow-500';
@@ -939,7 +1142,6 @@
                 const c3Html = formatNotaCiclo(a.c3);
                 const c4Html = formatNotaCiclo(a.c4);
                 
-                // Renderização da Média Final
                 let textoQualFinal = '';
                 if (isGabaritoFinal) {
                     textoQualFinal = `<span class="font-mono font-black text-white text-[16px] drop-shadow-md">${a.qual.toFixed(1)}</span>`;
@@ -950,7 +1152,6 @@
                     textoQualFinal = `<span class="font-mono font-black ${cor} text-lg">${a.qual.toFixed(1)}</span>`;
                 }
 
-                // Ajuste do Badge do Setor para não ficar ilegível no fundo dourado
                 const badgeTime = isGabaritoFinal ? 
                     `<span class="badge-setor bg-white/20 text-white shadow-none border border-white/30">${a.time}</span>` : 
                     `<span class="badge-setor">${a.time}</span>`;
@@ -964,19 +1165,188 @@
                 <tr class="ranking-row ${trClass}">
                     <td class="py-4 px-3 pl-6 ${nameClass} whitespace-nowrap align-middle rounded-l-xl">${a.nome}</td>
                     <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
-                    
                     <td class="py-4 px-3 text-center align-middle">${c1Html}</td>
                     <td class="py-4 px-3 text-center align-middle">${c2Html}</td>
                     <td class="py-4 px-3 text-center align-middle">${c3Html}</td>
                     <td class="py-4 px-3 text-center align-middle">${c4Html}</td>
-                    
                     <td class="py-4 px-3 text-center align-middle">${textoQualFinal}</td>
                     <td class="py-4 px-3 text-center align-middle rounded-r-xl pr-6">${btnDetalhes}</td>
                 </tr>`;
             }).join('');
         }
 
-        let calTkGeral;
+        // ==========================================
+        // DADOS DE SINALIZAÇÕES
+        // ==========================================
+        let dadosSinalizacoes = [];
+        let setorSinAtivo = 'TODOS';
+
+        async function carregarSinalizacoes(mes = '') {
+            try {
+                const response = await fetch(`/api/sinalizacoes?mes=${encodeURIComponent(mes)}`);
+                const data = await response.json();
+                if (data.success) {
+                    dadosSinalizacoes = data.agentes;
+                    
+                    const selectMes = document.getElementById('filtro-mes-sinalizacoes');
+                    if (selectMes && data.meses.length > 0) {
+                        if (selectMes.options.length <= 1) { 
+                            selectMes.innerHTML = data.meses.map(m => `<option value="${m}" ${m === data.mesAtual ? 'selected' : ''}>${m}</option>`).join('');
+                        }
+                    } else if (selectMes && data.meses.length === 0) {
+                        selectMes.innerHTML = `<option value="">Nenhum dado</option>`;
+                    }
+                    renderTabelaSinalizacoes();
+                }
+            } catch (error) { console.error("Erro Sinalizacoes:", error); }
+        }
+
+        function filtrarSinalizacoes(setor) {
+            setorSinAtivo = setor;
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+                const btn = document.getElementById(`btn-sin-${b}`);
+                if (btn) {
+                    if (b === setor) { btn.classList.remove('btn-setor-inativo'); btn.classList.add('btn-setor-ativo'); }
+                    else { btn.classList.remove('btn-setor-ativo'); btn.classList.add('btn-setor-inativo'); }
+                }
+            });
+            renderTabelaSinalizacoes();
+        }
+
+        function renderTabelaSinalizacoes() {
+            const tbSin = document.getElementById('tabela-sinalizacoes-body');
+            if (!tbSin) return;
+            
+            // 🔒 Aplica o Filtro do Agente Logado
+            let sinData = setorSinAtivo === 'TODOS' ? [...dadosSinalizacoes] : dadosSinalizacoes.filter(a => a.time.includes(setorSinAtivo));
+            sinData = sinData.filter(a => matchAgente(a.nome));
+            
+            if (sinData.length === 0) {
+                tbSin.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum dado encontrado para este filtro.</td></tr>`;
+                return;
+            }
+
+            tbSin.innerHTML = sinData.map((a) => {
+                const badgeTime = `<span class="badge-setor">${a.time}</span>`;
+
+                const gerarBotaoCiclo = (cicloArr, cicloNum, nomeAgente) => {
+                    if (!cicloArr || cicloArr.length === 0) return `<span class="text-gray-400 dark:text-gray-600 text-[10px] font-bold uppercase">Sem Reg.</span>`;
+                    
+                    const semSin = cicloArr.every(c => c.item.toLowerCase().includes('sem sinaliza'));
+                    const nomeEscaped = nomeAgente.replace(/'/g, "\\'");
+                    
+                    if (semSin) {
+                        return `<button onclick="abrirModalSin('${nomeEscaped}', ${cicloNum})" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 text-[11px] font-black transition-all hover:scale-105 shadow-sm">✅ Feedback</button>`;
+                    } else {
+                        const qtd = cicloArr.length;
+                        return `<button onclick="abrirModalSin('${nomeEscaped}', ${cicloNum})" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 text-[11px] font-black transition-all hover:scale-105 shadow-sm">🚨 Ver (${qtd})</button>`;
+                    }
+                };
+
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-4 px-3 pl-6 texto-contraste whitespace-nowrap align-middle rounded-l-xl">${a.nome}</td>
+                    <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
+                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[1], 1, a.nome)}</td>
+                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[2], 2, a.nome)}</td>
+                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[3], 3, a.nome)}</td>
+                    <td class="py-4 px-3 text-center align-middle rounded-r-xl">${gerarBotaoCiclo(a.ciclos[4], 4, a.nome)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function abrirModalSin(nomeAgente, cicloNum) {
+            const agente = dadosSinalizacoes.find(a => a.nome === nomeAgente);
+            if (!agente) return;
+            
+            const cicloDados = agente.ciclos[cicloNum];
+            if (!cicloDados || cicloDados.length === 0) return;
+
+            document.getElementById('modal-sin-titulo').innerText = `Sinalizações - ${nomeAgente} (Ciclo ${cicloNum})`;
+            
+            const conteudoHTML = cicloDados.map(c => {
+                const badgeFeed = c.feedback 
+                    ? `<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-500/30 mt-3">✅ Feedback aplicado</span>`
+                    : `<span class="inline-flex items-center gap-1 bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 px-3 py-1 rounded-lg text-xs font-bold border border-red-200 dark:border-red-500/30 mt-3">❌ Feedback não aplicado</span>`;
+
+                const isSemSin = c.item.toLowerCase().includes('sem sinaliza');
+                
+                return `
+                <div class="bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col">
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">TIPO: ${c.tipo || '-'}</span>
+                        <span class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">QTD: ${c.qtd}</span>
+                        ${isSemSin ? `<span class="bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">✅ SEM SINALIZAÇÕES</span>` : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">🚨 ${c.item}</span>`}
+                    </div>
+                    <div class="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap flex-1 bg-white dark:bg-[#0f172a] p-3 rounded border border-gray-100 dark:border-gray-800">${c.obs || 'Nenhuma observação registrada.'}</div>
+                    <div>${badgeFeed}</div>
+                </div>`;
+            }).join('');
+
+            document.getElementById('modal-sin-conteudo').innerHTML = conteudoHTML;
+            document.getElementById('modal-sinalizacoes').classList.remove('hidden');
+        }
+
+        function fecharModalSin() { document.getElementById('modal-sinalizacoes').classList.add('hidden'); }
+
+        // ==========================================
+        // NOVA MÁGICA REAL-TIME: DISTRIBUIÇÃO E STATUS
+        // ==========================================
+        let dadosDistribuicao = null;
+
+        async function carregarDistribuicao() {
+            try {
+                const response = await fetch('/api/distribuicao');
+                const data = await response.json();
+                if (data.success) { 
+                    dadosDistribuicao = data; 
+                    renderTabelaCasos(); 
+                    renderTabelaDist(); 
+                }
+            } catch (error) { console.error(error); }
+        }
+        
+        function renderTabelaCasos() {
+            const tb = document.getElementById('tabela-casos-body'); 
+            if (!tb || !dadosDistribuicao) return;
+            
+            if(dadosDistribuicao.casos.length === 0){ 
+                tb.innerHTML=`<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum caso em aberto.</td></tr>`; 
+                return;
+            }
+            
+            tb.innerHTML = dadosDistribuicao.casos.map(a => `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.ignorado>0?'text-red-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.ignorado}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.aguardando>0?'text-yellow-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.aguardando}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.parado>0?'text-purple-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.parado}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.andamento>0?'text-blue-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.andamento}</td>
+                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] text-gexCyan">${a.total}</td>
+                </tr>`).join('');
+        }
+
+        function renderTabelaDist() {
+            const th = document.getElementById('thead-dist-dinamico');
+            const tb = document.getElementById('tabela-dist-body'); 
+            if (!th || !tb || !dadosDistribuicao) return;
+            
+            let headH = `<th class="py-2 px-3 pl-4">Agente</th>`; 
+            dadosDistribuicao.caixas.forEach(c => headH+=`<th class="py-2 px-3 text-center max-w-[120px] truncate" title="${c}">${c}</th>`); 
+            headH+=`<th class="py-2 px-3 text-center font-black text-gexCyan">Total</th>`; 
+            th.innerHTML = headH;
+            
+            tb.innerHTML = dadosDistribuicao.distribuicao.map(a => {
+                let r = `<td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>`;
+                dadosDistribuicao.caixas.forEach(c => { 
+                    const v = a[c]||0; 
+                    r+=`<td class="py-3 px-3 text-center font-mono ${v>0?'text-gray-800 dark:text-gray-200 font-bold':'text-gray-400 dark:text-gray-600 opacity-30'}">${v}</td>`; 
+                });
+                r += `<td class="py-3 px-3 text-center font-mono font-black text-[15px] text-gexCyan">${a.total}</td>`; 
+                return `<tr class="ranking-row row-normal linha-animada">${r}</tr>`;
+            }).join('');
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             if (document.documentElement.classList.contains('dark')) {
                 document.getElementById('theme-toggle-light-icon').classList.remove('hidden');
@@ -999,7 +1369,6 @@
                     htmlMeses += `<option value="${val}">${label}</option>`;
                     dataDropdown.setMonth(dataDropdown.getMonth() - 1);
                 }
-                
                 selectMesSemanal.innerHTML = htmlMeses;
 
                 selectMesSemanal.addEventListener('change', () => {
@@ -1008,8 +1377,6 @@
                     }
                 });
             }
-
-            carregarTudo();
 
             const inputTkGeral = document.getElementById('calendario-tickets-geral');
             if (inputTkGeral) {
@@ -1036,12 +1403,15 @@
 
             const selMesQual = document.getElementById('filtro-mes-qualidade');
             if (selMesQual) {
-                selMesQual.addEventListener('change', (e) => {
-                    carregarQualidade(e.target.value);
-                });
+                selMesQual.addEventListener('change', (e) => carregarQualidade(e.target.value));
+            }
+            const selMesSin = document.getElementById('filtro-mes-sinalizacoes');
+            if (selMesSin) {
+                selMesSin.addEventListener('change', (e) => carregarSinalizacoes(e.target.value));
             }
 
-            setInterval(carregarTudo, 30 * 60 * 1000);
+            iniciarApp();
+            setInterval(carregarTudo, 15 * 60 * 1000);
         });
     </script>
 </body>
