@@ -360,24 +360,42 @@
                 </div>
 
                 <!-- SUB-ABA 4: DISTRIBUIÇÃO E STATUS (NOVIDADE) -->
-                <div id="tela-tk-distribuicao" class="hidden flex-1 flex flex-col min-h-0 bg-[#020617]">
-                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                <div id="tela-tk-distribuicao" class="hidden flex-1 flex flex-col min-h-0">
+                    
+                    <!-- BARRA DE FILTROS -->
+                    <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/20 shrink-0">
+                        <div class="flex items-center gap-4">
+                            <h3 class="text-sm font-bold text-gray-600 dark:text-gray-400">Tempo Real (Filas)</h3>
+                            <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="filtrarDistribuicao('TODOS')" id="btn-f-dist-TODOS" class="btn-setor btn-setor-ativo">Todos</button>
+                                <button onclick="filtrarDistribuicao('RET')" id="btn-f-dist-RET" class="btn-setor btn-setor-inativo">Retenção</button>
+                                <button onclick="filtrarDistribuicao('SAC')" id="btn-f-dist-SAC" class="btn-setor btn-setor-inativo">SAC</button>
+                                <button onclick="filtrarDistribuicao('BKO')" id="btn-f-dist-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
+                                <button onclick="filtrarDistribuicao('SMS')" id="btn-f-dist-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="carregarDistribuicao()" class="bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-transparent dark:bg-[#020617]">
                         
                         <!-- Bloco 1: Status de Casos Real-Time -->
                         <div class="glass-panel bg-white dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-lg">
                             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20 flex justify-between items-center">
-                                <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">📑 Resumo de Casos por Agente (Tempo Real)</h3>
-                                <button onclick="carregarDistribuicao()" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1.5 rounded transition-colors shadow-sm">🔄 Recarregar</button>
+                                <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">📑 Resumo de Casos por Agente (Abertos e Pendentes)</h3>
                             </div>
                             <div class="p-4 overflow-x-auto">
                                 <table class="w-full text-left border-separate min-w-[800px]" style="border-spacing: 0 0.5rem;">
                                     <thead>
                                         <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                             <th class="py-2 px-3 pl-4">Agente</th>
-                                            <th class="py-2 px-3 text-center">🔴 Oculto / Resolvido?</th>
-                                            <th class="py-2 px-3 text-center">🟡 Aguardando</th>
-                                            <th class="py-2 px-3 text-center">💤 Parado (>3 dias)</th>
-                                            <th class="py-2 px-3 text-center">⚙️ Em Andamento</th>
+                                            <th class="py-2 px-3 text-center" title="Snoozed/Oculto">🔴 Oculto / Resolvido?</th>
+                                            <th class="py-2 px-3 text-center" title="Pendente (Prazo de Retorno)">🟡 Aguardando</th>
+                                            <th class="py-2 px-3 text-center" title="Aberto há mais de 3 dias">💤 Parado (>3 dias)</th>
+                                            <th class="py-2 px-3 text-center" title="Aberto Recente">⚙️ Em Andamento</th>
                                             <th class="py-2 px-3 text-center font-black text-gexCyan">Total</th>
                                         </tr>
                                     </thead>
@@ -405,9 +423,6 @@
 
                     </div>
                 </div>
-                
-            </div>
-        </div>
 
         <!-- ABA: QUALIDADE (AGORA COM SUB-ABAS) -->
         <div id="aba-qualidade" class="hidden space-y-6">
@@ -1293,6 +1308,7 @@
         // NOVA MÁGICA REAL-TIME: DISTRIBUIÇÃO E STATUS
         // ==========================================
         let dadosDistribuicao = null;
+        let filtroDistSetor = 'TODOS';
 
         async function carregarDistribuicao() {
             try {
@@ -1305,17 +1321,32 @@
                 }
             } catch (error) { console.error(error); }
         }
+
+        function filtrarDistribuicao(setor) {
+            filtroDistSetor = setor;
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+                const btn = document.getElementById(`btn-f-dist-${b}`);
+                if (btn) {
+                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
+                }
+            });
+            renderTabelaCasos();
+            renderTabelaDist();
+        }
         
         function renderTabelaCasos() {
             const tb = document.getElementById('tabela-casos-body'); 
             if (!tb || !dadosDistribuicao) return;
             
-            if(dadosDistribuicao.casos.length === 0){ 
-                tb.innerHTML=`<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum caso em aberto.</td></tr>`; 
+            let lista = filtroDistSetor === 'TODOS' ? dadosDistribuicao.casos : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
+
+            if(lista.length === 0){ 
+                tb.innerHTML=`<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum caso em aberto neste setor.</td></tr>`; 
                 return;
             }
             
-            tb.innerHTML = dadosDistribuicao.casos.map(a => `
+            tb.innerHTML = lista.map(a => `
                 <tr class="ranking-row row-normal linha-animada">
                     <td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>
                     <td class="py-3 px-3 text-center font-mono ${a.ignorado>0?'text-red-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.ignorado}</td>
@@ -1331,12 +1362,19 @@
             const tb = document.getElementById('tabela-dist-body'); 
             if (!th || !tb || !dadosDistribuicao) return;
             
+            let lista = filtroDistSetor === 'TODOS' ? dadosDistribuicao.distribuicao : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
+
             let headH = `<th class="py-2 px-3 pl-4">Agente</th>`; 
             dadosDistribuicao.caixas.forEach(c => headH+=`<th class="py-2 px-3 text-center max-w-[120px] truncate" title="${c}">${c}</th>`); 
             headH+=`<th class="py-2 px-3 text-center font-black text-gexCyan">Total</th>`; 
             th.innerHTML = headH;
             
-            tb.innerHTML = dadosDistribuicao.distribuicao.map(a => {
+            if(lista.length === 0){ 
+                tb.innerHTML=`<tr><td colspan="${dadosDistribuicao.caixas.length + 2}" class="py-6 text-center text-gray-500 font-bold">Nenhum dado neste setor.</td></tr>`; 
+                return;
+            }
+
+            tb.innerHTML = lista.map(a => {
                 let r = `<td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>`;
                 dadosDistribuicao.caixas.forEach(c => { 
                     const v = a[c]||0; 
