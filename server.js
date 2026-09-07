@@ -729,18 +729,21 @@ app.get('/api/distribuicao', async (req, res) => {
             if (!resCasosMap[nome]) resCasosMap[nome] = { nome, ignorado: 0, aguardando: 0, parado: 0, andamento: 0, total: 0 };
             
             const qtd = parseInt(r.qtd) || 1;
-            const status = parseInt(r.status); // 0=open, 2=pending, 3=snoozed no Chatwoot
+            const status = parseInt(r.status); // 0=Aberto, 2=Pendente, 3=Snoozed/Oculto
             const dtAtividade = new Date(r.last_activity_at);
             const diffDias = (agora - dtAtividade) / (1000 * 60 * 60 * 24);
             
-            if (diffDias > 3) {
-                resCasosMap[nome].parado += qtd;
+            // Lógica exata: Status define a coluna, e se for aberto (0), divide pela idade
+            if (status === 3) {
+                resCasosMap[nome].ignorado += qtd; // Ocultos / Snoozed
             } else if (status === 2) {
-                resCasosMap[nome].aguardando += qtd;
-            } else if (status === 3) {
-                resCasosMap[nome].ignorado += qtd; 
-            } else {
-                resCasosMap[nome].andamento += qtd;
+                resCasosMap[nome].aguardando += qtd; // Pendentes / Aguardando Cliente
+            } else if (status === 0) {
+                if (diffDias > 3) {
+                    resCasosMap[nome].parado += qtd; // Abertos com mais de 3 dias
+                } else {
+                    resCasosMap[nome].andamento += qtd; // Abertos dentro do prazo
+                }
             }
             resCasosMap[nome].total += qtd;
         });
