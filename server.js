@@ -35,7 +35,7 @@ const pool = new Pool({
     ssl: false // SSL desligado conforme configurado
 });
 
-// 🔥 OTIMIZAÇÃO EXTREMA: Query direta usando os índices do banco de dados
+// 🔥 OTIMIZAÇÃO EXTREMA: Query direta usando os índices do banco de dados (ignorando excluídos/privados)
 const queryTickets = `
     SELECT
         u.id AS agente_id,
@@ -67,7 +67,7 @@ function formatarDataSQL(dataObj) {
 }
 
 // ==========================================
-// 2. ROTA PARA O UPTIMEROBOT E AUTH GOOGLE
+// 2. SISTEMA DE LOGIN GOOGLE E SESSÕES
 // ==========================================
 app.get('/ping', (req, res) => res.status(200).send('Servidor GEX Ativo!'));
 
@@ -77,7 +77,7 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'chave_reserva_gex',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 } 
+    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } // Sessão guardada por 30 dias
 }));
 
 app.use(passport.initialize());
@@ -98,40 +98,105 @@ function(accessToken, refreshToken, profile, cb) {
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
 
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/erro-login' }), (req, res) => { res.redirect('/'); });
+// Servir logo público para a tela de login ANTES do bloqueio
+app.get('/logo.jpg', (req, res) => res.sendFile(path.join(__dirname, 'public', 'logo.jpg')));
 
-app.get('/erro-login', (req, res) => {
-    res.send(`<div style="font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #020617; color: white; height: 100vh; padding-top: 100px;"><h1 style="color: #ef4444;">Acesso Negado</h1><p>Você precisa utilizar um e-mail corporativo válido.</p><br><a href="/auth/google" style="padding: 12px 24px; background: #22a7f0; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Tentar Novamente</a></div>`);
+// 🎨 TELA DE LOGIN ESTILIZADA GEX
+app.get('/login', (req, res) => {
+    if (req.isAuthenticated()) return res.redirect('/');
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="pt-BR" class="dark">
+    <head>
+        <meta charset="UTF-8">
+        <title>Login - Dash GEX</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    </head>
+    <body class="bg-[#020617] text-white flex items-center justify-center min-h-screen font-['Roboto'] relative overflow-hidden">
+        <div class="absolute inset-0 z-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] bg-[length:24px_24px]"></div>
+        <div class="absolute -top-[120px] -right-[150px] rotate-[40deg] flex flex-col gap-3 opacity-20">
+            <div class="w-[800px] h-[85px] bg-[#1b52af] rounded-full mb-2"></div>
+            <div class="w-[800px] h-[15px] bg-[#1b52af] rounded-full"></div>
+            <div class="w-[800px] h-[15px] bg-[#1b52af] rounded-full"></div>
+        </div>
+        <div class="z-10 bg-[#0a0f1c] p-10 rounded-[2rem] shadow-2xl border border-gray-800 max-w-md w-full text-center backdrop-blur-xl">
+            <img src="/logo.jpg" alt="Logo GEX" class="w-24 h-24 mx-auto rounded-2xl mb-6 shadow-[0_0_20px_rgba(34,167,240,0.3)] object-cover">
+            <h1 class="text-3xl font-black mb-2 tracking-tight">Dash GEX</h1>
+            <p class="text-gray-400 font-medium mb-10 text-sm">Acesso restrito à operação.</p>
+            
+            <a href="/auth/google" class="flex items-center justify-center gap-3 bg-white text-gray-900 font-bold py-3.5 px-6 rounded-xl hover:bg-gray-100 transition-all hover:scale-105 shadow-[0_10px_25px_rgba(255,255,255,0.1)]">
+                <svg class="w-5 h-5" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 15.02 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Continuar com o Google
+            </a>
+        </div>
+    </body>
+    </html>
+    `);
 });
 
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login' }), (req, res) => { res.redirect('/'); });
+
+app.get('/logout', (req, res) => {
+    req.logout(() => { res.redirect('/login'); });
+});
+
+// Trava Global
 const verificarLogin = (req, res, next) => {
     if (req.isAuthenticated()) return next();
-    res.redirect('/auth/google');
+    if (req.originalUrl.startsWith('/api/')) return res.status(401).json({ success: false, error: 'Não autorizado' });
+    res.redirect('/login');
 };
 
+// Identidade e Permissões do Usuário (RBAC)
+app.get('/api/me', verificarLogin, (req, res) => {
+    const email = (req.user.emails && req.user.emails[0] ? req.user.emails[0].value : '').toLowerCase();
+    const nome = req.user.displayName;
+    
+    // Lista de ADMs cadastrada no seu painel da Render.com
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    
+    res.json({ 
+        success: true, 
+        user: { 
+            nome: nome, 
+            email: email, 
+            role: adms.includes(email) ? 'admin' : 'agente' 
+        } 
+    });
+});
+
 // ==========================================
-// 4.5. SISTEMA DE CACHE (ESCUDO DE PERFORMANCE)
+// 4.5. SISTEMA DE CACHE INTELIGENTE
 // ==========================================
 const cacheMemoria = {};
-const TEMPO_CACHE_MINUTOS = 30; // Atualiza apenas 1 vez a cada 30 minutos
 
 const cacheMiddleware = (req, res, next) => {
     const chaveUrl = req.originalUrl; 
     const agora = Date.now();
 
-    // Se a informação já está na memória e tem menos de 30 min, devolve instantaneamente
-    if (cacheMemoria[chaveUrl] && (agora - cacheMemoria[chaveUrl].tempo < TEMPO_CACHE_MINUTOS * 60 * 1000)) {
-        console.log(`⚡ Retornando do Cache em 0s: ${chaveUrl}`);
+    // Lógica inteligente: Planilhas = 15 min / Banco de Dados (Tickets puros) = 30 min
+    let tempoCacheMinutos = 30; 
+    if (chaveUrl.includes('/api/qualidade') || chaveUrl.includes('/api/retencao') || chaveUrl.includes('/api/sinalizacoes')) {
+        tempoCacheMinutos = 15;
+    }
+
+    if (cacheMemoria[chaveUrl] && (agora - cacheMemoria[chaveUrl].tempo < tempoCacheMinutos * 60 * 1000)) {
+        console.log(`⚡ Retornando do Cache (${tempoCacheMinutos}m): ${chaveUrl}`);
         return res.json(cacheMemoria[chaveUrl].data);
     }
 
-    // Se for novo ou venceu os 30 min, vai no banco buscar e salva na memória
     const sendJsonOriginal = res.json;
     res.json = function(dados) {
         if (dados && dados.success) {
             cacheMemoria[chaveUrl] = { tempo: agora, data: dados };
-            console.log(`🔄 Banco Atualizado e Cache Salvo: ${chaveUrl}`);
+            console.log(`🔄 Dados Atualizados e Cache Salvo (${tempoCacheMinutos}m): ${chaveUrl}`);
         }
         sendJsonOriginal.call(this, dados);
     };
@@ -190,8 +255,12 @@ const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas) => {
 app.get('/api/retencao', async (req, res) => {
     try {
         const agoraBR = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+        
+        // ⚠️ ATUALIZAÇÃO MANUAL MENSAL AQUI:
         const anoPlanilha = 2026;
-        const mesPlanilha = 7; 
+        const mesPlanilha = 7; // 7 = Agosto (Lembrete: 0=Jan, 1=Fev ... 7=Ago, 8=Set)
+        const nomeAba = "📊 Análise | Metas | Agosto"; // Nome exato da aba na planilha
+        
         const diasNoMesPlanilha = new Date(anoPlanilha, mesPlanilha + 1, 0).getDate(); 
         const dInicioMes = new Date(anoPlanilha, mesPlanilha, 1);
         const dFimMes = new Date(anoPlanilha, mesPlanilha + 1, 0);
@@ -241,7 +310,6 @@ app.get('/api/retencao', async (req, res) => {
         });
         const sheets = google.sheets({ version: 'v4', auth });
         const sheetId = (process.env.GOOGLE_SHEET_ID || '').trim();
-        const nomeAba = "📊 Análise | Metas | Agosto"; 
 
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'${nomeAba}'!A1:T300` });
         const rows = response.data.values || [];
@@ -280,16 +348,14 @@ app.get('/api/retencao', async (req, res) => {
             };
         });
 
-        // 🌟 NOVO CÁLCULO DE RANKING PESADO (50% % TRV + 50% $ CASOS)
+        // 🌟 NOVO CÁLCULO DE RANKING PESADO (60% % TRV + 40% $ CASOS)
         const maxTrv = Math.max(...agentes.map(a => a.trv), 1);
         const maxCasos = Math.max(...agentes.map(a => a.casos_atual), 1);
 
         agentes.forEach(a => {
             const pctTrvRelativo = maxTrv > 0 ? (a.trv / maxTrv) : 0;
             const pctCasosRelativo = maxCasos > 0 ? (a.casos_atual / maxCasos) : 0;
-            
-            // Média equilibrada entre o TRV% e o $ Volume de Casos
-            a.score = ((pctTrvRelativo + pctCasosRelativo) / 2) * 100;
+            a.score = ((pctTrvRelativo * 0.60) + (pctCasosRelativo * 0.40)) * 100;
         });
 
         agentes.sort((a, b) => b.score - a.score);
@@ -319,7 +385,7 @@ app.get('/api/qualidade', async (req, res) => {
 
         if (rows.length < 4) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
 
-        // 2. LER NOVA ABA DE LINKS DO DRIVE MÁGICA
+        // 2. LER NOVA ABA DE LINKS DO DRIVE
         let linksDriveAgentes = {};
         try {
             const responseLinks = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'LINKS_AGENTES'!A1:B200` });
@@ -337,7 +403,7 @@ app.get('/api/qualidade', async (req, res) => {
         // Mapeamento das colunas
         const idxSetor = 1; // Coluna B
         const idxNome  = 2; // Coluna C
-        const idxCiclo = 3; // Coluna D (Ciclos)
+        const idxCiclo = 3; // Coluna D
         const idxNota  = 5; // Coluna F
         const idxMes   = 8; // Coluna I
 
@@ -349,7 +415,8 @@ app.get('/api/qualidade', async (req, res) => {
             const nomeRaw = String(row[idxNome] || '').trim();
             const mesRaw = String(row[idxMes] || '').trim();
             
-            if (!nomeRaw || !mesRaw) continue;
+            // Ignora as linhas vazias E ignora o cabeçalho "MES_REF"
+            if (!nomeRaw || !mesRaw || mesRaw.toUpperCase() === 'MES_REF') continue;
             
             const nomeFormatado = normalizeNome(nomeRaw);
             mesesSet.add(mesRaw);
@@ -384,14 +451,10 @@ app.get('/api/qualidade', async (req, res) => {
             const nomeBuscadoOriginal = String(a.nomeOriginal || '').trim();
             const nomeBuscadoNormalizado = normalizeNome(nomeBuscadoOriginal);
             
-            // 1. Tenta achar pelo nome EXATO normalizado
             if (linksDriveAgentes[nomeBuscadoNormalizado]) {
                 linkPastaDrive = linksDriveAgentes[nomeBuscadoNormalizado];
             } else {
-                // 2. Busca inteligente por maior similaridade de palavras
-                // Isso resolve o problema de "Luana Souza" vs "Luana Alves" e erros de digitação leves
                 const palavrasBuscadas = nomeBuscadoNormalizado.split(' ').filter(p => p.length > 0);
-                
                 let melhorChave = null;
                 let maiorPontuacao = 0;
 
@@ -399,11 +462,8 @@ app.get('/api/qualidade', async (req, res) => {
                     const palavrasChave = chaveLink.split(' ').filter(p => p.length > 0);
                     let pontuacaoAtual = 0;
 
-                    // Verifica se o primeiro nome bate (É obrigatório para evitar absurdos)
                     if (palavrasBuscadas.length > 0 && palavrasChave.length > 0 && palavrasBuscadas[0] === palavrasChave[0]) {
-                        pontuacaoAtual += 10; // Bônus gigante pro primeiro nome bater
-                        
-                        // Conta quantas outras palavras (sobrenomes) batem
+                        pontuacaoAtual += 10; 
                         for (let i = 1; i < palavrasBuscadas.length; i++) {
                             if (palavrasChave.includes(palavrasBuscadas[i])) {
                                 pontuacaoAtual += 1;
@@ -416,8 +476,6 @@ app.get('/api/qualidade', async (req, res) => {
                         melhorChave = chaveLink;
                     }
                 }
-
-                // Só associa se a pontuação for suficiente (pelo menos o primeiro nome bateu e desempatou)
                 if (melhorChave && maiorPontuacao > 0) {
                     linkPastaDrive = linksDriveAgentes[melhorChave];
                 }
@@ -435,6 +493,90 @@ app.get('/api/qualidade', async (req, res) => {
         
         res.json({ success: true, meses: meses, mesAtual: mesSelecionado, agentes: resultados });
 
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
+// ==========================================
+// 7.5 ROTA DE SINALIZAÇÕES (PLANILHA C - BASE_SINALIZACOES)
+// ==========================================
+app.get('/api/sinalizacoes', async (req, res) => {
+    try {
+        let privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').replace(/"/g, '').trim();
+        const auth = new google.auth.GoogleAuth({
+            credentials: { client_email: (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '').trim(), private_key: privateKey },
+            scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+        });
+        const sheets = google.sheets({ version: 'v4', auth });
+        
+        const sheetIdQualidade = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
+        
+        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_SINALIZACOES'!A1:Z5000` });
+        const rows = response.data.values || [];
+
+        if (rows.length < 3) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
+
+        const idxSetor = 1; // Coluna B
+        const idxNome  = 2; // Coluna C
+        const idxCiclo = 3; // Coluna D
+        const idxItem  = 5; // Coluna F
+        const idxTipo  = 7; // Coluna H
+        const idxData  = 8; // Coluna I
+        const idxQtd   = 9; // Coluna J
+        const idxObs   = 10; // Coluna K
+        const idxFeed  = 11; // Coluna L
+        const idxMes   = 12; // Coluna M
+
+        let mesesSet = new Set();
+        let sinalizacoesGerais = [];
+
+        for (let i = 2; i < rows.length; i++) {
+            const row = rows[i];
+            const nomeRaw = String(row[idxNome] || '').trim();
+            
+            // 🔥 Transforma em minúsculo para agrupar
+            let mesRaw = String(row[idxMes] || '').trim().toLowerCase(); 
+            
+            // 🔥 Bloqueia erros de fórmula (#ERROR!, #REF!) e cabeçalhos
+            if (!nomeRaw || !mesRaw || mesRaw === 'mes' || mesRaw.startsWith('#') || nomeRaw.toUpperCase() === 'ANALISTA') continue;
+            
+            const nomeFormatado = normalizeNome(nomeRaw);
+            mesesSet.add(mesRaw);
+
+            let cicloNum = parseInt(row[idxCiclo]) || 1;
+            let item = String(row[idxItem] || '').trim();
+            if (!item) item = "Sem sinalizações";
+
+            let setorRaw = String(row[idxSetor] || '').toUpperCase();
+            let siglaSetor = 'RET'; 
+            if (setorRaw.includes('SAC')) siglaSetor = 'SAC';
+            else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) siglaSetor = 'BKO';
+            else if (setorRaw.includes('SMS')) siglaSetor = 'SMS';
+
+            sinalizacoesGerais.push({
+                mes: mesRaw, nome: nomeFormatado, nomeOriginal: nomeRaw, time: siglaSetor,
+                ciclo: cicloNum, item: item, tipo: String(row[idxTipo] || '').trim(),
+                qtd: parseInt(row[idxQtd]) || 1, obs: String(row[idxObs] || '').trim(),
+                feedback: String(row[idxFeed] || '').trim().length > 0 // Se tiver qualquer texto, true.
+            });
+        }
+
+        const meses = Array.from(mesesSet).sort((a, b) => b.localeCompare(a)); 
+        const mesSelecionado = req.query.mes || (meses.length > 0 ? meses[0] : '');
+        const dadosDoMes = sinalizacoesGerais.filter(m => m.mes === mesSelecionado);
+
+        const agentesAgrupados = {};
+        dadosDoMes.forEach(s => {
+            if (!agentesAgrupados[s.nome]) {
+                agentesAgrupados[s.nome] = { nome: s.nomeOriginal.toUpperCase(), time: s.time, ciclos: { 1: [], 2: [], 3: [], 4: [] } };
+            }
+            if (s.ciclo >= 1 && s.ciclo <= 4) {
+                agentesAgrupados[s.nome].ciclos[s.ciclo].push({ item: s.item, tipo: s.tipo, qtd: s.qtd, obs: s.obs, feedback: s.feedback });
+            }
+        });
+
+        const resultados = Object.values(agentesAgrupados).sort((a, b) => a.nome.localeCompare(b.nome));
+
+        res.json({ success: true, meses: meses, mesAtual: mesSelecionado, agentes: resultados });
     } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
 
@@ -528,6 +670,88 @@ app.get('/api/tickets-geral', async (req, res) => {
         resultados.sort((a, b) => b.total - a.total);
         res.json({ success: true, agentes: resultados });
     } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
+
+// ==========================================
+// 10. ROTA DISTRIBUIÇÃO E CASOS (ADMIN-ONLY)
+// ==========================================
+app.get('/api/distribuicao', async (req, res) => {
+    try {
+        // 1. Query de Distribuição de Tickets por Inbox
+        const qDist = `
+            SELECT 
+                u.name AS agente,
+                i.name AS caixa,
+                COUNT(c.id) AS qtd
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            WHERE c.status IN (0, 2) 
+            GROUP BY u.name, i.name
+        `;
+        const resultDist = await pool.query(qDist);
+        
+        const distAgentes = {};
+        const caixasSet = new Set();
+        
+        resultDist.rows.forEach(r => {
+            let nome = (r.agente || 'SEM ATRIBUIR').toUpperCase();
+            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            
+            let cx = r.caixa || '(Sem Time)';
+            caixasSet.add(cx);
+            
+            if (!distAgentes[nome]) distAgentes[nome] = { nome, total: 0 };
+            distAgentes[nome][cx] = parseInt(r.qtd) || 0;
+            distAgentes[nome].total += parseInt(r.qtd) || 0;
+        });
+
+        // 2. Query Resumo Casos Agente (Ignorado / Aguardando / Parado / Andamento)
+        const qCasos = `
+            SELECT 
+                u.name AS agente,
+                c.status,
+                c.last_activity_at,
+                COUNT(c.id) AS qtd
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            WHERE c.status IN (0, 2, 3)
+            GROUP BY u.name, c.status, c.last_activity_at
+        `;
+        const resultCasos = await pool.query(qCasos);
+        const resCasosMap = {};
+        const agora = new Date();
+        
+        resultCasos.rows.forEach(r => {
+            let nome = (r.agente || 'SEM ATRIBUIR').toUpperCase();
+            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, ignorado: 0, aguardando: 0, parado: 0, andamento: 0, total: 0 };
+            
+            const qtd = parseInt(r.qtd) || 1;
+            const status = parseInt(r.status); // 0=open, 2=pending, 3=snoozed no Chatwoot
+            const dtAtividade = new Date(r.last_activity_at);
+            const diffDias = (agora - dtAtividade) / (1000 * 60 * 60 * 24);
+            
+            if (diffDias > 3) {
+                resCasosMap[nome].parado += qtd;
+            } else if (status === 2) {
+                resCasosMap[nome].aguardando += qtd;
+            } else if (status === 3) {
+                resCasosMap[nome].ignorado += qtd; 
+            } else {
+                resCasosMap[nome].andamento += qtd;
+            }
+            resCasosMap[nome].total += qtd;
+        });
+
+        res.json({ 
+            success: true, 
+            distribuicao: Object.values(distAgentes).sort((a,b) => b.total - a.total),
+            caixas: Array.from(caixasSet).sort(),
+            casos: Object.values(resCasosMap).sort((a,b) => b.total - a.total)
+        });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 const PORT = process.env.PORT || 3003;
