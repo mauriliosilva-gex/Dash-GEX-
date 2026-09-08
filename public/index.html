@@ -602,27 +602,35 @@
             } catch (e) { console.error("Erro auth", e); }
         }
 
-        // 🔒 SISTEMA DE PERMISSÕES: Esconde TUDO que o Agente não deve ver
+        // 🔒 SISTEMA DE PERMISSÕES: Esconde APENAS os botões solicitados e filtros de setores para o agente
         function configurarPermissoes() {
             if (usuarioAtual.role === 'agente') {
-                // Esconde a Aba Tickets Inteira do Menu Principal
-                const abaTkMenu = document.getElementById('tab-btn-tickets');
-                if (abaTkMenu) abaTkMenu.style.display = 'none';
+                // 1. Oculta apenas o botão "Sinalizações" no menu de Qualidade
+                const btnSinalizacoes = document.getElementById('btn-sub-qual-sinalizacoes');
+                if (btnSinalizacoes) btnSinalizacoes.style.display = 'none';
 
-                // Esconde todo o menu de sub-abas da Qualidade (que contém "Sinalizações")
-                const menuSubQual = document.querySelector('#aba-qualidade .glass-panel.flex.items-center');
-                if(menuSubQual) menuSubQual.style.display = 'none';
+                // 2. Oculta o botão "Status de Casos" no menu de Tickets
+                const btnTkCasos = document.getElementById('btn-sub-tk-casos');
+                if (btnTkCasos) btnTkCasos.style.display = 'none';
 
-                // Esconde todos os botões de Filtro (RET, SAC, TODOS, etc.) de TODAS as telas
+                // 3. Oculta o botão "Distribuição" no menu de Tickets
+                const btnTkDist = document.getElementById('btn-sub-tk-distribuicao');
+                if (btnTkDist) btnTkDist.style.display = 'none';
+
+                // 4. Oculta os botões de Filtro de Setor (RET, SAC, TODOS, etc.)
                 document.querySelectorAll('.btn-setor').forEach(btn => {
                     if (btn.id.match(/-TODOS|-RET|-SAC|-BKO|-SMS/)) btn.style.display = 'none';
                 });
             } else {
-                const abaTkMenu = document.getElementById('tab-btn-tickets');
-                if (abaTkMenu) abaTkMenu.style.display = 'flex';
-                
-                const menuSubQual = document.querySelector('#aba-qualidade .glass-panel.flex.items-center');
-                if(menuSubQual) menuSubQual.style.display = 'flex';
+                // Se for ADM, certifica-se de que os botões extras estão visíveis
+                const btnSinalizacoes = document.getElementById('btn-sub-qual-sinalizacoes');
+                if (btnSinalizacoes) btnSinalizacoes.style.display = 'block';
+
+                const btnTkCasos = document.getElementById('btn-sub-tk-casos');
+                if (btnTkCasos) btnTkCasos.style.display = 'block';
+
+                const btnTkDist = document.getElementById('btn-sub-tk-distribuicao');
+                if (btnTkDist) btnTkDist.style.display = 'block';
             }
         }
 
@@ -724,15 +732,16 @@
         function carregarTudo() {
             carregarDadosReais('');
             carregarQualidade('');
+            carregarTickets('');
+            carregarTicketsGeral('');
+            
+            const selectMesSemanal = document.getElementById('mes-tickets-semanais');
+            if (selectMesSemanal && selectMesSemanal.value) {
+                gerarBotoesSemanas(selectMesSemanal.value);
+            }
             
             if(usuarioAtual && usuarioAtual.role === 'admin') {
                 carregarSinalizacoes('');
-                carregarTickets('');
-                carregarTicketsGeral('');
-                const selectMesSemanal = document.getElementById('mes-tickets-semanais');
-                if (selectMesSemanal && selectMesSemanal.value) {
-                    gerarBotoesSemanas(selectMesSemanal.value);
-                }
             }
         }
 
@@ -773,7 +782,7 @@
 
             tbRetencao.innerHTML = retencaoData.map((a, i) => {
                 const recuperado = (a.casos_atual || 0) - (a.refund || 0);
-                const isTop3 = i < 3 && usuarioAtual.role === 'admin';
+                const isTop3 = i < 3 && (!usuarioAtual || usuarioAtual.role === 'admin');
 
                 let trClass = 'row-normal linha-animada';
                 let posEl = `<span class="pos-badge">${i + 1}º</span>`;
@@ -827,7 +836,6 @@
         let filtroTkAtualSetor = 'TODOS';
 
         async function carregarTickets(parametrosUrl = '') {
-            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
                 const response = await fetch('/api/tickets' + parametrosUrl);
                 const data = await response.json();
@@ -855,6 +863,7 @@
             if (!tbody) return;
             
             let lista = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
+            lista = lista.filter(a => matchAgente(a.nome));
             
             if (lista.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente encontrado neste setor.</td></tr>`;
@@ -986,7 +995,6 @@
         }
 
         async function carregarTicketsSemanal(parametrosUrl = '', dias = 7) {
-            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
                 diasFiltroSemanal = dias;
                 const response = await fetch('/api/tickets' + parametrosUrl);
@@ -1015,6 +1023,7 @@
             if (!tbody) return;
             
             let lista = filtroTkSemanalSetor === 'TODOS' ? dadosTkSemanal : dadosTkSemanal.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
+            lista = lista.filter(a => matchAgente(a.nome));
             
             if (lista.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente encontrado neste setor.</td></tr>`;
@@ -1049,7 +1058,6 @@
         let filtroTkGeralSetor = 'TODOS';
 
         async function carregarTicketsGeral(parametrosUrl = '') {
-            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
                 const response = await fetch('/api/tickets-geral' + parametrosUrl);
                 const data = await response.json();
@@ -1078,6 +1086,8 @@
             if (!tbody || !thead) return;
 
             let lista = filtroTkGeralSetor === 'TODOS' ? dadosTkGeral : dadosTkGeral.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
+            lista = lista.filter(a => matchAgente(a.nome));
+
             if (lista.length === 0) { tbody.innerHTML = ''; return; }
 
             const numSemanas = lista[0].semanas.length;
@@ -1225,65 +1235,111 @@
         }
 
         async function carregarSinalizacoes(mes = '') {
-            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
-                const response = await fetch(`/api/sinalizacoes?mes=${encodeURIComponent(mes)}`); const data = await response.json();
+                const response = await fetch(`/api/sinalizacoes?mes=${encodeURIComponent(mes)}`);
+                const data = await response.json();
                 if (data.success) {
                     dadosSinalizacoes = data.agentes;
-                    const sel = document.getElementById('filtro-mes-sinalizacoes');
-                    if (sel && data.meses.length > 0 && sel.options.length <= 1) sel.innerHTML = data.meses.map(m => `<option value="${m}" ${m === data.mesAtual ? 'selected' : ''}>${m}</option>`).join('');
+                    
+                    const selectMes = document.getElementById('filtro-mes-sinalizacoes');
+                    if (selectMes && data.meses.length > 0) {
+                        if (selectMes.options.length <= 1) { 
+                            selectMes.innerHTML = data.meses.map(m => `<option value="${m}" ${m === data.mesAtual ? 'selected' : ''}>${m}</option>`).join('');
+                        }
+                    } else if (selectMes && data.meses.length === 0) {
+                        selectMes.innerHTML = `<option value="">Nenhum dado</option>`;
+                    }
                     renderTabelaSinalizacoes();
                 }
-            } catch (error) {}
+            } catch (error) { console.error("Erro Sinalizacoes:", error); }
         }
 
         function filtrarSinalizacoes(setor) {
             setorSinAtivo = setor;
             ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
                 const btn = document.getElementById(`btn-sin-${b}`);
-                if (btn) { btn.classList.remove(b===setor?'btn-setor-inativo':'btn-setor-ativo'); btn.classList.add(b===setor?'btn-setor-ativo':'btn-setor-inativo'); }
+                if (btn) {
+                    if (b === setor) { btn.classList.remove('btn-setor-inativo'); btn.classList.add('btn-setor-ativo'); }
+                    else { btn.classList.remove('btn-setor-ativo'); btn.classList.add('btn-setor-inativo'); }
+                }
             });
             renderTabelaSinalizacoes();
         }
 
         function renderTabelaSinalizacoes() {
-            const tb = document.getElementById('tabela-sinalizacoes-body'); if (!tb) return;
-            let sData = setorSinAtivo === 'TODOS' ? [...dadosSinalizacoes] : dadosSinalizacoes.filter(a => a.time.includes(setorSinAtivo));
-            sData = sData.filter(a => matchAgente(a.nome));
+            const tbSin = document.getElementById('tabela-sinalizacoes-body');
+            if (!tbSin) return;
+            
+            // 🔒 Aplica o Filtro do Agente Logado
+            let sinData = setorSinAtivo === 'TODOS' ? [...dadosSinalizacoes] : dadosSinalizacoes.filter(a => a.time.includes(setorSinAtivo));
+            sinData = sinData.filter(a => matchAgente(a.nome));
+            
+            if (sinData.length === 0) {
+                tbSin.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum dado encontrado para este filtro.</td></tr>`;
+                return;
+            }
 
-            if (sData.length === 0) { tb.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum dado encontrado.</td></tr>`; return; }
+            tbSin.innerHTML = sinData.map((a) => {
+                const badgeTime = `<span class="badge-setor">${a.time}</span>`;
 
-            const fnBtn = (arr, c, n) => {
-                if (!arr || !arr.length) return `<span class="text-gray-400 text-[10px] font-bold uppercase">Sem Reg.</span>`;
-                return arr.every(x => x.item.toLowerCase().includes('sem sinaliza')) 
-                    ? `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200 text-[11px] font-black hover:scale-105">✅ Feedback</button>` 
-                    : `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-red-100 text-red-600 border border-red-200 text-[11px] font-black hover:scale-105">🚨 Ver (${arr.length})</button>`;
-            };
+                const gerarBotaoCiclo = (cicloArr, cicloNum, nomeAgente) => {
+                    if (!cicloArr || cicloArr.length === 0) return `<span class="text-gray-400 dark:text-gray-600 text-[10px] font-bold uppercase">Sem Reg.</span>`;
+                    
+                    const semSin = cicloArr.every(c => c.item.toLowerCase().includes('sem sinaliza'));
+                    const nomeEscaped = nomeAgente.replace(/'/g, "\\'");
+                    
+                    if (semSin) {
+                        return `<button onclick="abrirModalSin('${nomeEscaped}', ${cicloNum})" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 text-[11px] font-black transition-all hover:scale-105 shadow-sm">✅ Feedback</button>`;
+                    } else {
+                        const qtd = cicloArr.length;
+                        return `<button onclick="abrirModalSin('${nomeEscaped}', ${cicloNum})" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 text-[11px] font-black transition-all hover:scale-105 shadow-sm">🚨 Ver (${qtd})</button>`;
+                    }
+                };
 
-            tb.innerHTML = sData.map(a => `
+                return `
                 <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-4 px-3 pl-6 texto-contraste whitespace-nowrap">${a.nome}</td>
-                    <td class="py-4 px-3 text-center"><span class="badge-setor">${a.time}</span></td>
-                    <td class="py-4 px-3 text-center">${fnBtn(a.ciclos[1], 1, a.nome)}</td><td class="py-4 px-3 text-center">${fnBtn(a.ciclos[2], 2, a.nome)}</td>
-                    <td class="py-4 px-3 text-center">${fnBtn(a.ciclos[3], 3, a.nome)}</td><td class="py-4 px-3 text-center">${fnBtn(a.ciclos[4], 4, a.nome)}</td>
-                </tr>`).join('');
+                    <td class="py-4 px-3 pl-6 texto-contraste whitespace-nowrap align-middle rounded-l-xl">${a.nome}</td>
+                    <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
+                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[1], 1, a.nome)}</td>
+                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[2], 2, a.nome)}</td>
+                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[3], 3, a.nome)}</td>
+                    <td class="py-4 px-3 text-center align-middle rounded-r-xl">${gerarBotaoCiclo(a.ciclos[4], 4, a.nome)}</td>
+                </tr>`;
+            }).join('');
         }
 
-        function abrirModalSin(n, c) {
-            const ag = dadosSinalizacoes.find(x => x.nome === n); if (!ag || !ag.ciclos[c] || !ag.ciclos[c].length) return;
-            document.getElementById('modal-sin-titulo').innerText = `Sinalizações - ${n} (Ciclo ${c})`;
-            document.getElementById('modal-sin-conteudo').innerHTML = ag.ciclos[c].map(x => `
+        function abrirModalSin(nomeAgente, cicloNum) {
+            const agente = dadosSinalizacoes.find(a => a.nome === nomeAgente);
+            if (!agente) return;
+            
+            const cicloDados = agente.ciclos[cicloNum];
+            if (!cicloDados || cicloDados.length === 0) return;
+
+            document.getElementById('modal-sin-titulo').innerText = `Sinalizações - ${nomeAgente} (Ciclo ${cicloNum})`;
+            
+            const conteudoHTML = cicloDados.map(c => {
+                const badgeFeed = c.feedback 
+                    ? `<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-500/30 mt-3">✅ Feedback aplicado</span>`
+                    : `<span class="inline-flex items-center gap-1 bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 px-3 py-1 rounded-lg text-xs font-bold border border-red-200 dark:border-red-500/30 mt-3">❌ Feedback não aplicado</span>`;
+
+                const isSemSin = c.item.toLowerCase().includes('sem sinaliza');
+                
+                return `
                 <div class="bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col">
                     <div class="flex flex-wrap gap-2 mb-3">
-                        <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">TIPO: ${x.tipo||'-'}</span>
-                        <span class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">QTD: ${x.qtd}</span>
-                        ${x.item.toLowerCase().includes('sem sinaliza') ? `<span class="bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">✅ SEM SINALIZAÇÕES</span>` : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">🚨 ${x.item}</span>`}
+                        <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">TIPO: ${c.tipo || '-'}</span>
+                        <span class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">QTD: ${c.qtd}</span>
+                        ${isSemSin ? `<span class="bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">✅ SEM SINALIZAÇÕES</span>` : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">🚨 ${c.item}</span>`}
                     </div>
-                    <div class="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap flex-1 bg-white dark:bg-[#0f172a] p-3 rounded border border-gray-100 dark:border-gray-800">${x.obs||'Nenhuma observação registrada.'}</div>
-                    <div class="mt-3">${x.feedback ? '<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-500/30 mt-3">✅ Feedback aplicado</span>' : '<span class="inline-flex items-center gap-1 bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 px-3 py-1 rounded-lg text-xs font-bold border border-red-200 dark:border-red-500/30 mt-3">❌ Feedback não aplicado</span>'}</div>
-                </div>`).join('');
+                    <div class="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap flex-1 bg-white dark:bg-[#0f172a] p-3 rounded border border-gray-100 dark:border-gray-800">${c.obs || 'Nenhuma observação registrada.'}</div>
+                    <div>${badgeFeed}</div>
+                </div>`;
+            }).join('');
+
+            document.getElementById('modal-sin-conteudo').innerHTML = conteudoHTML;
             document.getElementById('modal-sinalizacoes').classList.remove('hidden');
         }
+
         function fecharModalSin() { document.getElementById('modal-sinalizacoes').classList.add('hidden'); }
 
         // ==========================================
@@ -1294,7 +1350,6 @@
         let filtroDistSetor = 'TODOS';
 
         async function carregarDistribuicao() {
-            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
                 const response = await fetch('/api/distribuicao');
                 const data = await response.json();
