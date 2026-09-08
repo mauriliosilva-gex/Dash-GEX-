@@ -678,7 +678,7 @@ app.get('/api/tickets-geral', async (req, res) => {
 // ==========================================
 app.get('/api/distribuicao', async (req, res) => {
     try {
-        // 1. Query de Distribuição de Tickets por Inbox
+        // 1. Query de Distribuição de Tickets por Inbox (APENAS ABERTOS: status = 0)
         const qDist = `
             SELECT 
                 u.name AS agente,
@@ -687,7 +687,7 @@ app.get('/api/distribuicao', async (req, res) => {
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
             LEFT JOIN inboxes i ON i.id = c.inbox_id
-            WHERE c.status IN (0, 2) 
+            WHERE c.status = 0 
             GROUP BY u.name, i.name
         `;
         const resultDist = await pool.query(qDist);
@@ -707,17 +707,30 @@ app.get('/api/distribuicao', async (req, res) => {
             distAgentes[nome].total += parseInt(r.qtd) || 0;
         });
 
-        // 2. Query Resumo Casos Agente (Ignorado / Aguardando / Parado / Andamento)
+        // 2. Query Resumo Casos Agente (Apenas Abertos) - Lógica de SLA
         const qCasos = `
+            WITH OpenConversations AS (
+                SELECT id, assignee_id, first_reply_created_at, last_activity_at
+                FROM conversations
+                WHERE status = 0
+            ),
+            LastMessages AS (
+                SELECT DISTINCT ON (conversation_id) conversation_id, message_type
+                FROM messages
+                WHERE conversation_id IN (SELECT id FROM OpenConversations)
+                  AND message_type IN (0, 1)
+                  AND private = FALSE
+                  AND (content_attributes->>'deleted')::boolean IS NOT TRUE
+                ORDER BY conversation_id, created_at DESC
+            )
             SELECT 
                 u.name AS agente,
-                c.status,
-                c.last_activity_at,
-                COUNT(c.id) AS qtd
-            FROM conversations c
-            LEFT JOIN users u ON u.id = c.assignee_id
-            WHERE c.status IN (0, 2, 3)
-            GROUP BY u.name, c.status, c.last_activity_at
+                oc.first_reply_created_at,
+                oc.last_activity_at,
+                lm.message_type AS last_msg_type
+            FROM OpenConversations oc
+            LEFT JOIN users u ON u.id = oc.assignee_id
+            LEFT JOIN LastMessages lm ON lm.conversation_id = oc.id
         `;
         const resultCasos = await pool.query(qCasos);
         const resCasosMap = {};
@@ -728,24 +741,28 @@ app.get('/api/distribuicao', async (req, res) => {
             if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
             if (!resCasosMap[nome]) resCasosMap[nome] = { nome, ignorado: 0, aguardando: 0, parado: 0, andamento: 0, total: 0 };
             
-            const qtd = parseInt(r.qtd) || 1;
-            const status = parseInt(r.status); // 0=Aberto, 2=Pendente, 3=Snoozed/Oculto
-            const dtAtividade = new Date(r.last_activity_at);
-            const diffDias = (agora - dtAtividade) / (1000 * 60 * 60 * 24);
+            const diffHoras = (agora - new Date(r.last_activity_at)) / (1000 * 60 * 60);
+            const isClientLast = (r.last_msg_type === 0);
+            const agentRepliedBefore = (r.first_reply_created_at !== null);
             
-            // Lógica exata: Status define a coluna, e se for aberto (0), divide pela idade
-            if (status === 3) {
-                resCasosMap[nome].ignorado += qtd; // Ocultos / Snoozed
-            } else if (status === 2) {
-                resCasosMap[nome].aguardando += qtd; // Pendentes / Aguardando Cliente
-            } else if (status === 0) {
-                if (diffDias > 3) {
-                    resCasosMap[nome].parado += qtd; // Abertos com mais de 3 dias
+            if (isClientLast) {
+                if (!agentRepliedBefore) {
+                    // Novo caso: Cliente mandou msg e o agente NUNCA respondeu
+                    resCasosMap[nome].aguardando += 1;
                 } else {
-                    resCasosMap[nome].andamento += qtd; // Abertos dentro do prazo
+                    // Retorno: Agente já tinha conversado, e cliente mandou msg novamente
+                    if (diffHoras > 48) {
+                        resCasosMap[nome].parado += 1; // Quebrou SLA de 48h
+                    } else {
+                        resCasosMap[nome].ignorado += 1; // Dentro do SLA de 48h
+                    }
                 }
+            } else {
+                // Última mensagem foi do Agente (ou não tem msg válida), está com o cliente
+                resCasosMap[nome].andamento += 1;
             }
-            resCasosMap[nome].total += qtd;
+            
+            resCasosMap[nome].total += 1;
         });
 
         res.json({ 
