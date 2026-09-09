@@ -774,6 +774,165 @@ app.get('/api/distribuicao', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ==========================================
+// 11. ROTA DE PRODUTIVIDADE E TEMPO OCIOSO (ADMIN-ONLY)
+// ==========================================
+app.get('/api/produtividade', async (req, res) => {
+    try {
+        let dataInicioSQL, dataFimSQL;
+        if (req.query.since && req.query.until) {
+            dataInicioSQL = unixParaYYYYMMDD(req.query.since); 
+            dataFimSQL = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+            dataInicioSQL = formatarDataSQL(agora); 
+            dataFimSQL = formatarDataSQL(agora);    
+        }
+
+        const qProd = `
+            SELECT 
+                u.name AS agente,
+                TO_CHAR(m.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') AS data_hora
+            FROM messages m
+            INNER JOIN users u ON u.id = m.sender_id
+            WHERE m.sender_type = 'User'
+              AND m.message_type = 1
+              AND m.private = FALSE
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+              AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND m.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+            ORDER BY u.name, m.created_at ASC
+        `;
+        
+        const result = await pool.query(qProd, [dataInicioSQL, dataFimSQL]);
+        
+        const relatorio = {};
+        result.rows.forEach(r => {
+            let nome = (r.agente || '').toUpperCase();
+            if (!nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            
+            let d = new Date(r.data_hora.replace(' ', 'T'));
+            let diaStr = r.data_hora.split(' ')[0];
+            
+            if (!relatorio[nome]) relatorio[nome] = { dias: {} };
+            if (!relatorio[nome].dias[diaStr]) relatorio[nome].dias[diaStr] = [];
+            relatorio[nome].dias[diaStr].push(d);
+        });
+
+        const formatHora = (d) => String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+
+        const output = [];
+        for (const [agente, dados] of Object.entries(relatorio)) {
+            let totalTickets = 0;
+            let totalMinutosAciosos = 0;
+            let historicoPausas = [];
+            let jornadas = [];
+            
+            let diasUteis = 0;
+            let ticketsPorHora = new Array(24).fill(0);
+            let ticketsPorDia = {};
+            let ociosoPorDia = {};
+
+            for (const [dia, horas] of Object.entries(dados.dias)) {
+                totalTickets += horas.length;
+                if (horas.length === 0) continue;
+                
+                let inicio = horas[0];
+                let fim = horas[horas.length - 1];
+                let objDia = dia.split('-').reverse().join('/');
+                jornadas.push(`${objDia} (${formatHora(inicio)} as ${formatHora(fim)})`);
+
+                let diaDaSemana = inicio.getDay(); // 0=Dom, 6=Sab
+                let isFDS = (diaDaSemana === 0 || diaDaSemana === 6);
+                
+                if (!isFDS) diasUteis++;
+                ticketsPorDia[objDia] = horas.length;
+                ociosoPorDia[objDia] = 0;
+
+                for (let i = 1; i < horas.length; i++) {
+                    let msgAnterior = horas[i-1];
+                    let msgAtual = horas[i];
+                    let diffMinRaw = (msgAtual - msgAnterior) / 60000;
+                    
+                    if(!isFDS) {
+                        let h = msgAtual.getHours();
+                        ticketsPorHora[h]++;
+                    }
+
+                    // Se passou de 20 min sem mandar msg, é pausa.
+                    if (diffMinRaw >= 20) {
+                        let startMin = msgAnterior.getHours() * 60 + msgAnterior.getMinutes();
+                        let endMin = msgAtual.getHours() * 60 + msgAtual.getMinutes();
+                        
+                        let isAlmoco = (startMin < 14*60 && endMin > 12*60+30); 
+                        let strPausa = `${objDia} das ${formatHora(msgAnterior)} às ${formatHora(msgAtual)} (${Math.round(diffMinRaw)}m)`;
+
+                        // Interseção rigorosa com horários úteis (09:00 as 12:30 e 14:00 as 18:00)
+                        const overlap = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
+                        let idleUtil = overlap(startMin, endMin, 9*60, 12*60+30) + overlap(startMin, endMin, 14*60, 18*60);
+
+                        if (isFDS) {
+                            historicoPausas.push(`🏖️ FDS: ${strPausa}`);
+                        } else if (isAlmoco && idleUtil <= 0) {
+                            historicoPausas.push(`🍽️ ALMOÇO: ${strPausa}`);
+                        } else if (diffMinRaw < 60 * 6) { 
+                            // É dia útil e teve tempo ocioso dentro do horário
+                            if (idleUtil > 0) {
+                                totalMinutosAciosos += idleUtil;
+                                ociosoPorDia[objDia] += idleUtil;
+                                historicoPausas.push(`⏸️ OCIOSO (${Math.round(idleUtil)}m úteis): ${strPausa}`);
+                            } else if (isAlmoco) {
+                                historicoPausas.push(`🍽️ ALMOÇO: ${strPausa}`);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // --- CÁLCULO DAS MÉTRICAS AVANÇADAS (Apenas Seg-Sex, 09h às 18h) ---
+            let horaMaisAtiva = 0, maxT = -1;
+            let horaMenosAtiva = 0, minT = 999999;
+            
+            for(let h=9; h<18; h++) {
+                if (h === 13) continue; // Pula horário de almoço na média de pior/melhor hora
+                if(ticketsPorHora[h] > maxT) { maxT = ticketsPorHora[h]; horaMaisAtiva = h; }
+                if(ticketsPorHora[h] < minT) { minT = ticketsPorHora[h]; horaMenosAtiva = h; }
+            }
+
+            let diaMaisTickets = '-', valMaisTickets = 0;
+            let diaMaisOcioso = '-', valMaisOcioso = 0;
+
+            for (let d in ticketsPorDia) {
+                if (ticketsPorDia[d] > valMaisTickets) { valMaisTickets = ticketsPorDia[d]; diaMaisTickets = d; }
+            }
+            for (let d in ociosoPorDia) {
+                if (ociosoPorDia[d] > valMaisOcioso) { valMaisOcioso = ociosoPorDia[d]; diaMaisOcioso = d; }
+            }
+
+            let mediaOcioso = diasUteis > 0 ? (totalMinutosAciosos / diasUteis) : 0;
+
+            output.push({
+                nome: agente,
+                tickets: totalTickets,
+                jornada: jornadas.join('\n'),
+                tempo_ocioso: Math.round(totalMinutosAciosos),
+                maior_pico: maxT > 0 ? `${String(horaMaisAtiva).padStart(2,'0')}h às ${String(horaMaisAtiva+1).padStart(2,'0')}h` : '-',
+                pausas: historicoPausas,
+                detalhes: {
+                    media_ocioso: Math.round(mediaOcioso),
+                    hora_mais: maxT > 0 ? `${String(horaMaisAtiva).padStart(2,'0')}h (${maxT} tkts)` : '-',
+                    hora_menos: minT !== 999999 && maxT > 0 ? `${String(horaMenosAtiva).padStart(2,'0')}h (${minT} tkts)` : '-',
+                    dia_tickets: `${diaMaisTickets} (${valMaisTickets})`,
+                    dia_ocioso: `${diaMaisOcioso} (${Math.round(valMaisOcioso)}m)`
+                }
+            });
+        }
+
+        output.sort((a, b) => b.tempo_ocioso - a.tempo_ocioso);
+        res.json({ success: true, agentes: output });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
 const PORT = process.env.PORT || 3003;
 app.listen(PORT, () => {
     console.log(`✅ Servidor rodando na porta ${PORT}`);
