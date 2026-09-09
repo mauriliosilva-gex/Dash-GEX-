@@ -406,7 +406,6 @@
 
                 <!-- SUB-ABA 5: DISTRIBUIÇÃO (CAIXAS) -->
                 <div id="tela-tk-distribuicao" class="hidden flex-1 flex flex-col min-h-0 bg-[#020617]">
-                    <!-- BARRA DE FILTROS -->
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-darkBorder flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/20 shrink-0">
                         <div class="flex items-center gap-4">
                             <h3 class="text-sm font-bold text-gray-600 dark:text-gray-400">Tempo Real (Caixas/Setor)</h3>
@@ -439,6 +438,7 @@
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
 
@@ -572,20 +572,6 @@
     <script>
         let usuarioAtual = null;
 
-        // 🧠 NOVA INTELIGÊNCIA: Verifica se a linha pertence ao agente logado
-        function matchAgente(nomePlanilha) {
-            if (!usuarioAtual || usuarioAtual.role === 'admin') return true;
-            
-            const partes = usuarioAtual.nome.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(' ').filter(p => p.length > 0);
-            const p1 = partes[0];
-            const p2 = partes.length > 1 ? partes[1] : '';
-            const alvo = nomePlanilha.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-            if (p2 && alvo.includes(p1) && alvo.includes(p2)) return true;
-            if (alvo.includes(p1)) return true;
-            return false;
-        }
-
         async function iniciarApp() {
             try {
                 const res = await fetch('/api/me');
@@ -602,35 +588,20 @@
             } catch (e) { console.error("Erro auth", e); }
         }
 
-        // 🔒 SISTEMA DE PERMISSÕES: Esconde APENAS os botões solicitados e filtros de setores para o agente
+        // 🔒 SISTEMA DE PERMISSÕES: Esconde APENAS os 3 botões solicitados se for Agente
         function configurarPermissoes() {
-            if (usuarioAtual.role === 'agente') {
-                // 1. Oculta apenas o botão "Sinalizações" no menu de Qualidade
-                const btnSinalizacoes = document.getElementById('btn-sub-qual-sinalizacoes');
-                if (btnSinalizacoes) btnSinalizacoes.style.display = 'none';
+            if (usuarioAtual && usuarioAtual.role === 'agente') {
+                // 1. Esconde botão de Sinalizações na aba Qualidade
+                const btnSin = document.getElementById('btn-sub-qual-sinalizacoes');
+                if (btnSin) btnSin.style.display = 'none';
 
-                // 2. Oculta o botão "Status de Casos" no menu de Tickets
-                const btnTkCasos = document.getElementById('btn-sub-tk-casos');
-                if (btnTkCasos) btnTkCasos.style.display = 'none';
+                // 2. Esconde botão de Status de Casos na aba Tickets
+                const btnCasos = document.getElementById('btn-sub-tk-casos');
+                if (btnCasos) btnCasos.style.display = 'none';
 
-                // 3. Oculta o botão "Distribuição" no menu de Tickets
-                const btnTkDist = document.getElementById('btn-sub-tk-distribuicao');
-                if (btnTkDist) btnTkDist.style.display = 'none';
-
-                // 4. Oculta os botões de Filtro de Setor (RET, SAC, TODOS, etc.)
-                document.querySelectorAll('.btn-setor').forEach(btn => {
-                    if (btn.id.match(/-TODOS|-RET|-SAC|-BKO|-SMS/)) btn.style.display = 'none';
-                });
-            } else {
-                // Se for ADM, certifica-se de que os botões extras estão visíveis
-                const btnSinalizacoes = document.getElementById('btn-sub-qual-sinalizacoes');
-                if (btnSinalizacoes) btnSinalizacoes.style.display = 'block';
-
-                const btnTkCasos = document.getElementById('btn-sub-tk-casos');
-                if (btnTkCasos) btnTkCasos.style.display = 'block';
-
-                const btnTkDist = document.getElementById('btn-sub-tk-distribuicao');
-                if (btnTkDist) btnTkDist.style.display = 'block';
+                // 3. Esconde botão de Distribuição na aba Tickets
+                const btnDist = document.getElementById('btn-sub-tk-distribuicao');
+                if (btnDist) btnDist.style.display = 'none';
             }
         }
 
@@ -684,7 +655,7 @@
             document.getElementById(`tela-qual-${aba}`).classList.add('block');
             document.getElementById(`btn-sub-qual-${aba}`).classList.replace('btn-setor-inativo', 'btn-setor-ativo');
             
-            if (aba === 'sinalizacoes' && dadosSinalizacoes.length === 0) carregarSinalizacoes('');
+            if (aba === 'sinalizacoes' && dadosSinalizacoes.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') carregarSinalizacoes('');
         }
 
         function mudarSubAbaTk(aba) {
@@ -703,661 +674,266 @@
             if ((aba === 'casos' || aba === 'distribuicao') && !dadosDistribuicao && usuarioAtual && usuarioAtual.role === 'admin') carregarDistribuicao();
         }
 
-        let dadosAgentes = [];
-        let dadosQualidade = [];
-        let mesesQualidade = [];
-        let mesQualidadeAtivo = '';
-        let setorQualAtivo = 'TODOS';
+        let dadosAgentes = [], dadosQualidade = [], dadosSinalizacoes = [], dadosTkAtual = [], dadosTkSemanal = [], dadosTkGeral = [], dadosDistribuicao = null;
+        let mesesQualidade = [], mesQualidadeAtivo = '', setorQualAtivo = 'TODOS', setorSinAtivo = 'TODOS', filtroTkAtualSetor = 'TODOS', filtroTkSemanalSetor = 'TODOS', filtroTkGeralSetor = 'TODOS';
+        let filtroCasosSetor = 'TODOS', filtroDistSetor = 'TODOS';
+        let diasFiltroSemanal = 7;
 
         const fmtDolar = val => '$ ' + Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const fmtTrv = val => Number(val || 0).toFixed(2) + '%';
-        
         const formatStatus = (text, isTop3 = false) => {
             if (!text) return '<span class="text-gray-500 font-bold">-</span>';
             const cleanText = text.replace(/^[✅❌⚠️]\s*/, '');
-            const lower = cleanText.toLowerCase();
-
-            if (lower.includes('batendo') || lower.includes('conseguiu')) {
-                return `<span class="bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">✅ ${cleanText}</span>`;
-            } else if (lower.includes('atenção')) {
-                return `<span class="bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">⚠️ ${cleanText}</span>`;
-            } else if (lower.includes('abaixo') || lower.includes('falta')) {
-                return `<span class="bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider whitespace-nowrap">❌ ${cleanText}</span>`;
-            }
-            
-            const textColor = isTop3 ? 'texto-top3-sm' : 'texto-contraste-sm';
-            return `<span class="${textColor} whitespace-nowrap">${cleanText}</span>`;
+            if (cleanText.toLowerCase().includes('batendo') || cleanText.toLowerCase().includes('conseguiu')) return `<span class="bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold whitespace-nowrap">✅ ${cleanText}</span>`;
+            if (cleanText.toLowerCase().includes('atenção')) return `<span class="bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold whitespace-nowrap">⚠️ ${cleanText}</span>`;
+            if (cleanText.toLowerCase().includes('abaixo') || cleanText.toLowerCase().includes('falta')) return `<span class="bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] uppercase font-bold whitespace-nowrap">❌ ${cleanText}</span>`;
+            return `<span class="${isTop3 ? 'texto-top3-sm' : 'texto-contraste-sm'} whitespace-nowrap">${cleanText}</span>`;
         };
 
         function carregarTudo() {
-            carregarDadosReais('');
-            carregarQualidade('');
-            carregarTickets('');
+            carregarDadosReais(''); 
+            carregarQualidade(''); 
+            carregarTickets(''); 
             carregarTicketsGeral('');
             
             const selectMesSemanal = document.getElementById('mes-tickets-semanais');
             if (selectMesSemanal && selectMesSemanal.value) {
                 gerarBotoesSemanas(selectMesSemanal.value);
             }
-            
+
             if(usuarioAtual && usuarioAtual.role === 'admin') {
                 carregarSinalizacoes('');
             }
         }
 
         // ==========================================
-        // DADOS RETENÇÃO
+        // RETENÇÃO
         // ==========================================
-        async function carregarDadosReais(parametrosUrl = '') {
+        async function carregarDadosReais(pUrl = '') {
             try {
                 const btnSync = document.querySelector('button.bg-gradient-to-r');
                 if (btnSync) btnSync.innerHTML = '⏳ Sincronizando...';
 
-                const response = await fetch('/api/retencao' + parametrosUrl);
-                const data = await response.json();
-
+                const response = await fetch('/api/retencao' + pUrl); const data = await response.json();
                 if (data.success) {
                     dadosAgentes = data.agentes;
-
-                    document.getElementById('card-meta-trv').innerText = fmtTrv(data.globais.meta_trv);
-                    document.getElementById('card-trv-medio').innerText = fmtTrv(data.globais.trv_medio);
-                    document.getElementById('card-meta-mes').innerText = fmtDolar(data.globais.meta_mes);
-                    document.getElementById('card-recuperado-total').innerText = fmtDolar(data.globais.recuperado_total);
-                    document.getElementById('card-faltam').innerText = fmtDolar(data.globais.faltam);
-                    document.getElementById('card-meta-min-casos').innerText = fmtDolar(data.globais.meta_minima_casos);
-
+                    document.getElementById('card-meta-trv').innerText = fmtTrv(data.globais.meta_trv); document.getElementById('card-trv-medio').innerText = fmtTrv(data.globais.trv_medio);
+                    document.getElementById('card-meta-mes').innerText = fmtDolar(data.globais.meta_mes); document.getElementById('card-recuperado-total').innerText = fmtDolar(data.globais.recuperado_total);
+                    document.getElementById('card-faltam').innerText = fmtDolar(data.globais.faltam); document.getElementById('card-meta-min-casos').innerText = fmtDolar(data.globais.meta_minima_casos);
                     renderTabelaRetencaoPremium();
-
                     if (btnSync) { btnSync.innerHTML = '✅ OK!'; setTimeout(() => btnSync.innerHTML = 'Sincronizar', 2000); }
                 }
-            } catch (error) { console.error("Erro comunicação:", error.message); }
+            } catch (error) {}
         }
 
         function renderTabelaRetencaoPremium() {
-            const tbRetencao = document.getElementById('tabela-retencao-body');
-            if (!tbRetencao) return;
-
-            // 🔒 Aplica o Filtro do Agente Logado
-            let retencaoData = dadosAgentes.filter(a => a.time === 'RET' && matchAgente(a.nome));
-
-            tbRetencao.innerHTML = retencaoData.map((a, i) => {
+            const tb = document.getElementById('tabela-retencao-body'); if (!tb) return;
+            let rData = dadosAgentes.filter(a => a.time === 'RET');
+            tb.innerHTML = rData.map((a, i) => {
                 const recuperado = (a.casos_atual || 0) - (a.refund || 0);
-                const isTop3 = i < 3 && (!usuarioAtual || usuarioAtual.role === 'admin');
-
-                let trClass = 'row-normal linha-animada';
-                let posEl = `<span class="pos-badge">${i + 1}º</span>`;
-                
-                let nameClass = 'texto-contraste'; 
-                let textClassData = 'texto-contraste-sm';
-                let trvColor = a.trv >= 70 ? 'text-emerald-600 dark:text-emerald-500' : a.trv >= 60 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500';
-
+                const isTop3 = i < 3; 
+                let trClass = 'row-normal linha-animada', posEl = `<span class="pos-badge">${i + 1}º</span>`, nC = 'texto-contraste', tC = 'texto-contraste-sm', trvC = a.trv >= 70 ? 'text-emerald-500' : a.trv >= 60 ? 'text-yellow-500' : 'text-red-500';
                 if (isTop3) {
-                    if (i === 0) {
-                        trClass = 'row-gold font-bold linha-animada'; nameClass = 'texto-top3 text-yellow-400'; trvColor = 'text-yellow-400'; textClassData = 'texto-top3-sm';
-                        posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
-                                    <span class="text-[8px] font-black text-yellow-500 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
-                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-yellow-200 to-yellow-600 text-black font-black text-base shadow-[0_0_10px_rgba(234,179,8,0.5)] border border-yellow-200">1</span>
-                                 </div>`;
-                    } else if (i === 1) {
-                        trClass = 'row-silver font-bold linha-animada'; nameClass = 'texto-top3 text-gray-100'; trvColor = 'text-gray-100'; textClassData = 'texto-top3-sm';
-                        posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
-                                    <span class="text-[8px] font-black text-gray-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
-                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-400 text-black font-black text-base shadow-[0_0_10px_rgba(156,163,175,0.5)] border border-gray-200">2</span>
-                                 </div>`;
-                    } else if (i === 2) {
-                        trClass = 'row-bronze font-bold linha-animada'; nameClass = 'texto-top3 text-orange-200'; trvColor = 'text-orange-200'; textClassData = 'texto-top3-sm';
-                        posEl = `<div class="flex flex-col items-center justify-center relative w-10 h-10 mx-auto">
-                                    <span class="text-[8px] font-black text-orange-400 absolute -top-1.5 tracking-widest drop-shadow-md">TOP</span>
-                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-orange-200 to-orange-700 text-white font-black text-base shadow-[0_0_10px_rgba(249,115,22,0.5)] border border-orange-300">3</span>
-                                 </div>`;
-                    }
+                    trClass = i === 0 ? 'row-gold' : i === 1 ? 'row-silver' : 'row-bronze'; trClass += ' font-bold linha-animada';
+                    nC = i === 0 ? 'texto-top3 text-yellow-400' : i === 1 ? 'texto-top3 text-gray-100' : 'texto-top3 text-orange-200'; tC = 'texto-top3-sm'; trvC = i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-100' : 'text-orange-200';
+                    posEl = `<span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br ${i===0?'from-yellow-200 to-yellow-600':i===1?'from-gray-100 to-gray-400':'from-orange-200 to-orange-700'} text-${i===1?'black':'white'} font-black text-base border"> ${i+1} </span>`;
                 }
-
                 return `
                 <tr class="ranking-row ${trClass}">
-                    <td class="py-3 px-2 text-center align-middle">${posEl}</td>
-                    <td class="py-3 px-3 ${nameClass} whitespace-nowrap align-middle">${a.nome}</td>
-                    <td class="py-3 px-2 text-center font-mono font-black text-gexCyan text-[15px] align-middle">${a.tickets || 0}</td>
-                    <td class="py-3 px-3 text-right font-mono ${textClassData} align-middle">${fmtDolar(a.casos_atual)}</td>
-                    <td class="py-3 px-3 text-right font-mono ${textClassData} align-middle">${fmtDolar(a.refund)}</td>
-                    <td class="py-3 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-[13px] align-middle">${fmtDolar(recuperado)}</td>
-                    <td class="py-3 px-3 text-center align-middle">${formatStatus(a.status_vol, isTop3)}</td>
-                    <td class="py-3 px-3 text-center font-mono ${textClassData} align-middle">${fmtTrv(a.meta_trv_agente)}</td>
-                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] ${trvColor} align-middle">${fmtTrv(a.trv)}</td>
-                    <td class="py-3 px-3 text-center align-middle">${formatStatus(a.status_trv, isTop3)}</td>
+                    <td class="py-3 px-2 text-center">${posEl}</td>
+                    <td class="py-3 px-3 ${nC} whitespace-nowrap">${a.nome}</td>
+                    <td class="py-3 px-2 text-center font-mono font-black text-gexCyan">${a.tickets || 0}</td>
+                    <td class="py-3 px-3 text-right font-mono ${tC}">${fmtDolar(a.casos_atual)}</td>
+                    <td class="py-3 px-3 text-right font-mono ${tC}">${fmtDolar(a.refund)}</td>
+                    <td class="py-3 px-3 text-right font-mono font-bold text-emerald-500">${fmtDolar((a.casos_atual || 0) - (a.refund || 0))}</td>
+                    <td class="py-3 px-3 text-center">${formatStatus(a.status_vol, isTop3)}</td>
+                    <td class="py-3 px-3 text-center font-mono ${tC}">${fmtTrv(a.meta_trv_agente)}</td>
+                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] ${trvC}">${fmtTrv(a.trv)}</td>
+                    <td class="py-3 px-3 text-center">${formatStatus(a.status_trv, isTop3)}</td>
                 </tr>`;
             }).join('');
         }
 
         // ==========================================
-        // 1. TICKETS ATUAL
-        // ==========================================
-        let dadosTkAtual = [];
-        let filtroTkAtualSetor = 'TODOS';
-
-        async function carregarTickets(parametrosUrl = '') {
-            try {
-                const response = await fetch('/api/tickets' + parametrosUrl);
-                const data = await response.json();
-                if (data.success) {
-                    dadosTkAtual = data.agentes;
-                    renderTabelaTickets();
-                }
-            } catch (error) { }
-        }
-
-        function filtrarTkAtual(setor) {
-            filtroTkAtualSetor = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
-                const btn = document.getElementById(`btn-f-tk-atual-${b}`);
-                if (btn) {
-                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
-                }
-            });
-            renderTabelaTickets();
-        }
-
-        function renderTabelaTickets() {
-            const tbody = document.getElementById('tabela-tickets-body');
-            if (!tbody) return;
-            
-            let lista = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
-            lista = lista.filter(a => matchAgente(a.nome));
-            
-            if (lista.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente encontrado neste setor.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = lista.map(a => {
-                const formatCell = val => (val === 0 || val === '-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${val}</span>`;
-                const metaColor = a.meta >= 60 ? 'text-emerald-600 dark:text-emerald-500' : (a.meta >= 40 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500');
-                return `
-                <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.seg)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.ter)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.qua)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.qui)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.sex)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.sab)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.dom)}</td>
-                    <td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td>
-                    <td class="py-3 px-4 text-center font-mono font-bold ${metaColor} pr-6">${a.meta}%</td>
-                </tr>`;
-            }).join('');
-        }
-
-        function carregarSemanaAtual() {
-            document.getElementById('btn-filtro-semana-atual').className = "bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm";
-            document.getElementById('btn-filtro-semana-passada').className = "bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold transition-all";
-            carregarTickets('');
-        }
-
-        function carregarSemanaPassada() {
-            document.getElementById('btn-filtro-semana-passada').className = "bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm";
-            document.getElementById('btn-filtro-semana-atual').className = "bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold transition-all";
-
-            const hoje = new Date();
-            const diaDaSemana = hoje.getDay();
-            const difParaSegunda = hoje.getDate() - diaDaSemana + (diaDaSemana === 0 ? -6 : 1) - 7;
-            const segunda = new Date(hoje.getFullYear(), hoje.getMonth(), difParaSegunda, 0, 0, 0);
-            const domingo = new Date(segunda);
-            domingo.setDate(segunda.getDate() + 6);
-            domingo.setHours(23, 59, 59);
-
-            carregarTickets(`?since=${Math.floor(segunda.getTime() / 1000)}&until=${Math.floor(domingo.getTime() / 1000)}`);
-        }
-
-        // ==========================================
-        // 2. TICKETS MENSAL 
-        // ==========================================
-        let diasFiltroSemanal = 7; 
-        let dadosTkSemanal = []; 
-        let filtroTkSemanalSetor = 'TODOS'; 
-
-        function gerarBotoesSemanas(anoMes) {
-            const parts = anoMes.split('-');
-            const ano = parseInt(parts[0]);
-            const mes = parseInt(parts[1]) - 1; 
-            
-            const semanas = [];
-            let dataAtual = new Date(ano, mes, 1);
-            const ultimoDia = new Date(ano, mes + 1, 0);
-
-            while (dataAtual <= ultimoDia) {
-                let inicioSemana = new Date(dataAtual);
-                while (dataAtual.getDay() !== 0 && dataAtual < ultimoDia) {
-                    dataAtual.setDate(dataAtual.getDate() + 1);
-                }
-                let fimSemana = new Date(dataAtual);
-                let dias = Math.round((fimSemana - inicioSemana) / (1000 * 60 * 60 * 24)) + 1;
-                
-                semanas.push({ inicio: inicioSemana, fim: fimSemana, dias: dias });
-                dataAtual.setDate(dataAtual.getDate() + 1);
-            }
-
-            const container = document.getElementById('botoes-semanas-container');
-            if(!container) return;
-            container.innerHTML = '';
-
-            semanas.forEach((sem, index) => {
-                const btn = document.createElement('button');
-                const strInicio = String(sem.inicio.getDate()).padStart(2, '0') + '/' + String(sem.inicio.getMonth()+1).padStart(2, '0');
-                const strFim = String(sem.fim.getDate()).padStart(2, '0') + '/' + String(sem.fim.getMonth()+1).padStart(2, '0');
-                
-                btn.className = `btn-setor text-[11px] px-3 py-1.5 ${index === 0 ? 'btn-setor-ativo' : 'btn-setor-inativo'}`;
-                btn.innerText = `Sem ${strInicio} - ${strFim}`;
-                
-                btn.onclick = async () => {
-                    Array.from(container.children).forEach(c => c.classList.replace('btn-setor-ativo', 'btn-setor-inativo'));
-                    btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-                    
-                    const dFim = new Date(sem.fim);
-                    dFim.setHours(23, 59, 59, 999);
-                    const since = Math.floor(sem.inicio.getTime() / 1000);
-                    const until = Math.floor(dFim.getTime() / 1000);
-                    
-                    let dataSegunda = new Date(sem.inicio);
-                    const day = dataSegunda.getDay();
-                    dataSegunda.setDate(dataSegunda.getDate() - day + (day === 0 ? -6 : 1)); 
-                    
-                    const nomesDias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-                    let htmlCab = '<th class="cabecalho-fixo py-3 px-4 min-w-[150px] pl-6 align-middle">Analista</th>';
-                    for(let i=0; i<7; i++) {
-                        let d = new Date(dataSegunda);
-                        d.setDate(d.getDate() + i);
-                        let strD = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth()+1).padStart(2, '0');
-                        let cor = (i >= 5) ? 'text-orange-600 dark:text-orange-500' : '';
-                        htmlCab += `<th class="cabecalho-fixo py-1.5 px-2 text-center align-middle ${cor}">
-                                        <div class="flex flex-col items-center leading-tight">
-                                            <span>${nomesDias[i]}</span>
-                                            <span class="text-[9px] font-bold opacity-60 mt-0.5">${strD}</span>
-                                        </div>
-                                    </th>`;
-                    }
-                    htmlCab += '<th class="cabecalho-fixo py-3 px-4 text-center align-middle">Total</th><th class="cabecalho-fixo py-3 px-4 text-center pr-6 text-gexCyan align-middle">Média/dia</th>';
-                    document.getElementById('tr-header-semanal').innerHTML = htmlCab;
-                    
-                    const originalText = btn.innerText;
-                    btn.innerText = '⏳ Buscando...';
-                    await carregarTicketsSemanal(`?since=${since}&until=${until}`, sem.dias);
-                    btn.innerText = originalText;
-                };
-                
-                container.appendChild(btn);
-                
-                if(index === 0) {
-                    btn.click();
-                }
-            });
-        }
-
-        async function carregarTicketsSemanal(parametrosUrl = '', dias = 7) {
-            try {
-                diasFiltroSemanal = dias;
-                const response = await fetch('/api/tickets' + parametrosUrl);
-                const data = await response.json();
-                if (data.success) {
-                    dadosTkSemanal = data.agentes; 
-                    renderTabelaTicketsSemanal(); 
-                }
-            } catch (error) { console.error(error); }
-        }
-
-        function filtrarTkSemanal(setor) {
-            filtroTkSemanalSetor = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
-                const btn = document.getElementById(`btn-f-tk-sem-${b}`);
-                if (btn) {
-                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
-                }
-            });
-            renderTabelaTicketsSemanal();
-        }
-
-        function renderTabelaTicketsSemanal() {
-            const tbody = document.getElementById('tabela-tickets-semanal-body');
-            if (!tbody) return;
-            
-            let lista = filtroTkSemanalSetor === 'TODOS' ? dadosTkSemanal : dadosTkSemanal.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
-            lista = lista.filter(a => matchAgente(a.nome));
-            
-            if (lista.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente encontrado neste setor.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = lista.map(a => {
-                const formatCell = val => (val === 0 || val === '-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${val}</span>`;
-                
-                const mediaDia = (a.total / diasFiltroSemanal).toFixed(1);
-                
-                return `
-                <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.seg)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.ter)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.qua)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.qui)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.sex)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.sab)}</td>
-                    <td class="py-3 px-2 text-center">${formatCell(a.dom)}</td>
-                    <td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td>
-                    <td class="py-3 px-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 pr-6">${mediaDia}</td>
-                </tr>`;
-            }).join('');
-        }
-
-        // ==========================================
-        // 3. TICKETS GERAL
-        // ==========================================
-        let dadosTkGeral = [];
-        let filtroTkGeralSetor = 'TODOS';
-
-        async function carregarTicketsGeral(parametrosUrl = '') {
-            try {
-                const response = await fetch('/api/tickets-geral' + parametrosUrl);
-                const data = await response.json();
-                if (data.success) {
-                    dadosTkGeral = data.agentes;
-                    renderTabelaTkGeral();
-                }
-            } catch (error) { }
-        }
-
-        function filtrarTkGeral(setor) {
-            filtroTkGeralSetor = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
-                const btn = document.getElementById(`btn-f-tk-${b}`);
-                if (btn) {
-                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
-                }
-            });
-            renderTabelaTkGeral();
-        }
-
-        function renderTabelaTkGeral() {
-            const thead = document.getElementById('thead-tk-geral-dinamico');
-            const tbody = document.getElementById('tabela-tickets-geral-body');
-            if (!tbody || !thead) return;
-
-            let lista = filtroTkGeralSetor === 'TODOS' ? dadosTkGeral : dadosTkGeral.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
-            lista = lista.filter(a => matchAgente(a.nome));
-
-            if (lista.length === 0) { tbody.innerHTML = ''; return; }
-
-            const numSemanas = lista[0].semanas.length;
-            let theadHTML = `<th class="cabecalho-fixo py-3 px-4 min-w-[150px] pl-6">Analista</th>`;
-            for (let i = 0; i < numSemanas; i++) {
-                theadHTML += `<th class="cabecalho-fixo py-3 px-2 text-center">Semana ${i + 1}</th>`;
-            }
-            theadHTML += `<th class="cabecalho-fixo py-3 px-4 text-center">Total</th><th class="cabecalho-fixo py-3 px-4 text-center pr-6">Meta %</th>`;
-            thead.innerHTML = theadHTML;
-
-            tbody.innerHTML = lista.map(a => {
-                const formatCell = val => (val === 0 || val === '-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${val}</span>`;
-                const metaColor = a.meta >= 60 ? 'text-emerald-600 dark:text-emerald-500' : (a.meta >= 40 ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-500');
-
-                let tdHTML = `<td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>`;
-                for (let i = 0; i < numSemanas; i++) tdHTML += `<td class="py-3 px-2 text-center">${formatCell(a.semanas[i])}</td>`;
-                tdHTML += `<td class="py-3 px-4 text-center font-mono font-black text-gexBlue dark:text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-mono font-bold ${metaColor} pr-6">${a.meta}%</td>`;
-
-                return `<tr class="ranking-row row-normal linha-animada">${tdHTML}</tr>`;
-            }).join('');
-        }
-
-        // ==========================================
-        // DADOS DA QUALIDADE E SINALIZACOES
+        // QUALIDADE
         // ==========================================
         async function carregarQualidade(mes = '') {
             try {
-                const response = await fetch(`/api/qualidade?mes=${encodeURIComponent(mes)}`);
-                const data = await response.json();
-
+                const response = await fetch(`/api/qualidade?mes=${encodeURIComponent(mes)}`); const data = await response.json();
                 if (data.success) {
                     dadosQualidade = data.agentes;
-                    mesesQualidade = data.meses;
-                    mesQualidadeAtivo = data.mesAtual;
-
-                    const selectMes = document.getElementById('filtro-mes-qualidade');
-                    if (selectMes && mesesQualidade.length > 0) {
-                        if (selectMes.options.length <= 1) { 
-                            selectMes.innerHTML = mesesQualidade.map(m => `<option value="${m}" ${m === mesQualidadeAtivo ? 'selected' : ''}>${m}</option>`).join('');
-                        }
-                    } else if (selectMes && mesesQualidade.length === 0) {
-                         selectMes.innerHTML = `<option value="">Nenhum dado</option>`;
-                    }
-
+                    const sel = document.getElementById('filtro-mes-qualidade');
+                    if (sel && data.meses.length > 0 && sel.options.length <= 1) sel.innerHTML = data.meses.map(m => `<option value="${m}" ${m === data.mesAtual ? 'selected' : ''}>${m}</option>`).join('');
                     renderTabelaQualidade();
                 }
-            } catch (error) { console.error("Erro Qualidade:", error); }
+            } catch (error) {}
         }
 
         function filtrarQualidade(setor) {
             setorQualAtivo = setor;
             ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
                 const btn = document.getElementById(`btn-qual-${b}`);
-                if (btn) {
-                    if (b === setor) { btn.classList.remove('btn-setor-inativo'); btn.classList.add('btn-setor-ativo'); }
-                    else { btn.classList.remove('btn-setor-ativo'); btn.classList.add('btn-setor-inativo'); }
-                }
+                if (btn) { btn.classList.remove(b===setor?'btn-setor-inativo':'btn-setor-ativo'); btn.classList.add(b===setor?'btn-setor-ativo':'btn-setor-inativo'); }
             });
             renderTabelaQualidade();
         }
 
         function renderTabelaQualidade() {
-            const tbQualidade = document.getElementById('tabela-qualidade-body');
-            if (!tbQualidade) return;
-            
-            // 🔒 Aplica o Filtro do Agente Logado
+            const tb = document.getElementById('tabela-qualidade-body'); if (!tb) return;
             let qualData = setorQualAtivo === 'TODOS' ? [...dadosQualidade] : dadosQualidade.filter(a => a.time.includes(setorQualAtivo));
-            qualData = qualData.filter(a => matchAgente(a.nome));
-            
             qualData.sort((a, b) => b.qual - a.qual);
 
-            let media = qualData.length > 0 ? qualData.reduce((acc, curr) => acc + curr.qual, 0) / qualData.length : 0;
+            if (qualData.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-gray-500 font-bold">Nenhuma nota encontrada.</td></tr>`; return; }
+
+            const md = qualData.reduce((acc, curr) => acc + curr.qual, 0) / qualData.length;
             const elMediaVal = document.getElementById('media-qualidade-val');
-            if (elMediaVal) elMediaVal.innerText = media.toFixed(1);
+            if (elMediaVal) elMediaVal.innerText = md.toFixed(1);
 
-            if (qualData.length === 0) {
-                tbQualidade.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-gray-500 font-bold">Nenhuma nota encontrada para este filtro.</td></tr>`;
-                return;
-            }
+            tb.innerHTML = qualData.map((a) => {
+                let is100 = a.qual === 100;
+                let c100 = `<div class="inline-flex items-center justify-center w-20 py-1 bg-gradient-to-r from-[#2b1f00] to-[#2b1f00] text-white font-mono font-bold text-[14px] rounded-lg shadow-[inset_0_0_0_1px_#d4af37] mx-auto">100.0</div>`;
+                const fn = (n) => n === null ? `<span class="${is100?'text-white opacity-50':'texto-contraste-sm opacity-50'}">-</span>` : (is100 ? `<span class="font-mono font-bold text-white text-[14px]">${n.toFixed(1)}</span>` : (n===100 ? c100 : `<span class="font-mono font-bold ${n<70?'text-red-500':n<90?'text-yellow-500':'text-gexCyan'} text-[14px]">${n.toFixed(1)}</span>`));
 
-            const theadQual = document.querySelector('#tela-qual-monitoria thead tr');
-            if(theadQual && !theadQual.innerHTML.includes('Detalhes')) {
-                theadQual.innerHTML += '<th class="cabecalho-fixo py-3 px-3 text-center pr-6">Detalhes</th>';
-            }
-
-            tbQualidade.innerHTML = qualData.map((a) => {
-                let isGabaritoFinal = a.qual === 100;
-
-                let trClass = isGabaritoFinal ? 'row-gold font-bold linha-animada' : 'row-normal linha-animada';
-                let nameClass = isGabaritoFinal ? 'text-white font-bold' : 'texto-contraste';
-                let dashClass = isGabaritoFinal ? 'text-white opacity-50' : 'texto-contraste-sm opacity-50';
-
-                const formatNotaCiclo = (n) => {
-                    if (n === null || n === undefined) return `<span class="${dashClass}">-</span>`;
-                    
-                    if (isGabaritoFinal) {
-                        return `<span class="font-mono font-bold text-white text-[14px]">${n.toFixed(1)}</span>`;
-                    }
-                    if (n === 100) {
-                        return `<div class="inline-flex items-center justify-center w-20 py-1 bg-gradient-to-r from-[#2b1f00] via-[#5c4700] to-[#2b1f00] text-white font-mono font-bold text-[14px] rounded-lg shadow-[inset_0_0_0_1px_#d4af37] mx-auto">100.0</div>`;
-                    }
-                    
-                    let cor = 'text-gexCyan';
-                    if (n < 70) cor = 'text-red-600 dark:text-red-500';
-                    else if (n < 90) cor = 'text-yellow-600 dark:text-yellow-500';
-                    return `<span class="font-mono font-bold ${cor} text-[14px]">${n.toFixed(1)}</span>`;
-                };
-
-                const c1Html = formatNotaCiclo(a.c1);
-                const c2Html = formatNotaCiclo(a.c2);
-                const c3Html = formatNotaCiclo(a.c3);
-                const c4Html = formatNotaCiclo(a.c4);
-                
-                let textoQualFinal = '';
-                if (isGabaritoFinal) {
-                    textoQualFinal = `<span class="font-mono font-black text-white text-[16px] drop-shadow-md">${a.qual.toFixed(1)}</span>`;
-                } else {
-                    let cor = 'text-gexCyan';
-                    if (a.qual < 70) cor = 'text-red-600 dark:text-red-500';
-                    else if (a.qual < 90) cor = 'text-yellow-600 dark:text-yellow-500';
-                    textoQualFinal = `<span class="font-mono font-black ${cor} text-lg">${a.qual.toFixed(1)}</span>`;
-                }
-
-                const badgeTime = isGabaritoFinal ? 
-                    `<span class="badge-setor bg-white/20 text-white shadow-none border border-white/30">${a.time}</span>` : 
-                    `<span class="badge-setor">${a.time}</span>`;
-
-                let btnDetalhes = `<a href="${a.link}" target="_blank" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-gradient-to-r from-gexBlue to-gexCyan dark:from-[#1e293b] dark:to-[#334155] text-white dark:text-gray-200 border border-transparent dark:border-gray-600 text-[11px] font-black transition-all hover:scale-105 shadow-[0_4px_10px_rgba(34,167,240,0.4)] dark:shadow-sm" style="text-decoration: none;">📄 Drive</a>`;
-                if (!a.link || a.link === '#') {
-                    btnDetalhes = `<span class="text-gray-400 dark:text-gray-600 text-[10px] font-bold">Sem link</span>`;
-                }
-
+                let btnD = a.link && a.link !== '#' ? `<a href="${a.link}" target="_blank" class="px-4 py-1.5 rounded-full bg-gradient-to-r from-gexBlue to-gexCyan text-white text-[11px] font-black hover:scale-105 shadow-sm">📄 Drive</a>` : `<span class="text-gray-500 text-[10px] font-bold">Sem link</span>`;
                 return `
-                <tr class="ranking-row ${trClass}">
-                    <td class="py-4 px-3 pl-6 ${nameClass} whitespace-nowrap align-middle rounded-l-xl">${a.nome}</td>
-                    <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
-                    <td class="py-4 px-3 text-center align-middle">${c1Html}</td>
-                    <td class="py-4 px-3 text-center align-middle">${c2Html}</td>
-                    <td class="py-4 px-3 text-center align-middle">${c3Html}</td>
-                    <td class="py-4 px-3 text-center align-middle">${c4Html}</td>
-                    <td class="py-4 px-3 text-center align-middle">${textoQualFinal}</td>
-                    <td class="py-4 px-3 text-center align-middle rounded-r-xl pr-6">${btnDetalhes}</td>
+                <tr class="ranking-row ${is100 ? 'row-gold font-bold linha-animada' : 'row-normal linha-animada'}">
+                    <td class="py-4 px-3 pl-6 ${is100 ? 'text-white font-bold' : 'texto-contraste'} whitespace-nowrap">${a.nome}</td>
+                    <td class="py-4 px-3 text-center"><span class="badge-setor ${is100?'bg-white/20 text-white border-white/30':''}">${a.time}</span></td>
+                    <td class="py-4 px-3 text-center">${fn(a.c1)}</td><td class="py-4 px-3 text-center">${fn(a.c2)}</td><td class="py-4 px-3 text-center">${fn(a.c3)}</td><td class="py-4 px-3 text-center">${fn(a.c4)}</td>
+                    <td class="py-4 px-3 text-center">${is100 ? `<span class="font-mono font-black text-white text-[16px]">${a.qual.toFixed(1)}</span>` : `<span class="font-mono font-black ${a.qual<70?'text-red-500':a.qual<90?'text-yellow-500':'text-gexCyan'} text-lg">${a.qual.toFixed(1)}</span>`}</td>
+                    <td class="py-4 px-3 text-center pr-6">${btnD}</td>
                 </tr>`;
             }).join('');
         }
 
+        // ==========================================
+        // SINALIZAÇÕES (ADMIN ONLY)
+        // ==========================================
         async function carregarSinalizacoes(mes = '') {
+            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
-                const response = await fetch(`/api/sinalizacoes?mes=${encodeURIComponent(mes)}`);
-                const data = await response.json();
+                const response = await fetch(`/api/sinalizacoes?mes=${encodeURIComponent(mes)}`); const data = await response.json();
                 if (data.success) {
                     dadosSinalizacoes = data.agentes;
-                    
-                    const selectMes = document.getElementById('filtro-mes-sinalizacoes');
-                    if (selectMes && data.meses.length > 0) {
-                        if (selectMes.options.length <= 1) { 
-                            selectMes.innerHTML = data.meses.map(m => `<option value="${m}" ${m === data.mesAtual ? 'selected' : ''}>${m}</option>`).join('');
-                        }
-                    } else if (selectMes && data.meses.length === 0) {
-                        selectMes.innerHTML = `<option value="">Nenhum dado</option>`;
-                    }
+                    const sel = document.getElementById('filtro-mes-sinalizacoes');
+                    if (sel && data.meses.length > 0 && sel.options.length <= 1) sel.innerHTML = data.meses.map(m => `<option value="${m}" ${m === data.mesAtual ? 'selected' : ''}>${m}</option>`).join('');
                     renderTabelaSinalizacoes();
                 }
-            } catch (error) { console.error("Erro Sinalizacoes:", error); }
+            } catch (error) {}
         }
 
         function filtrarSinalizacoes(setor) {
             setorSinAtivo = setor;
             ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
                 const btn = document.getElementById(`btn-sin-${b}`);
-                if (btn) {
-                    if (b === setor) { btn.classList.remove('btn-setor-inativo'); btn.classList.add('btn-setor-ativo'); }
-                    else { btn.classList.remove('btn-setor-ativo'); btn.classList.add('btn-setor-inativo'); }
-                }
+                if (btn) { btn.classList.remove(b===setor?'btn-setor-inativo':'btn-setor-ativo'); btn.classList.add(b===setor?'btn-setor-ativo':'btn-setor-inativo'); }
             });
             renderTabelaSinalizacoes();
         }
 
         function renderTabelaSinalizacoes() {
-            const tbSin = document.getElementById('tabela-sinalizacoes-body');
-            if (!tbSin) return;
-            
-            // 🔒 Aplica o Filtro do Agente Logado
-            let sinData = setorSinAtivo === 'TODOS' ? [...dadosSinalizacoes] : dadosSinalizacoes.filter(a => a.time.includes(setorSinAtivo));
-            sinData = sinData.filter(a => matchAgente(a.nome));
-            
-            if (sinData.length === 0) {
-                tbSin.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum dado encontrado para este filtro.</td></tr>`;
-                return;
-            }
+            const tb = document.getElementById('tabela-sinalizacoes-body'); if (!tb) return;
+            let sData = setorSinAtivo === 'TODOS' ? [...dadosSinalizacoes] : dadosSinalizacoes.filter(a => a.time.includes(setorSinAtivo));
 
-            tbSin.innerHTML = sinData.map((a) => {
-                const badgeTime = `<span class="badge-setor">${a.time}</span>`;
+            if (sData.length === 0) { tb.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum dado encontrado.</td></tr>`; return; }
 
-                const gerarBotaoCiclo = (cicloArr, cicloNum, nomeAgente) => {
-                    if (!cicloArr || cicloArr.length === 0) return `<span class="text-gray-400 dark:text-gray-600 text-[10px] font-bold uppercase">Sem Reg.</span>`;
-                    
-                    const semSin = cicloArr.every(c => c.item.toLowerCase().includes('sem sinaliza'));
-                    const nomeEscaped = nomeAgente.replace(/'/g, "\\'");
-                    
-                    if (semSin) {
-                        return `<button onclick="abrirModalSin('${nomeEscaped}', ${cicloNum})" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 text-[11px] font-black transition-all hover:scale-105 shadow-sm">✅ Feedback</button>`;
-                    } else {
-                        const qtd = cicloArr.length;
-                        return `<button onclick="abrirModalSin('${nomeEscaped}', ${cicloNum})" class="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 text-[11px] font-black transition-all hover:scale-105 shadow-sm">🚨 Ver (${qtd})</button>`;
-                    }
-                };
+            const fnBtn = (arr, c, n) => {
+                if (!arr || !arr.length) return `<span class="text-gray-400 text-[10px] font-bold uppercase">Sem Reg.</span>`;
+                return arr.every(x => x.item.toLowerCase().includes('sem sinaliza')) 
+                    ? `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200 text-[11px] font-black hover:scale-105">✅ Feedback</button>` 
+                    : `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-red-100 text-red-600 border border-red-200 text-[11px] font-black hover:scale-105">🚨 Ver (${arr.length})</button>`;
+            };
 
-                return `
+            tb.innerHTML = sData.map(a => `
                 <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-4 px-3 pl-6 texto-contraste whitespace-nowrap align-middle rounded-l-xl">${a.nome}</td>
-                    <td class="py-4 px-3 text-center align-middle">${badgeTime}</td>
-                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[1], 1, a.nome)}</td>
-                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[2], 2, a.nome)}</td>
-                    <td class="py-4 px-3 text-center align-middle">${gerarBotaoCiclo(a.ciclos[3], 3, a.nome)}</td>
-                    <td class="py-4 px-3 text-center align-middle rounded-r-xl">${gerarBotaoCiclo(a.ciclos[4], 4, a.nome)}</td>
-                </tr>`;
-            }).join('');
+                    <td class="py-4 px-3 pl-6 texto-contraste whitespace-nowrap">${a.nome}</td>
+                    <td class="py-4 px-3 text-center"><span class="badge-setor">${a.time}</span></td>
+                    <td class="py-4 px-3 text-center">${fnBtn(a.ciclos[1], 1, a.nome)}</td><td class="py-4 px-3 text-center">${fnBtn(a.ciclos[2], 2, a.nome)}</td>
+                    <td class="py-4 px-3 text-center">${fnBtn(a.ciclos[3], 3, a.nome)}</td><td class="py-4 px-3 text-center">${fnBtn(a.ciclos[4], 4, a.nome)}</td>
+                </tr>`).join('');
         }
 
-        function abrirModalSin(nomeAgente, cicloNum) {
-            const agente = dadosSinalizacoes.find(a => a.nome === nomeAgente);
-            if (!agente) return;
-            
-            const cicloDados = agente.ciclos[cicloNum];
-            if (!cicloDados || cicloDados.length === 0) return;
-
-            document.getElementById('modal-sin-titulo').innerText = `Sinalizações - ${nomeAgente} (Ciclo ${cicloNum})`;
-            
-            const conteudoHTML = cicloDados.map(c => {
-                const badgeFeed = c.feedback 
-                    ? `<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-500/30 mt-3">✅ Feedback aplicado</span>`
-                    : `<span class="inline-flex items-center gap-1 bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 px-3 py-1 rounded-lg text-xs font-bold border border-red-200 dark:border-red-500/30 mt-3">❌ Feedback não aplicado</span>`;
-
-                const isSemSin = c.item.toLowerCase().includes('sem sinaliza');
-                
-                return `
-                <div class="bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col">
+        function abrirModalSin(n, c) {
+            const ag = dadosSinalizacoes.find(x => x.nome === n); if (!ag || !ag.ciclos[c] || !ag.ciclos[c].length) return;
+            document.getElementById('modal-sin-titulo').innerText = `Sinalizações - ${n} (Ciclo ${c})`;
+            document.getElementById('modal-sin-conteudo').innerHTML = ag.ciclos[c].map(x => `
+                <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col">
                     <div class="flex flex-wrap gap-2 mb-3">
-                        <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">TIPO: ${c.tipo || '-'}</span>
-                        <span class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">QTD: ${c.qtd}</span>
-                        ${isSemSin ? `<span class="bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">✅ SEM SINALIZAÇÕES</span>` : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">🚨 ${c.item}</span>`}
+                        <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black">TIPO: ${x.tipo||'-'}</span>
+                        <span class="bg-gray-200 text-gray-800 px-2 py-1 rounded text-[10px] font-black">QTD: ${x.qtd}</span>
+                        ${x.item.toLowerCase().includes('sem sinaliza') ? `<span class="bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-black">✅ SEM SINALIZAÇÕES</span>` : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black">🚨 ${x.item}</span>`}
                     </div>
-                    <div class="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap flex-1 bg-white dark:bg-[#0f172a] p-3 rounded border border-gray-100 dark:border-gray-800">${c.obs || 'Nenhuma observação registrada.'}</div>
-                    <div>${badgeFeed}</div>
-                </div>`;
-            }).join('');
-
-            document.getElementById('modal-sin-conteudo').innerHTML = conteudoHTML;
+                    <div class="text-sm font-medium whitespace-pre-wrap flex-1 bg-white p-3 rounded border border-gray-100">${x.obs||'Nenhuma observação.'}</div>
+                    <div class="mt-3">${x.feedback ? '<span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-200">✅ Aplicado</span>' : '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-xs font-bold border border-red-200">❌ Não aplicado</span>'}</div>
+                </div>`).join('');
             document.getElementById('modal-sinalizacoes').classList.remove('hidden');
         }
-
         function fecharModalSin() { document.getElementById('modal-sinalizacoes').classList.add('hidden'); }
 
         // ==========================================
-        // NOVA MÁGICA REAL-TIME: DISTRIBUIÇÃO E STATUS
+        // TICKETS ATUAL / SEMANAL / GERAL (ABERTO PARA TODOS)
         // ==========================================
-        let dadosDistribuicao = null;
-        let filtroCasosSetor = 'TODOS';
-        let filtroDistSetor = 'TODOS';
+        async function carregarTickets(p = '') {
+            try { const response = await fetch('/api/tickets' + p); const data = await response.json(); if (data.success) { dadosTkAtual = data.agentes; renderTabelaTickets(); } } catch (e) {}
+        }
+        function filtrarTkAtual(s) { filtroTkAtualSetor = s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b => { const btn = document.getElementById(`btn-f-tk-atual-${b}`); if(btn) btn.className = `btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTickets(); }
+        function renderTabelaTickets() {
+            const tb = document.getElementById('tabela-tickets-body'); if (!tb) return;
+            
+            let l = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
 
+            if (l.length === 0) { tb.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente.</td></tr>`; return; }
+            tb.innerHTML = l.map(a => {
+                const fc = v => (v===0||v==='-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${v}</span>`;
+                return `<tr class="ranking-row row-normal linha-animada"><td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td><td class="py-3 px-2 text-center">${fc(a.seg)}</td><td class="py-3 px-2 text-center">${fc(a.ter)}</td><td class="py-3 px-2 text-center">${fc(a.qua)}</td><td class="py-3 px-2 text-center">${fc(a.qui)}</td><td class="py-3 px-2 text-center">${fc(a.sex)}</td><td class="py-3 px-2 text-center">${fc(a.sab)}</td><td class="py-3 px-2 text-center">${fc(a.dom)}</td><td class="py-3 px-4 text-center font-mono font-black text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-mono font-bold ${a.meta>=60?'text-emerald-500':a.meta>=40?'text-yellow-500':'text-red-500'} pr-6">${a.meta}%</td></tr>`;
+            }).join('');
+        }
+        function carregarSemanaAtual() { document.getElementById('btn-filtro-semana-atual').className = "bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm"; document.getElementById('btn-filtro-semana-passada').className = "bg-gray-200 text-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold"; carregarTickets(''); }
+        function carregarSemanaPassada() { document.getElementById('btn-filtro-semana-passada').className = "bg-gexBlue text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm"; document.getElementById('btn-filtro-semana-atual').className = "bg-gray-200 text-gray-700 px-4 py-1.5 rounded-lg text-xs font-bold"; const h = new Date(); const seg = new Date(h.getFullYear(), h.getMonth(), h.getDate() - h.getDay() + (h.getDay()===0?-6:1) - 7); const dom = new Date(seg); dom.setDate(seg.getDate()+6); dom.setHours(23,59,59); carregarTickets(`?since=${Math.floor(seg.getTime()/1000)}&until=${Math.floor(dom.getTime()/1000)}`); }
+
+        function gerarBotoesSemanas(anoMes) {
+            const [ano, mes] = anoMes.split('-'); const sems = []; let dA = new Date(ano, mes-1, 1), ult = new Date(ano, mes, 0);
+            while(dA <= ult) { let i = new Date(dA); while(dA.getDay()!==0 && dA<ult) dA.setDate(dA.getDate()+1); let f = new Date(dA); sems.push({i, f, d: Math.round((f-i)/86400000)+1}); dA.setDate(dA.getDate()+1); }
+            const cnt = document.getElementById('botoes-semanas-container'); if(!cnt) return; cnt.innerHTML = '';
+            sems.forEach((s, idx) => {
+                const btn = document.createElement('button'); btn.className = `btn-setor text-[11px] px-3 py-1.5 ${idx===0?'btn-setor-ativo':'btn-setor-inativo'}`; btn.innerText = `Sem ${String(s.i.getDate()).padStart(2,'0')}/${String(s.i.getMonth()+1).padStart(2,'0')} - ${String(s.f.getDate()).padStart(2,'0')}/${String(s.f.getMonth()+1).padStart(2,'0')}`;
+                btn.onclick = async () => { Array.from(cnt.children).forEach(c => c.className = 'btn-setor text-[11px] px-3 py-1.5 btn-setor-inativo'); btn.className = 'btn-setor text-[11px] px-3 py-1.5 btn-setor-ativo'; let df=new Date(s.f); df.setHours(23,59,59); await carregarTicketsSemanal(`?since=${Math.floor(s.i.getTime()/1000)}&until=${Math.floor(df.getTime()/1000)}`, s.d); };
+                cnt.appendChild(btn); if(idx===0) btn.click();
+            });
+        }
+        async function carregarTicketsSemanal(p='', d=7) { try { diasFiltroSemanal=d; const res=await fetch('/api/tickets'+p); const dat=await res.json(); if(dat.success){ dadosTkSemanal=dat.agentes; renderTabelaTicketsSemanal(); } } catch(e){} }
+        function filtrarTkSemanal(s) { filtroTkSemanalSetor=s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-sem-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTicketsSemanal(); }
+        function renderTabelaTicketsSemanal() {
+            const tb=document.getElementById('tabela-tickets-semanal-body'); if(!tb) return;
+
+            let l=filtroTkSemanalSetor==='TODOS'?dadosTkSemanal:dadosTkSemanal.filter(a=>a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
+
+            if(l.length===0){ tb.innerHTML=`<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente.</td></tr>`; return; }
+            tb.innerHTML = l.map(a => { const fc = v => (v===0||v==='-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${v}</span>`; return `<tr class="ranking-row row-normal linha-animada"><td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td><td class="py-3 px-2 text-center">${fc(a.seg)}</td><td class="py-3 px-2 text-center">${fc(a.ter)}</td><td class="py-3 px-2 text-center">${fc(a.qua)}</td><td class="py-3 px-2 text-center">${fc(a.qui)}</td><td class="py-3 px-2 text-center">${fc(a.sex)}</td><td class="py-3 px-2 text-center">${fc(a.sab)}</td><td class="py-3 px-2 text-center">${fc(a.dom)}</td><td class="py-3 px-4 text-center font-black text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-bold text-emerald-500 pr-6">${(a.total/diasFiltroSemanal).toFixed(1)}</td></tr>`; }).join('');
+        }
+
+        async function carregarTicketsGeral(p='') { 
+            try{ const res=await fetch('/api/tickets-geral'+p); const d=await res.json(); if(d.success){ dadosTkGeral=d.agentes; renderTabelaTkGeral(); } }catch(e){} 
+        }
+        function filtrarTkGeral(s) { filtroTkGeralSetor=s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTkGeral(); }
+        function renderTabelaTkGeral() {
+            const th=document.getElementById('thead-tk-geral-dinamico'), tb=document.getElementById('tabela-tickets-geral-body'); if(!tb||!th) return;
+
+            let l=filtroTkGeralSetor==='TODOS'?dadosTkGeral:dadosTkGeral.filter(a=>a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
+
+            if(l.length===0){ tb.innerHTML=''; return; }
+            let hH=`<th class="cabecalho-fixo py-3 px-4 pl-6">Analista</th>`; for(let i=0;i<l[0].semanas.length;i++) hH+=`<th class="cabecalho-fixo py-3 px-2 text-center">Semana ${i+1}</th>`; hH+=`<th class="cabecalho-fixo py-3 px-4 text-center">Total</th><th class="cabecalho-fixo py-3 px-4 text-center pr-6">Meta %</th>`; th.innerHTML=hH;
+            tb.innerHTML = l.map(a => { const fc = v => (v===0||v==='-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${v}</span>`; let c=`<td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>`; for(let i=0;i<a.semanas.length;i++) c+=`<td class="py-3 px-2 text-center">${fc(a.semanas[i])}</td>`; c+=`<td class="py-3 px-4 text-center font-mono font-black text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-mono font-bold ${a.meta>=60?'text-emerald-500':a.meta>=40?'text-yellow-500':'text-red-500'} pr-6">${a.meta}%</td>`; return `<tr class="ranking-row row-normal linha-animada">${c}</tr>`; }).join('');
+        }
+
+        // ==========================================
+        // DISTRIBUIÇÃO E STATUS DE CASOS (ADMIN ONLY)
+        // ==========================================
         async function carregarDistribuicao() {
+            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
-                const response = await fetch('/api/distribuicao');
-                const data = await response.json();
-                if (data.success) { 
-                    dadosDistribuicao = data; 
-                    renderTabelaCasos(); 
-                    renderTabelaDist(); 
-                }
+                const response = await fetch('/api/distribuicao'); const data = await response.json();
+                if (data.success) { dadosDistribuicao = data; renderTabelaCasos(); renderTabelaDist(); }
             } catch (error) { console.error(error); }
         }
 
@@ -1365,10 +941,7 @@
             filtroCasosSetor = setor;
             ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
                 const btn = document.getElementById(`btn-f-casos-${b}`);
-                if (btn) {
-                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
-                }
+                if (btn) btn.className = `btn-setor ${b === setor ? 'btn-setor-ativo' : 'btn-setor-inativo'}`;
             });
             renderTabelaCasos();
         }
@@ -1377,10 +950,7 @@
             filtroDistSetor = setor;
             ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
                 const btn = document.getElementById(`btn-f-dist-${b}`);
-                if (btn) {
-                    if (b === setor) btn.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-                    else btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
-                }
+                if (btn) btn.className = `btn-setor ${b === setor ? 'btn-setor-ativo' : 'btn-setor-inativo'}`;
             });
             renderTabelaDist();
         }
@@ -1498,4 +1068,4 @@
         });
     </script>
 </body>
-</html>
+</html>    
