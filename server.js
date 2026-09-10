@@ -849,41 +849,49 @@ app.get('/api/produtividade', async (req, res) => {
                 ticketsPorDia[objDia] = horas.length;
                 ociosoPorDia[objDia] = 0;
 
+                // Calcula os gaps de tempo entre as mensagens desse dia
                 for (let i = 1; i < horas.length; i++) {
                     let msgAnterior = horas[i-1];
                     let msgAtual = horas[i];
-                    let diffMinRaw = (msgAtual - msgAnterior) / 60000;
+                    let diffMinRaw = (msgAtual - msgAnterior) / 60000; // diferença em minutos
                     
                     if(!isFDS) {
                         let h = msgAtual.getHours();
-                        ticketsPorHora[h]++;
+                        ticketsPorHora[h] = (ticketsPorHora[h] || 0) + 1;
                     }
 
-                    // Se passou de 20 min sem mandar msg, é pausa.
-                    if (diffMinRaw >= 20) {
+                    // Regra: Uma pausa é qualquer tempo inativo >= 20 minutos (ignorando gaps noturnos longos > 12h)
+                    if (diffMinRaw >= 20 && diffMinRaw < 60 * 12) {
                         let startMin = msgAnterior.getHours() * 60 + msgAnterior.getMinutes();
                         let endMin = msgAtual.getHours() * 60 + msgAtual.getMinutes();
                         
-                        let isAlmoco = (startMin < 14*60 && endMin > 12*60+30); 
-                        let strPausa = `${objDia} das ${formatHora(msgAnterior)} às ${formatHora(msgAtual)} (${Math.round(diffMinRaw)}m)`;
-
-                        // Interseção rigorosa com horários úteis (09:00 as 12:30 e 14:00 as 18:00)
+                        // Função matemática inteligente para calcular interseção de tempo
                         const overlap = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
+                        
+                        // Tempo ocioso útil (fora do almoço e DENTRO do expediente 09-18h)
                         let idleUtil = overlap(startMin, endMin, 9*60, 12*60+30) + overlap(startMin, endMin, 14*60, 18*60);
+                        
+                        // Verifica se o período inativo cruzou com o almoço (12:30 às 14:00)
+                        let overlapAlmoco = overlap(startMin, endMin, 12*60+30, 14*60);
+                        let isAlmoco = overlapAlmoco > 0;
+                        
+                        let strPausa = `${objDia} das ${formatHora(msgAnterior)} às ${formatHora(msgAtual)} (${Math.round(diffMinRaw)}m)`;
 
                         if (isFDS) {
                             historicoPausas.push(`🏖️ FDS: ${strPausa}`);
-                        } else if (isAlmoco && idleUtil <= 0) {
-                            historicoPausas.push(`🍽️ ALMOÇO: ${strPausa}`);
-                        } else if (diffMinRaw < 60 * 6) { 
-                            // É dia útil e teve tempo ocioso dentro do horário
+                        } else if (isAlmoco) {
+                            // Se pegou horário de almoço, MAS teve tempo ocioso junto, registra os dois!
                             if (idleUtil > 0) {
                                 totalMinutosAciosos += idleUtil;
                                 ociosoPorDia[objDia] += idleUtil;
-                                historicoPausas.push(`⏸️ OCIOSO (${Math.round(idleUtil)}m úteis): ${strPausa}`);
-                            } else if (isAlmoco) {
+                                historicoPausas.push(`🍽️ ALMOÇO (+ ${Math.round(idleUtil)}m ociosos): ${strPausa}`);
+                            } else {
                                 historicoPausas.push(`🍽️ ALMOÇO: ${strPausa}`);
                             }
+                        } else if (idleUtil > 0) {
+                            totalMinutosAciosos += idleUtil;
+                            ociosoPorDia[objDia] += idleUtil;
+                            historicoPausas.push(`⏸️ OCIOSO (${Math.round(idleUtil)}m úteis): ${strPausa}`);
                         }
                     }
                 }
