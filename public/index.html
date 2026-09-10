@@ -14,6 +14,29 @@
         .flatpickr-months .flatpickr-month { background: #0a0f1c !important; color: white !important; }
         .flatpickr-weekdays { background: #0a0f1c !important; }
 
+        /* 🔥 CORREÇÃO CIRÚRGICA: Impede o Tailwind de destruir a grade do Flatpickr */
+        .flatpickr-calendar .flatpickr-day.hidden,
+        .flatpickr-calendar .flatpickr-day.prevMonthDay, 
+        .flatpickr-calendar .flatpickr-day.nextMonthDay { 
+            display: flex !important; 
+            visibility: hidden !important; 
+        }
+        .flatpickr-days .dayContainer { 
+            display: grid !important; 
+            grid-template-columns: repeat(7, 1fr) !important; 
+            width: 100% !important; 
+            justify-items: center; 
+        }
+        .flatpickr-day { 
+            max-width: 35px !important; 
+            width: 100% !important; 
+            margin: 0 !important; 
+            display: flex !important; 
+            justify-content: center !important; 
+            align-items: center !important; 
+            height: 35px !important; 
+        }
+
         /* Estilos do Ranking e Destaques */
         .ranking-row { border-radius: 0.75rem; overflow: hidden; }
         .ranking-row td:first-child { border-top-left-radius: 0.75rem; border-bottom-left-radius: 0.75rem; }
@@ -303,6 +326,7 @@
                                     <select id="mes-tickets-semanais" class="select-moderno text-gexCyan font-bold tracking-wider min-w-[150px]"></select>
                                 </div>
                             </div>
+                            
                             <div class="flex items-center gap-2">
                                 <button onclick="filtrarTkSemanal('TODOS')" id="btn-f-tk-sem-TODOS" class="btn-setor btn-setor-ativo">Todos</button>
                                 <button onclick="filtrarTkSemanal('RET')" id="btn-f-tk-sem-RET" class="btn-setor btn-setor-inativo">Retenção</button>
@@ -477,7 +501,7 @@
                         </div>
                     </div>
                 </div>
-            </div> <!-- Aqui fecha o glass-panel da aba tickets corretamente -->
+            </div>
         </div>
 
         <!-- ABA: QUALIDADE (AGORA COM SUB-ABAS) -->
@@ -639,22 +663,17 @@
             } catch (e) { console.error("Erro auth", e); }
         }
 
-        // 🔒 SISTEMA DE PERMISSÕES: Esconde APENAS os 3 botões solicitados se for Agente
         function configurarPermissoes() {
             if (usuarioAtual && usuarioAtual.role === 'agente') {
-                // 1. Esconde botão de Sinalizações na aba Qualidade
                 const btnSin = document.getElementById('btn-sub-qual-sinalizacoes');
                 if (btnSin) btnSin.style.display = 'none';
 
-                // 2. Esconde botão de Status de Casos na aba Tickets
                 const btnCasos = document.getElementById('btn-sub-tk-casos');
                 if (btnCasos) btnCasos.style.display = 'none';
 
-                // 3. Esconde botão de Distribuição na aba Tickets
                 const btnDist = document.getElementById('btn-sub-tk-distribuicao');
                 if (btnDist) btnDist.style.display = 'none';
 
-                // Oculta botão de Produtividade
                 const btnTkProd = document.getElementById('btn-sub-tk-prod');
                 if (btnTkProd) btnTkProd.style.display = 'none';
             }
@@ -696,7 +715,6 @@
                 btnAtiva.classList.add('tab-btn-active');
             }
             
-            // Força a atualização da distribuição se o admin abrir os tickets
             if (abaId === 'tickets' && !dadosDistribuicao && usuarioAtual && usuarioAtual.role === 'admin') carregarDistribuicao();
         }
 
@@ -762,9 +780,6 @@
             }
         }
 
-        // ==========================================
-        // RETENÇÃO
-        // ==========================================
         async function carregarDadosReais(pUrl = '') {
             try {
                 const btnSync = document.querySelector('button.bg-gradient-to-r');
@@ -810,9 +825,6 @@
             }).join('');
         }
 
-        // ==========================================
-        // QUALIDADE
-        // ==========================================
         async function carregarQualidade(mes = '') {
             try {
                 const response = await fetch(`/api/qualidade?mes=${encodeURIComponent(mes)}`); const data = await response.json();
@@ -862,9 +874,6 @@
             }).join('');
         }
 
-        // ==========================================
-        // SINALIZAÇÕES (ADMIN ONLY)
-        // ==========================================
         async function carregarSinalizacoes(mes = '') {
             if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
@@ -913,29 +922,36 @@
             const ag = dadosSinalizacoes.find(x => x.nome === n); if (!ag || !ag.ciclos[c] || !ag.ciclos[c].length) return;
             document.getElementById('modal-sin-titulo').innerText = `Sinalizações - ${n} (Ciclo ${c})`;
             document.getElementById('modal-sin-conteudo').innerHTML = ag.ciclos[c].map(x => `
-                <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col">
+                <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col shadow-sm">
                     <div class="flex flex-wrap gap-2 mb-3">
-                        <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black">TIPO: ${x.tipo||'-'}</span>
-                        <span class="bg-gray-200 text-gray-800 px-2 py-1 rounded text-[10px] font-black">QTD: ${x.qtd}</span>
-                        ${x.item.toLowerCase().includes('sem sinaliza') ? `<span class="bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-black">✅ SEM SINALIZAÇÕES</span>` : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black">🚨 ${x.item}</span>`}
+                        <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">TIPO: ${x.tipo||'-'}</span>
+                        <span class="bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">QTD: ${x.qtd}</span>
+                        ${x.item.toLowerCase().includes('sem sinaliza') 
+                            ? `<span class="bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">✅ SEM SINALIZAÇÕES</span>` 
+                            : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">🚨 ${x.item}</span>`}
                     </div>
-                    <div class="text-sm font-medium whitespace-pre-wrap flex-1 bg-white p-3 rounded border border-gray-100">${x.obs||'Nenhuma observação.'}</div>
-                    <div class="mt-3">${x.feedback ? '<span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-200">✅ Aplicado</span>' : '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-xs font-bold border border-red-200">❌ Não aplicado</span>'}</div>
+                    
+                    <div class="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap flex-1 bg-white dark:bg-[#0f172a] p-3 rounded-lg border border-gray-100 dark:border-gray-700 leading-relaxed">
+                        ${x.obs||'Nenhuma observação registrada.'}
+                    </div>
+                    
+                    <div class="mt-3">
+                        ${x.feedback 
+                            ? '<span class="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-3 py-1 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-500/30 shadow-sm">✅ Feedback aplicado</span>' 
+                            : '<span class="inline-flex items-center gap-1 bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 px-3 py-1 rounded-lg text-xs font-bold border border-red-200 dark:border-red-500/30 shadow-sm">❌ Feedback não aplicado</span>'}
+                    </div>
                 </div>`).join('');
             document.getElementById('modal-sinalizacoes').classList.remove('hidden');
         }
+
         function fecharModalSin() { document.getElementById('modal-sinalizacoes').classList.add('hidden'); }
 
-        // ==========================================
-        // TICKETS ATUAL / SEMANAL / GERAL (ABERTO PARA TODOS)
-        // ==========================================
         async function carregarTickets(p = '') {
             try { const response = await fetch('/api/tickets' + p); const data = await response.json(); if (data.success) { dadosTkAtual = data.agentes; renderTabelaTickets(); } } catch (e) {}
         }
         function filtrarTkAtual(s) { filtroTkAtualSetor = s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b => { const btn = document.getElementById(`btn-f-tk-atual-${b}`); if(btn) btn.className = `btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTickets(); }
         function renderTabelaTickets() {
             const tb = document.getElementById('tabela-tickets-body'); if (!tb) return;
-            
             let l = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
 
             if (l.length === 0) { tb.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente.</td></tr>`; return; }
@@ -961,9 +977,7 @@
         function filtrarTkSemanal(s) { filtroTkSemanalSetor=s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-sem-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTicketsSemanal(); }
         function renderTabelaTicketsSemanal() {
             const tb=document.getElementById('tabela-tickets-semanal-body'); if(!tb) return;
-
             let l=filtroTkSemanalSetor==='TODOS'?dadosTkSemanal:dadosTkSemanal.filter(a=>a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
-
             if(l.length===0){ tb.innerHTML=`<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente.</td></tr>`; return; }
             tb.innerHTML = l.map(a => { const fc = v => (v===0||v==='-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${v}</span>`; return `<tr class="ranking-row row-normal linha-animada"><td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td><td class="py-3 px-2 text-center">${fc(a.seg)}</td><td class="py-3 px-2 text-center">${fc(a.ter)}</td><td class="py-3 px-2 text-center">${fc(a.qua)}</td><td class="py-3 px-2 text-center">${fc(a.qui)}</td><td class="py-3 px-2 text-center">${fc(a.sex)}</td><td class="py-3 px-2 text-center">${fc(a.sab)}</td><td class="py-3 px-2 text-center">${fc(a.dom)}</td><td class="py-3 px-4 text-center font-black text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-bold text-emerald-500 pr-6">${(a.total/diasFiltroSemanal).toFixed(1)}</td></tr>`; }).join('');
         }
@@ -974,17 +988,12 @@
         function filtrarTkGeral(s) { filtroTkGeralSetor=s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTkGeral(); }
         function renderTabelaTkGeral() {
             const th=document.getElementById('thead-tk-geral-dinamico'), tb=document.getElementById('tabela-tickets-geral-body'); if(!tb||!th) return;
-
             let l=filtroTkGeralSetor==='TODOS'?dadosTkGeral:dadosTkGeral.filter(a=>a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
-
             if(l.length===0){ tb.innerHTML=''; return; }
             let hH=`<th class="cabecalho-fixo py-3 px-4 pl-6">Analista</th>`; for(let i=0;i<l[0].semanas.length;i++) hH+=`<th class="cabecalho-fixo py-3 px-2 text-center">Semana ${i+1}</th>`; hH+=`<th class="cabecalho-fixo py-3 px-4 text-center">Total</th><th class="cabecalho-fixo py-3 px-4 text-center pr-6">Meta %</th>`; th.innerHTML=hH;
             tb.innerHTML = l.map(a => { const fc = v => (v===0||v==='-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${v}</span>`; let c=`<td class="py-3 px-4 texto-contraste pl-6">${a.nome}</td>`; for(let i=0;i<a.semanas.length;i++) c+=`<td class="py-3 px-2 text-center">${fc(a.semanas[i])}</td>`; c+=`<td class="py-3 px-4 text-center font-mono font-black text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-mono font-bold ${a.meta>=60?'text-emerald-500':a.meta>=40?'text-yellow-500':'text-red-500'} pr-6">${a.meta}%</td>`; return `<tr class="ranking-row row-normal linha-animada">${c}</tr>`; }).join('');
         }
 
-        // ==========================================
-        // DISTRIBUIÇÃO E STATUS DE CASOS (ADMIN ONLY)
-        // ==========================================
         async function carregarDistribuicao() {
             if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             try {
@@ -1052,9 +1061,7 @@
         }
 
         function renderTabelaDist() {
-            const th = document.getElementById('thead-dist-dinamico');
-            const tb = document.getElementById('tabela-dist-body'); 
-            const tf = document.getElementById('tabela-dist-foot'); 
+            const th = document.getElementById('thead-dist-dinamico'), tb = document.getElementById('tabela-dist-body'), tf = document.getElementById('tabela-dist-foot'); 
             if (!th || !tb || !tf || !dadosDistribuicao) return;
             
             let lista = filtroDistSetor === 'TODOS' ? dadosDistribuicao.distribuicao : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
@@ -1070,15 +1077,12 @@
                 return;
             }
 
-            let totaisCaixas = {};
-            dadosDistribuicao.caixas.forEach(c => totaisCaixas[c] = 0);
-            let totGeral = 0;
+            let totaisCaixas = {}; dadosDistribuicao.caixas.forEach(c => totaisCaixas[c] = 0); let totGeral = 0;
 
             tb.innerHTML = lista.map(a => {
                 let r = `<td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>`;
                 dadosDistribuicao.caixas.forEach(c => { 
-                    const v = a[c]||0; 
-                    totaisCaixas[c] += v;
+                    const v = a[c]||0; totaisCaixas[c] += v;
                     r+=`<td class="py-3 px-3 text-center font-mono ${v>0?'text-gray-800 dark:text-gray-200 font-bold':'text-gray-400 dark:text-gray-600 opacity-30'}">${v}</td>`; 
                 });
                 totGeral += a.total;
@@ -1087,9 +1091,7 @@
             }).join('');
 
             let footR = `<tr><td class="py-4 px-3 pl-4 font-black text-gray-800 dark:text-white uppercase tracking-widest text-xs">Total Filtrado</td>`;
-            dadosDistribuicao.caixas.forEach(c => {
-                footR += `<td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px]">${totaisCaixas[c]}</td>`;
-            });
+            dadosDistribuicao.caixas.forEach(c => { footR += `<td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px]">${totaisCaixas[c]}</td>`; });
             footR += `<td class="py-4 px-3 text-center font-mono font-black text-gexCyan text-lg">${totGeral}</td></tr>`;
             tf.innerHTML = footR;
         }
@@ -1155,19 +1157,19 @@
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Média Ociosa / Dia</p>
-                    <p class="text-xl font-black text-red-500">${a.detalhes.media_ocioso} min</p>
+                    <p class="text-xl font-black text-red-500">${a.detalhes?.media_ocioso || 0} min</p>
                 </div>
                 <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Hora + Produtiva</p>
-                    <p class="text-xl font-black text-emerald-500">${a.detalhes.hora_mais}</p>
+                    <p class="text-xl font-black text-emerald-500">${a.detalhes?.hora_mais || '-'}</p>
                 </div>
                 <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Hora - Produtiva</p>
-                    <p class="text-xl font-black text-yellow-500">${a.detalhes.hora_menos}</p>
+                    <p class="text-xl font-black text-yellow-500">${a.detalhes?.hora_menos || '-'}</p>
                 </div>
                 <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Dia + Ocioso</p>
-                    <p class="text-xl font-black text-red-500">${a.detalhes.dia_ocioso}</p>
+                    <p class="text-xl font-black text-red-500">${a.detalhes?.dia_ocioso || '-'}</p>
                 </div>
             </div>
             
@@ -1243,6 +1245,25 @@
             btn.innerHTML = '📥 Baixar Excel';
         }
 
+        // ==========================================
+        // FECHAR MODAIS NO ESC OU CLIQUE FORA
+        // ==========================================
+        window.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modalPausas = document.getElementById('modal-pausas');
+                const modalSin = document.getElementById('modal-sinalizacoes');
+                if (modalPausas && !modalPausas.classList.contains('hidden')) fecharModalPausas();
+                if (modalSin && !modalSin.classList.contains('hidden')) fecharModalSin();
+            }
+        });
+
+        window.addEventListener('click', function(e) {
+            const modalPausas = document.getElementById('modal-pausas');
+            const modalSin = document.getElementById('modal-sinalizacoes');
+            if (e.target === modalPausas) fecharModalPausas();
+            if (e.target === modalSin) fecharModalSin();
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
             if (document.documentElement.classList.contains('dark')) {
                 document.getElementById('theme-toggle-light-icon').classList.remove('hidden');
@@ -1250,18 +1271,38 @@
                 document.getElementById('theme-toggle-dark-icon').classList.remove('hidden');
             }
 
+            // FLATPICKR: Forçando as datas corretas usando a engine nativa sem fuso horário bugado do JS
+            const flatpickrConfig = {
+                mode: "range", 
+                locale: "pt", 
+                dateFormat: "d/m/Y", 
+                showMonths: 2, 
+                theme: "dark",
+                allowInput: true
+            };
+
             const selectMesSemanal = document.getElementById('mes-tickets-semanais');
             if (selectMesSemanal) {
                 let htmlM = '', dt = new Date(); const nM = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
                 for (let i=0; i<12; i++) { htmlM += `<option value="${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}">${nM[dt.getMonth()]} de ${dt.getFullYear()}</option>`; dt.setMonth(dt.getMonth()-1); }
                 selectMesSemanal.innerHTML = htmlM; selectMesSemanal.addEventListener('change', () => gerarBotoesSemanas(selectMesSemanal.value));
             }
-            const inp = document.getElementById('calendario-tickets-geral');
-            if (inp) {
-                calTkGeral = flatpickr(inp, { mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark" });
+            const inpTk = document.getElementById('calendario-tickets-geral');
+            if (inpTk) {
+                calTkGeral = flatpickr(inpTk, flatpickrConfig);
                 document.getElementById('btn-aplicar-geral').addEventListener('click', () => {
                     const ds = calTkGeral.selectedDates; if (ds.length < 2) return alert("⚠️ Selecione INÍCIO e FIM.");
                     const dF = ds[1]; dF.setHours(23,59,59); carregarTicketsGeral(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
+                });
+            }
+
+            const inpProd = document.getElementById('calendario-produtividade');
+            if (inpProd) {
+                calTkProd = flatpickr(inpProd, flatpickrConfig);
+                document.getElementById('btn-aplicar-prod').addEventListener('click', () => {
+                    const ds = calTkProd.selectedDates; if (ds.length < 2) return alert("⚠️ Selecione INÍCIO e FIM.");
+                    const dF = ds[1]; dF.setHours(23,59,59);
+                    carregarProdutividade(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
                 });
             }
 
@@ -1270,17 +1311,7 @@
 
             iniciarApp();
             setInterval(carregarTudo, 15 * 60 * 1000);
-
-            const inpProd = document.getElementById('calendario-produtividade');
-            if (inpProd) {
-                calTkProd = flatpickr(inpProd, { mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark" });
-                document.getElementById('btn-aplicar-prod').addEventListener('click', () => {
-                    const ds = calTkProd.selectedDates; if (ds.length < 2) return alert("⚠️ Selecione INÍCIO e FIM.");
-                    const dF = ds[1]; dF.setHours(23,59,59);
-                    carregarProdutividade(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
-                });
-            }
         });
     </script>
 </body>
-</html>    
+</html>
