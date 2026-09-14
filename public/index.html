@@ -194,6 +194,9 @@
                 <button id="tab-btn-retencao" onclick="mudarAba('retencao')" class="tab-btn tab-btn-active">🏆 Retenção</button>
                 <button id="tab-btn-tickets" onclick="mudarAba('tickets')" class="tab-btn tab-btn-inactive">🎫 Tickets</button>
                 <button id="tab-btn-qualidade" onclick="mudarAba('qualidade')" class="tab-btn tab-btn-inactive">⭐ Qualidade</button>
+                
+                <!-- NOVO BOTÃO DA ABA CHATWOOT -->
+                <button id="tab-btn-chatwoot" onclick="mudarAba('chatwoot')" class="tab-btn tab-btn-inactive">💬 Chatwoot</button>
             </nav>
         </div>
 
@@ -616,7 +619,91 @@
                 </section>
             </div>
         </div>
-    </main>
+
+        <!-- ABA: CHATWOOT (ADMIN ONLY) -->
+        <div id="aba-chatwoot" class="hidden space-y-6">
+            
+            <!-- CABEÇALHO DA ABA -->
+            <div class="flex items-center gap-4 px-2">
+                <div>
+                    <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Análise de Recorrência - ChatWoot</h2>
+                    <p class="text-xs font-bold text-gray-500 mt-1">Evolução e volume de clientes que retornaram ao atendimento (Gap > 24h)</p>
+                </div>
+                <button onclick="carregarRecorrencia(); carregarProdutosMetricas();" class="bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm ml-auto flex items-center gap-2">🔄 Recarregar</button>
+            </div>
+
+            <!-- CARDS DE MÉTRICAS MoM -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-5 shadow-sm">
+                    <h3 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total de Retornos (Mês Atual)</h3>
+                    <div class="flex items-end justify-between">
+                        <span class="text-3xl font-black text-gexCyan font-mono" id="cw-total-retornos">...</span>
+                        <div id="cw-mom-retornos"></div>
+                    </div>
+                </div>
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-5 shadow-sm">
+                    <h3 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Clientes Únicos Recorrentes</h3>
+                    <div class="flex items-end justify-between">
+                        <span class="text-3xl font-black text-gray-800 dark:text-white font-mono" id="cw-clientes-unicos">...</span>
+                        <div id="cw-mom-unicos"></div>
+                    </div>
+                </div>
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-5 shadow-sm">
+                    <h3 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Tempo Médio para Retornar</h3>
+                    <div class="flex items-end justify-between">
+                        <span class="text-3xl font-black text-gray-800 dark:text-white font-mono" id="cw-tempo-medio">...</span>
+                        <div id="cw-mom-tempo"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABELA DE EVOLUÇÃO HISTÓRICA -->
+            <div class="glass-panel bg-white dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[500px]">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20 shrink-0">
+                    <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">📈 Evolução Histórica (Últimos 6 Meses)</h3>
+                </div>
+                <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
+                    <table class="w-full text-left border-separate min-w-[800px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
+                        <thead class="sticky top-0 bg-white dark:bg-[#0a0f1c] z-10 shadow-sm">
+                            <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                <th class="py-3 px-3 pl-4">Mês Base</th>
+                                <th class="py-3 px-3 text-center">Volume de Retornos</th>
+                                <th class="py-3 px-3 text-center">Clientes Envolvidos</th>
+                                <th class="py-3 px-3 text-center text-gexCyan">Tempo Médio (Dias)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-recorrencia-body" class="text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TABELA DE INTELIGÊNCIA POR PRODUTO (ATRIBUTO) -->
+            <div class="glass-panel bg-white dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-lg flex flex-col mt-6">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20 flex justify-between items-center shrink-0">
+                    <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">📦 Inteligência por Produto (Tabulação)</h3>
+                    <span class="bg-gexBlue/10 text-gexBlue dark:text-gexCyan px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Últimos 30 Dias</span>
+                </div>
+                <div class="p-0 overflow-x-auto flex-1 custom-scrollbar">
+                    <table class="w-full text-left border-separate min-w-[1000px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
+                        <thead class="sticky top-0 bg-white dark:bg-[#0a0f1c] z-10 shadow-sm">
+                            <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                <th class="py-3 px-3 pl-4">Produto Tabulado</th>
+                                <th class="py-3 px-3 text-center" title="Volume total de mensagens enviadas pelos clientes">📥 Msgs Recebidas</th>
+                                <th class="py-3 px-3 text-center" title="Retornos rápidos: Dúvida não resolvida">⏱️ Retornos < 24h</th>
+                                <th class="py-3 px-3 text-center" title="Retornos médios: Problema reaberto">⏳ Retornos 24-48h</th>
+                                <th class="py-3 px-3 text-center" title="Nova recorrência: Novo chamado real">📅 Retornos > 48h</th>
+                                <th class="py-3 px-3 text-center" title="Média de mensagens do cliente por ticket. +5 é atrito alto.">⚙️ Esforço / Atrito</th>
+                                <th class="py-3 px-3 text-center" title="Quantidade de vezes que o cliente mandou +2 mensagens seguidas sem resposta">🚨 Desespero (Flood)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-produtos-body" class="text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </main> 
 
     <!-- MODAL SINALIZAÇÕES -->
     <div id="modal-sinalizacoes" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -663,6 +750,7 @@
             } catch (e) { console.error("Erro auth", e); }
         }
 
+        // 🔒 SISTEMA DE PERMISSÕES: Esconde APENAS os botões solicitados se for Agente
         function configurarPermissoes() {
             if (usuarioAtual && usuarioAtual.role === 'agente') {
                 const btnSin = document.getElementById('btn-sub-qual-sinalizacoes');
@@ -676,9 +764,14 @@
 
                 const btnTkProd = document.getElementById('btn-sub-tk-prod');
                 if (btnTkProd) btnTkProd.style.display = 'none';
+
+                // 🔥 ESCONDE A NOVA ABA CHATWOOT INTEIRA DO AGENTE
+                const btnAbaChatwoot = document.getElementById('tab-btn-chatwoot');
+                if (btnAbaChatwoot) btnAbaChatwoot.style.display = 'none';
             }
         }
 
+        // 🌙 MOTOR DO MODO ESCURO/CLARO
         document.getElementById('theme-toggle').addEventListener('click', function () {
             document.documentElement.classList.toggle('dark');
             localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -692,7 +785,7 @@
         });
 
         function mudarAba(abaId) {
-            ['retencao', 'tickets', 'qualidade'].forEach(id => {
+            ['retencao', 'tickets', 'qualidade', 'chatwoot'].forEach(id => {
                 const elAba = document.getElementById(`aba-${id}`);
                 if(elAba) {
                     elAba.classList.add('hidden');
@@ -777,6 +870,8 @@
 
             if(usuarioAtual && usuarioAtual.role === 'admin') {
                 carregarSinalizacoes('');
+                carregarRecorrencia();
+                carregarProdutosMetricas();
             }
         }
 
@@ -1246,6 +1341,96 @@
         }
 
         // ==========================================
+        // RECORRÊNCIA CHATWOOT E PRODUTOS
+        // ==========================================
+        async function carregarRecorrencia() {
+            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
+            try {
+                const response = await fetch('/api/recorrencia');
+                const data = await response.json();
+                if (data.success && data.dados.length > 0) {
+                    const atual = data.dados[0];
+                    const anterior = data.dados[1] || { total_retornos: 0, clientes_unicos: 0, media_horas: 0 };
+                    
+                    const calcEvol = (vAtual, vAnt, isInverted = false) => {
+                        if (!vAnt || vAnt == 0) return '<span class="text-gray-500 text-[10px] font-bold uppercase">Sem base</span>';
+                        const diff = ((vAtual - vAnt) / vAnt) * 100;
+                        const isGood = isInverted ? diff < 0 : diff > 0;
+                        const color = isGood ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30' : 'text-red-500 bg-red-500/10 border-red-500/30';
+                        const icon = diff > 0 ? '▲' : '▼';
+                        return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border shadow-sm ${color}">${icon} ${Math.abs(diff).toFixed(1)}% vs Ant.</span>`;
+                    };
+
+                    document.getElementById('cw-total-retornos').innerText = atual.total_retornos;
+                    document.getElementById('cw-clientes-unicos').innerText = atual.clientes_unicos;
+                    document.getElementById('cw-tempo-medio').innerText = (atual.media_horas / 24).toFixed(1) + ' Dias';
+
+                    document.getElementById('cw-mom-retornos').innerHTML = calcEvol(atual.total_retornos, anterior.total_retornos);
+                    document.getElementById('cw-mom-unicos').innerHTML = calcEvol(atual.clientes_unicos, anterior.clientes_unicos);
+                    document.getElementById('cw-mom-tempo').innerHTML = calcEvol(atual.media_horas, anterior.media_horas, true);
+
+                    const tb = document.getElementById('tabela-recorrencia-body');
+                    const nomeMeses = { '01':'Jan', '02':'Fev', '03':'Mar', '04':'Abr', '05':'Mai', '06':'Jun', '07':'Jul', '08':'Ago', '09':'Set', '10':'Out', '11':'Nov', '12':'Dez' };
+
+                    tb.innerHTML = data.dados.map(d => {
+                        let mesStr = d.mes_retorno.split('-')[1];
+                        let anoStr = d.mes_retorno.split('-')[0];
+                        let mesFormatado = `${nomeMeses[mesStr]} / ${anoStr}`;
+                        let diasMedios = (d.media_horas / 24).toFixed(1);
+
+                        return `
+                        <tr class="ranking-row row-normal linha-animada">
+                            <td class="py-4 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap uppercase tracking-widest">${mesFormatado}</td>
+                            <td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px]">${d.total_retornos}</td>
+                            <td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px]">${d.clientes_unicos}</td>
+                            <td class="py-4 px-3 text-center font-mono font-black text-gexCyan text-[15px]">${diasMedios}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        async function carregarProdutosMetricas() {
+            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
+            try {
+                const response = await fetch('/api/produtos-metricas');
+                const data = await response.json();
+                if (data.success) {
+                    const tb = document.getElementById('tabela-produtos-body');
+                    if(!tb) return;
+                    
+                    if (data.dados.length === 0) {
+                        tb.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-gray-500 font-bold">Nenhum dado nos últimos 30 dias.</td></tr>`;
+                        return;
+                    }
+
+                    tb.innerHTML = data.dados.map(d => {
+                        let atrito = parseFloat(d.atrito_msg_por_conv);
+                        let corAtrito = atrito > 5 ? 'text-red-500 bg-red-500/10 border-red-500/30' : (atrito > 3 ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30');
+                        
+                        let desespero = parseInt(d.flood_desespero);
+                        let corDesespero = desespero > 100 ? 'text-red-500 font-black' : (desespero > 30 ? 'text-yellow-500 font-bold' : 'text-gray-500');
+
+                        return `
+                        <tr class="ranking-row row-normal linha-animada">
+                            <td class="py-4 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${d.produto}</td>
+                            <td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px]">${d.total_recebidas}</td>
+                            <td class="py-4 px-3 text-center font-mono font-black text-orange-500 text-[15px]">${d.retornos_24h}</td>
+                            <td class="py-4 px-3 text-center font-mono font-black text-yellow-500 text-[15px]">${d.retornos_48h}</td>
+                            <td class="py-4 px-3 text-center font-mono font-black text-emerald-500 text-[15px]">${d.retornos_mais_48h}</td>
+                            <td class="py-4 px-3 text-center">
+                                <span class="inline-flex items-center justify-center px-2 py-1 rounded text-[11px] font-black border shadow-sm ${corAtrito}">
+                                    ${atrito.toFixed(1)} msg / ticket
+                                </span>
+                            </td>
+                            <td class="py-4 px-3 text-center font-mono text-[15px] ${corDesespero}">${desespero}x</td>
+                        </tr>`;
+                    }).join('');
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        // ==========================================
         // FECHAR MODAIS NO ESC OU CLIQUE FORA
         // ==========================================
         window.addEventListener('keydown', function(e) {
@@ -1271,7 +1456,13 @@
                 document.getElementById('theme-toggle-dark-icon').classList.remove('hidden');
             }
 
-            // FLATPICKR: Forçando as datas corretas usando a engine nativa sem fuso horário bugado do JS
+            const selectMesSemanal = document.getElementById('mes-tickets-semanais');
+            if (selectMesSemanal) {
+                let htmlM = '', dt = new Date(); const nM = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                for (let i=0; i<12; i++) { htmlM += `<option value="${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}">${nM[dt.getMonth()]} de ${dt.getFullYear()}</option>`; dt.setMonth(dt.getMonth()-1); }
+                selectMesSemanal.innerHTML = htmlM; selectMesSemanal.addEventListener('change', () => gerarBotoesSemanas(selectMesSemanal.value));
+            }
+
             const flatpickrConfig = {
                 mode: "range", 
                 locale: "pt", 
@@ -1281,12 +1472,6 @@
                 allowInput: true
             };
 
-            const selectMesSemanal = document.getElementById('mes-tickets-semanais');
-            if (selectMesSemanal) {
-                let htmlM = '', dt = new Date(); const nM = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-                for (let i=0; i<12; i++) { htmlM += `<option value="${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}">${nM[dt.getMonth()]} de ${dt.getFullYear()}</option>`; dt.setMonth(dt.getMonth()-1); }
-                selectMesSemanal.innerHTML = htmlM; selectMesSemanal.addEventListener('change', () => gerarBotoesSemanas(selectMesSemanal.value));
-            }
             const inpTk = document.getElementById('calendario-tickets-geral');
             if (inpTk) {
                 calTkGeral = flatpickr(inpTk, flatpickrConfig);
