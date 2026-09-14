@@ -941,6 +941,107 @@ app.get('/api/produtividade', async (req, res) => {
     } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
 
+// ==========================================
+// 12. ROTA DE RECORRÊNCIA E RETORNO (CHATWOOT)
+// ==========================================
+app.get('/api/recorrencia', async (req, res) => {
+    try {
+        // Query de Inteligência Avançada: 
+        // 1. Agrupa pelo E-mail (ou ID). 
+        // 2. Calcula o tempo entre a mensagem atual e a anterior do mesmo cliente.
+        // 3. Se a diferença for MAIOR que 24 horas, conta como um "Retorno".
+        const q = `
+        WITH ClientMessages AS (
+            SELECT 
+                COALESCE(NULLIF(c.email, ''), c.id::text) AS client_identity,
+                m.created_at,
+                LAG(m.created_at) OVER (PARTITION BY COALESCE(NULLIF(c.email, ''), c.id::text) ORDER BY m.created_at) as prev_msg_date
+            FROM messages m
+            JOIN contacts c ON c.id = m.sender_id
+            WHERE m.sender_type = 'Contact'
+              AND m.message_type = 0
+        ),
+        Returns AS (
+            SELECT 
+                client_identity,
+                created_at,
+                prev_msg_date,
+                EXTRACT(EPOCH FROM (created_at - prev_msg_date))/3600 AS hours_since_last,
+                TO_CHAR(created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') as mes_retorno
+            FROM ClientMessages
+            WHERE prev_msg_date IS NOT NULL
+        )
+        SELECT 
+            mes_retorno,
+            COUNT(*) AS total_retornos,
+            COUNT(DISTINCT client_identity) AS clientes_unicos,
+            AVG(hours_since_last) AS media_horas
+        FROM Returns 
+        WHERE hours_since_last > 24
+        GROUP BY mes_retorno
+        ORDER BY mes_retorno DESC
+        LIMIT 6;
+        `;
+        const result = await pool.query(q);
+        res.json({ success: true, dados: result.rows });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
+// ==========================================
+// 13. ROTA INTELIGÊNCIA DE PRODUTOS E ATRITO (VIA ATRIBUTO)
+// ==========================================
+app.get('/api/produtos-metricas', async (req, res) => {
+    try {
+        const q = `
+        WITH BaseMessages AS (
+            SELECT 
+                m.conversation_id,
+                -- Puxa o campo 'produto' direto dos Atributos Personalizados da Conversa no Chatwoot
+                COALESCE(NULLIF(c.custom_attributes->>'produto', ''), 'Sem Tabulação') AS produto,
+                m.sender_id,
+                m.message_type,
+                m.created_at,
+                LAG(m.created_at) OVER (PARTITION BY m.sender_id, COALESCE(NULLIF(c.custom_attributes->>'produto', ''), 'Sem Tabulação') ORDER BY m.created_at) as prev_user_msg_time,
+                LAG(m.message_type) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_type
+            FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+            WHERE m.private = FALSE 
+              AND m.created_at >= CURRENT_DATE - INTERVAL '30 days'
+        ),
+        Analise AS (
+            SELECT 
+                produto,
+                COUNT(*) FILTER (WHERE message_type = 0) AS total_recebidas,
+                
+                -- Retornos: Gap entre mensagens do MESMO cliente no MESMO produto
+                COUNT(*) FILTER (WHERE message_type = 0 AND prev_user_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 <= 24) AS retornos_24h,
+                COUNT(*) FILTER (WHERE message_type = 0 AND prev_user_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 > 24 AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 <= 48) AS retornos_48h,
+                COUNT(*) FILTER (WHERE message_type = 0 AND prev_user_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 > 48) AS retornos_mais_48h,
+                
+                -- Taxa de Desespero (Cliente mandou msg logo após outra msg dele mesmo, sem o agente responder)
+                COUNT(*) FILTER (WHERE message_type = 0 AND prev_msg_type = 0) AS flood_desespero,
+                
+                COUNT(DISTINCT conversation_id) AS total_conversas
+            FROM BaseMessages
+            GROUP BY produto
+        )
+        SELECT 
+            produto,
+            total_recebidas,
+            retornos_24h,
+            retornos_48h,
+            retornos_mais_48h,
+            flood_desespero,
+            -- Esforço/Atrito (Média de mensagens que o cliente precisa mandar por ticket para ser resolvido)
+            ROUND((total_recebidas::numeric / GREATEST(total_conversas, 1)), 1) AS atrito_msg_por_conv
+        FROM Analise
+        ORDER BY total_recebidas DESC;
+        `;
+        const result = await pool.query(q);
+        res.json({ success: true, dados: result.rows });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
 const PORT = process.env.PORT || 3003;
 app.listen(PORT, () => {
     console.log(`✅ Servidor rodando na porta ${PORT}`);
