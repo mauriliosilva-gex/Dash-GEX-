@@ -258,8 +258,8 @@ app.get('/api/retencao', async (req, res) => {
         
         // ⚠️ ATUALIZAÇÃO MANUAL MENSAL AQUI:
         const anoPlanilha = 2026;
-        const mesPlanilha = 7; // 7 = Agosto (Lembrete: 0=Jan, 1=Fev ... 7=Ago, 8=Set)
-        const nomeAba = "📊 Análise | Metas | Agosto"; // Nome exato da aba na planilha
+        const mesPlanilha = 8; // 7 = Agosto (Lembrete: 0=Jan, 1=Fev ... 7=Ago, 8=Set)
+        const nomeAba = "📊 Análise | Metas | Setembro"; // Nome exato da aba na planilha
         
         const diasNoMesPlanilha = new Date(anoPlanilha, mesPlanilha + 1, 0).getDate(); 
         const dInicioMes = new Date(anoPlanilha, mesPlanilha, 1);
