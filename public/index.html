@@ -295,6 +295,7 @@
                                 <button onclick="filtrarTkAtual('SAC')" id="btn-f-tk-atual-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarTkAtual('BKO')" id="btn-f-tk-atual-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarTkAtual('SMS')" id="btn-f-tk-atual-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="filtrarTkAtual('48H')" id="btn-f-tk-atual-48H" class="btn-setor btn-setor-inativo">48H</button>
                                 <button onclick="exportarTicketsAtual()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
@@ -343,6 +344,7 @@
                                 <button onclick="filtrarTkSemanal('SAC')" id="btn-f-tk-sem-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarTkSemanal('BKO')" id="btn-f-tk-sem-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarTkSemanal('SMS')" id="btn-f-tk-sem-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="filtrarTkSemanal('48H')" id="btn-f-tk-sem-48H" class="btn-setor btn-setor-inativo">48H</button>
                                 <button onclick="exportarVisaoMensal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
@@ -378,6 +380,7 @@
                             <button onclick="filtrarTkGeral('SAC')" id="btn-f-tk-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                             <button onclick="filtrarTkGeral('BKO')" id="btn-f-tk-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                             <button onclick="filtrarTkGeral('SMS')" id="btn-f-tk-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                            <button onclick="filtrarTkGeral('48H')" id="btn-f-tk-48H" class="btn-setor btn-setor-inativo">48H</button>
                                 <button onclick="exportarTicketsGeral()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                         </div>
                         <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
@@ -408,6 +411,7 @@
                                 <button onclick="filtrarCasos('SAC')" id="btn-f-casos-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarCasos('BKO')" id="btn-f-casos-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarCasos('SMS')" id="btn-f-casos-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="filtrarCasos('48H')" id="btn-f-casos-48H" class="btn-setor btn-setor-inativo">48H</button>
                                 <button onclick="exportarStatusCasos()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
@@ -451,6 +455,7 @@
                                 <button onclick="filtrarDistribuicao('SAC')" id="btn-f-dist-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarDistribuicao('BKO')" id="btn-f-dist-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarDistribuicao('SMS')" id="btn-f-dist-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="filtrarDistribuicao('48H')" id="btn-f-dist-48H" class="btn-setor btn-setor-inativo">48H</button>
                                 <button onclick="exportarDistribuicao()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
@@ -483,6 +488,7 @@
                             <button onclick="filtrarProdutividade('SAC')" id="btn-f-prod-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                             <button onclick="filtrarProdutividade('BKO')" id="btn-f-prod-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                             <button onclick="filtrarProdutividade('SMS')" id="btn-f-prod-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                            <button onclick="filtrarProdutividade('48H')" id="btn-f-prod-48H" class="btn-setor btn-setor-inativo">48H</button>
                         </div>
                         <div class="flex items-center gap-2">
                             <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
@@ -565,6 +571,7 @@
                                 <button id="btn-qual-SAC" onclick="filtrarQualidade('SAC')" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button id="btn-qual-BKO" onclick="filtrarQualidade('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button id="btn-qual-SMS" onclick="filtrarQualidade('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button id="btn-qual-48H" onclick="filtrarQualidade('48H')" class="btn-setor btn-setor-inativo">48H</button>
                             </div>
                         </div>
                         
@@ -611,6 +618,7 @@
                                 <button id="btn-sin-SAC" onclick="filtrarSinalizacoes('SAC')" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button id="btn-sin-BKO" onclick="filtrarSinalizacoes('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button id="btn-sin-SMS" onclick="filtrarSinalizacoes('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button id="btn-sin-48H" onclick="filtrarSinalizacoes('48H')" class="btn-setor btn-setor-inativo">48H</button>
                             </div>
                         </div>
                         
@@ -648,6 +656,7 @@
                                     <button id="btn-montk-SAC" onclick="filtrarMonitoriaTk('SAC')" class="btn-setor btn-setor-inativo">SAC</button>
                                     <button id="btn-montk-BKO" onclick="filtrarMonitoriaTk('BKO')" class="btn-setor btn-setor-inativo">BKO</button>
                                     <button id="btn-montk-SMS" onclick="filtrarMonitoriaTk('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
+                                    <button id="btn-montk-48H" onclick="filtrarMonitoriaTk('48H')" class="btn-setor btn-setor-inativo">48H</button>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
@@ -1429,7 +1438,7 @@
 
         function filtrarQualidade(setor) {
             setorQualAtivo = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => {
                 const btn = document.getElementById(`btn-qual-${b}`);
                 if (btn) { btn.classList.remove(b===setor?'btn-setor-inativo':'btn-setor-ativo'); btn.classList.add(b===setor?'btn-setor-ativo':'btn-setor-inativo'); }
             });
@@ -1479,7 +1488,7 @@
 
         function filtrarSinalizacoes(setor) {
             setorSinAtivo = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => {
                 const btn = document.getElementById(`btn-sin-${b}`);
                 if (btn) { btn.classList.remove(b===setor?'btn-setor-inativo':'btn-setor-ativo'); btn.classList.add(b===setor?'btn-setor-ativo':'btn-setor-inativo'); }
             });
@@ -1539,7 +1548,7 @@
         async function carregarTickets(p = '') {
             try { const response = await fetch('/api/tickets' + p); const data = await response.json(); if (data.success) { dadosTkAtual = data.agentes; renderTabelaTickets(); } } catch (e) {}
         }
-        function filtrarTkAtual(s) { filtroTkAtualSetor = s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b => { const btn = document.getElementById(`btn-f-tk-atual-${b}`); if(btn) btn.className = `btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTickets(); }
+        function filtrarTkAtual(s) { filtroTkAtualSetor = s; ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b => { const btn = document.getElementById(`btn-f-tk-atual-${b}`); if(btn) btn.className = `btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTickets(); }
         function renderTabelaTickets() {
             const tb = document.getElementById('tabela-tickets-body'); if (!tb) return;
             let l = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
@@ -1564,7 +1573,7 @@
             });
         }
         async function carregarTicketsSemanal(p='', d=7) { try { diasFiltroSemanal=d; const res=await fetch('/api/tickets'+p); const dat=await res.json(); if(dat.success){ dadosTkSemanal=dat.agentes; renderTabelaTicketsSemanal(); } } catch(e){} }
-        function filtrarTkSemanal(s) { filtroTkSemanalSetor=s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-sem-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTicketsSemanal(); }
+        function filtrarTkSemanal(s) { filtroTkSemanalSetor=s; ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-sem-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTicketsSemanal(); }
         function renderTabelaTicketsSemanal() {
             const tb=document.getElementById('tabela-tickets-semanal-body'); if(!tb) return;
             let l=filtroTkSemanalSetor==='TODOS'?dadosTkSemanal:dadosTkSemanal.filter(a=>a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
@@ -1575,7 +1584,7 @@
         async function carregarTicketsGeral(p='') { 
             try{ const res=await fetch('/api/tickets-geral'+p); const d=await res.json(); if(d.success){ dadosTkGeral=d.agentes; renderTabelaTkGeral(); } }catch(e){} 
         }
-        function filtrarTkGeral(s) { filtroTkGeralSetor=s; ['TODOS','RET','SAC','BKO','SMS'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTkGeral(); }
+        function filtrarTkGeral(s) { filtroTkGeralSetor=s; ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTkGeral(); }
         function renderTabelaTkGeral() {
             const th=document.getElementById('thead-tk-geral-dinamico'), tb=document.getElementById('tabela-tickets-geral-body'); if(!tb||!th) return;
             let l=filtroTkGeralSetor==='TODOS'?dadosTkGeral:dadosTkGeral.filter(a=>a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
@@ -1594,7 +1603,7 @@
 
         function filtrarCasos(setor) {
             filtroCasosSetor = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => {
                 const btn = document.getElementById(`btn-f-casos-${b}`);
                 if (btn) btn.className = `btn-setor ${b === setor ? 'btn-setor-ativo' : 'btn-setor-inativo'}`;
             });
@@ -1603,7 +1612,7 @@
 
         function filtrarDistribuicao(setor) {
             filtroDistSetor = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => {
                 const btn = document.getElementById(`btn-f-dist-${b}`);
                 if (btn) btn.className = `btn-setor ${b === setor ? 'btn-setor-ativo' : 'btn-setor-inativo'}`;
             });
@@ -1697,6 +1706,7 @@
         // ==========================================
         let dadosProdutividade = [];
         let filtroProdSetor = 'TODOS';
+        let calTkGeral = null;
         let calTkProd = null;
 
         async function carregarProdutividade(parametrosUrl = '') {
@@ -1713,7 +1723,7 @@
 
         function filtrarProdutividade(setor) {
             filtroProdSetor = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => {
                 const btn = document.getElementById(`btn-f-prod-${b}`);
                 if (btn) btn.classList.replace(b===setor?'btn-setor-inativo':'btn-setor-ativo', b===setor?'btn-setor-ativo':'btn-setor-inativo');
             });
@@ -2884,7 +2894,7 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
 
         function filtrarMonitoriaTk(setor) {
             filtroMonitoriaTkSetor = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => {
                 const btn = document.getElementById(`btn-montk-${b}`);
                 if (btn) btn.className = `btn-setor ${b === setor ? 'btn-setor-ativo' : 'btn-setor-inativo'}`;
             });
@@ -3278,90 +3288,39 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
                 selectMesSemanal.innerHTML = htmlM; selectMesSemanal.addEventListener('change', () => gerarBotoesSemanas(selectMesSemanal.value));
             }
 
-            const flatpickrConfig = {
-                mode: "range", 
-                locale: "pt", 
-                dateFormat: "d/m/Y", 
-                showMonths: 2, 
-                theme: "dark",
-                allowInput: true
-            };
-
-            const inpTk = document.getElementById('calendario-tickets-geral');
-            if (inpTk) {
-                calTkGeral = flatpickr(inpTk, flatpickrConfig);
-                document.getElementById('btn-aplicar-geral').addEventListener('click', () => {
-                    const ds = calTkGeral.selectedDates; if (ds.length < 2) return alert("⚠️ Selecione INÍCIO e FIM.");
-                    const dF = ds[1]; dF.setHours(23,59,59); carregarTicketsGeral(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
+            // 🔧 Helper único de calendário — sem allowInput (evita reset no blur), config própria por instância,
+            //    datas capturadas via onChange (à prova de perder a seleção ao clicar em Buscar) + fallback de 1 dia.
+            function criarCalendario(inputId, btnId, onAplicar, permitirUmDia = true) {
+                const inp = document.getElementById(inputId);
+                if (!inp) return null;
+                let datas = [];
+                const cal = flatpickr(inp, {
+                    mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark",
+                    onChange: (selectedDates) => { datas = selectedDates; }
                 });
-            }
-
-            const inpProd = document.getElementById('calendario-produtividade');
-            if (inpProd) {
-                calTkProd = flatpickr(inpProd, flatpickrConfig);
-                document.getElementById('btn-aplicar-prod').addEventListener('click', () => {
-                    const ds = calTkProd.selectedDates; if (ds.length < 2) return alert("⚠️ Selecione INÍCIO e FIM.");
-                    const dF = ds[1]; dF.setHours(23,59,59);
-                    carregarProdutividade(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
-                });
-            }
-
-            const inpMonTk = document.getElementById('calendario-monitoria-tk');
-            if (inpMonTk) {
-                calMonitoriaTk = flatpickr(inpMonTk, flatpickrConfig);
-                document.getElementById('btn-aplicar-montk').addEventListener('click', () => {
-                    const ds = calMonitoriaTk.selectedDates; 
-                    if (ds.length < 2) {
-                        if(ds.length === 1) {
-                            const dF = new Date(ds[0]); dF.setHours(23,59,59);
-                            carregarMonitoriaTk(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
-                        } else {
-                            return alert("⚠️ Selecione INÍCIO e FIM.");
-                        }
+                const btn = document.getElementById(btnId);
+                if (btn) btn.addEventListener('click', () => {
+                    const ds = (datas && datas.length) ? datas : cal.selectedDates;
+                    if (ds.length >= 2) {
+                        const dF = new Date(ds[1]); dF.setHours(23, 59, 59);
+                        onAplicar(`?since=${Math.floor(ds[0].getTime() / 1000)}&until=${Math.floor(dF.getTime() / 1000)}`);
+                    } else if (ds.length === 1 && permitirUmDia) {
+                        const dF = new Date(ds[0]); dF.setHours(23, 59, 59);
+                        onAplicar(`?since=${Math.floor(ds[0].getTime() / 1000)}&until=${Math.floor(dF.getTime() / 1000)}`);
                     } else {
-                        const dF = ds[1]; dF.setHours(23,59,59);
-                        carregarMonitoriaTk(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
+                        alert("⚠️ Selecione INÍCIO e FIM.");
                     }
                 });
+                return cal;
             }
 
-            // 🔥 NOVO CALENDÁRIO DA PAGAMERICAN ENTRA AQUI 🔥
-            const inpPagAm = document.getElementById('calendario-pagamerican');
-            if (inpPagAm) {
-                calPagAmerican = flatpickr(inpPagAm, flatpickrConfig);
-                document.getElementById('btn-aplicar-pagam').addEventListener('click', () => {
-                    const ds = calPagAmerican.selectedDates; 
-                    if (ds.length < 2) {
-                        if(ds.length === 1) {
-                            const dF = new Date(ds[0]); dF.setHours(23,59,59);
-                            carregarPagAmerican(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
-                        } else { return alert("⚠️ Selecione INÍCIO e FIM."); }
-                    } else {
-                        const dF = ds[1]; dF.setHours(23,59,59);
-                        carregarPagAmerican(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
-                    }
-                });
-            }
+            calTkGeral      = criarCalendario('calendario-tickets-geral', 'btn-aplicar-geral', carregarTicketsGeral, true);
+            calTkProd       = criarCalendario('calendario-produtividade', 'btn-aplicar-prod',  carregarProdutividade, true);
+            calMonitoriaTk  = criarCalendario('calendario-monitoria-tk',  'btn-aplicar-montk', carregarMonitoriaTk,  true);
+            calPagAmerican  = criarCalendario('calendario-pagamerican',   'btn-aplicar-pagam', carregarPagAmerican,  true);
+            calTime48       = criarCalendario('calendario-time48',        'btn-aplicar-time48', carregarTime48,      true);
 
-            // NOVO CALENDÁRIO TIME 48H
-            const inpTime48 = document.getElementById('calendario-time48');
-            if (inpTime48) {
-                calTime48 = flatpickr(inpTime48, flatpickrConfig);
-                document.getElementById('btn-aplicar-time48').addEventListener('click', () => {
-                    const ds = calTime48.selectedDates; 
-                    if (ds.length < 2) {
-                        if(ds.length === 1) {
-                            const dF = new Date(ds[0]); dF.setHours(23,59,59);
-                            carregarTime48(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
-                        } else { return alert("⚠️ Selecione INÍCIO e FIM."); }
-                    } else {
-                        const dF = ds[1]; dF.setHours(23,59,59);
-                        carregarTime48(`?since=${Math.floor(ds[0].getTime()/1000)}&until=${Math.floor(dF.getTime()/1000)}`);
-                    }
-                });
-            }
-
-            // 👇 Restante das chamadas que já existiam 👇
+                        // 👇 Restante das chamadas que já existiam 👇
             document.getElementById('filtro-mes-qualidade')?.addEventListener('change', (e) => carregarQualidade(e.target.value));
             document.getElementById('filtro-mes-sinalizacoes')?.addEventListener('change', (e) => carregarSinalizacoes(e.target.value));
 
