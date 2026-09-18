@@ -233,6 +233,12 @@
                 <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl w-full flex flex-col h-full overflow-hidden shadow-2xl">
                     <div class="px-6 py-5 border-b border-lightBorder dark:border-darkBorder flex justify-between items-center bg-gray-50 dark:bg-[#0a0f1c] shrink-0">
                         <h2 class="text-xl font-black text-gray-900 dark:text-white tracking-tight">Ranking de Desempenho da Equipe</h2>
+                        <div id="controles-mes-ret" class="flex items-center gap-2 flex-wrap justify-end">
+                            <select id="select-mes-unico-ret" onchange="verMesUnicoRet(this.value)" title="Ver outro mês" class="bg-gray-100 dark:bg-black/40 text-gray-700 dark:text-gray-200 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 outline-none cursor-pointer"></select>
+                            <button id="btn-fazer-comp-ret" onclick="toggleComparativoModoRet()" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm">📊 Fazer comparativo</button>
+                            <div id="meses-comp-container" class="hidden flex flex-wrap gap-1.5 items-center"></div>
+                            <button id="btn-ver-dif-ret" onclick="toggleDiffRet()" class="hidden bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm">📈 Ver diferença</button>
+                        </div>
                     </div>
                     
                     <div class="flex-1 min-h-0 overflow-auto custom-scrollbar px-4 pb-4 mt-2">
@@ -1210,6 +1216,165 @@
             }
         }
 
+        let mesesSelecionadosRet = [], mesesDisponiveisRet = [], detalheRet = {}, multiMesRet = false, mesRecenteRet = '', modoComparativoRet = false, comparativoAtivoRet = false, mesAtualFullRet = '';
+        const METRICAS_RET = [
+            { key: 'casos_atual', label: '💰 Casos ($)', money: true, maiorMelhor: true },
+            { key: 'refund', label: '↩️ Refund ($)', money: true, maiorMelhor: false },
+            { key: 'recuperado', label: '✅ Recuperado ($)', money: true, maiorMelhor: true },
+            { key: 'tickets', label: '🎫 Tickets', money: false, maiorMelhor: true },
+            { key: 'trv', label: '📈 TRV (%)', pct: true, maiorMelhor: true }
+        ];
+
+        // Ver 1 mês (dropdown)
+        function verMesUnicoRet(aba) {
+            if (!aba) return;
+            comparativoAtivoRet = false; modoComparativoRet = false;
+            const cont = document.getElementById('meses-comp-container'); if (cont) cont.classList.add('hidden');
+            const btnDif = document.getElementById('btn-ver-dif-ret'); if (btnDif) btnDif.classList.add('hidden');
+            const btn = document.getElementById('btn-fazer-comp-ret');
+            if (btn) { btn.innerHTML = '📊 Fazer comparativo'; btn.classList.add('bg-gexBlue','hover:bg-gexCyan'); btn.classList.remove('bg-red-500','hover:bg-red-400'); }
+            mesesSelecionadosRet = [aba];
+            carregarDadosReais('?aba=' + encodeURIComponent(aba));
+        }
+
+        // Entrar/sair do comparativo (multi)
+        function toggleComparativoModoRet() {
+            comparativoAtivoRet = !comparativoAtivoRet;
+            const btn = document.getElementById('btn-fazer-comp-ret');
+            const cont = document.getElementById('meses-comp-container');
+            const selU = document.getElementById('select-mes-unico-ret');
+            const btnDif = document.getElementById('btn-ver-dif-ret');
+            if (comparativoAtivoRet) {
+                if (!mesesSelecionadosRet.length && mesAtualFullRet) mesesSelecionadosRet = [mesAtualFullRet];
+                if (btn) { btn.innerHTML = '✖ Sair do comparativo'; btn.classList.remove('bg-gexBlue','hover:bg-gexCyan'); btn.classList.add('bg-red-500','hover:bg-red-400'); }
+                if (cont) cont.classList.remove('hidden');
+                if (selU) selU.classList.add('hidden');
+                renderMesesCompBtns();
+                carregarDadosReais('?' + mesesSelecionadosRet.map(a => 'aba=' + encodeURIComponent(a)).join('&'));
+            } else {
+                modoComparativoRet = false;
+                if (btn) { btn.innerHTML = '📊 Fazer comparativo'; btn.classList.add('bg-gexBlue','hover:bg-gexCyan'); btn.classList.remove('bg-red-500','hover:bg-red-400'); }
+                if (cont) cont.classList.add('hidden');
+                if (selU) selU.classList.remove('hidden');
+                if (btnDif) btnDif.classList.add('hidden');
+                const alvo = mesAtualFullRet || mesesSelecionadosRet[mesesSelecionadosRet.length - 1] || '';
+                mesesSelecionadosRet = alvo ? [alvo] : [];
+                carregarDadosReais(alvo ? ('?aba=' + encodeURIComponent(alvo)) : '');
+            }
+        }
+
+        function renderMesesCompBtns() {
+            const cont = document.getElementById('meses-comp-container'); if (!cont) return;
+            cont.innerHTML = '<span class="text-[9px] text-gray-500 uppercase font-bold mr-1">Selecione 2+ meses</span>' + mesesDisponiveisRet.map(aba => {
+                const ativo = mesesSelecionadosRet.includes(aba);
+                return `<button onclick="toggleMesRet('${aba}')" class="btn-setor text-[11px] px-3 py-1 ${ativo ? 'btn-setor-ativo' : 'btn-setor-inativo'}">${aba.split('|').pop().trim()}</button>`;
+            }).join('');
+        }
+
+        function toggleMesRet(aba) {
+            const i = mesesSelecionadosRet.indexOf(aba);
+            if (i >= 0) { if (mesesSelecionadosRet.length <= 1) return; mesesSelecionadosRet.splice(i, 1); }
+            else { mesesSelecionadosRet.push(aba); }
+            carregarDadosReais('?' + mesesSelecionadosRet.map(a => 'aba=' + encodeURIComponent(a)).join('&'));
+        }
+
+        // Alternar valores <-> diferença (dentro do comparativo)
+        function toggleDiffRet() {
+            modoComparativoRet = !modoComparativoRet;
+            const b = document.getElementById('btn-ver-dif-ret');
+            if (b) b.innerHTML = modoComparativoRet ? '📋 Ver valores' : '📈 Ver diferença';
+            renderTabelaRetencaoPremium();
+        }
+
+        function fmtMetricaRet(v, m) { if (m.pct) return fmtTrv(v); if (m.money) return fmtDolar(v); return (v || 0); }
+
+        function refMetricaRet(labels, meses, key, maiorMelhor) {
+            const vals = labels.map(L => (meses[L] && meses[L][key]) || 0);
+            if (labels.length <= 2) return { ref: (meses[labels[0]] && meses[labels[0]][key]) || 0, refLabel: labels[0] };
+            const ref = maiorMelhor ? Math.max(...vals) : Math.min(...vals);
+            return { ref, refLabel: labels[vals.indexOf(ref)] };
+        }
+
+        function deltaBadgeRet(vRec, ref, maiorMelhor) {
+            const pct = ref !== 0 ? ((vRec - ref) / Math.abs(ref)) * 100 : (vRec !== 0 ? 100 : 0);
+            const igual = Math.abs(vRec - ref) < 0.0001;
+            const melhor = maiorMelhor ? (vRec >= ref) : (vRec <= ref);
+            const arrow = igual ? '=' : (melhor ? '▲' : '▼');
+            const cor = igual ? 'text-gray-400' : (melhor ? 'text-emerald-500' : 'text-red-500');
+            return `<span class="${cor} font-bold">${arrow} ${Math.abs(pct).toFixed(0)}%</span>`;
+        }
+
+        function nomeCellRet(a, nC) {
+            if (multiMesRet) return `<td class="py-3 px-3 ${nC} whitespace-nowrap cursor-pointer hover:underline" onclick="abrirCardAgenteRet('${(a.base||'').replace(/'/g,'')}')">${a.nome} <span class="text-[9px] opacity-60">👁️</span></td>`;
+            return `<td class="py-3 px-3 ${nC} whitespace-nowrap">${a.nome}</td>`;
+        }
+
+        function renderComparativoRet() {
+            const tb = document.getElementById('tabela-retencao-body'); if (!tb) return;
+            const bases = Object.keys(detalheRet).map(base => {
+                const meses = detalheRet[base].meses; const labels = Object.keys(meses);
+                const rec = labels[labels.length - 1];
+                return { base, nome: detalheRet[base].nome, meses, labels, rec, trvRec: (meses[rec] && meses[rec].trv) || 0 };
+            }).sort((x, y) => y.trvRec - x.trvRec);
+            if (!bases.length) { tb.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Sem dados.</td></tr>`; return; }
+            const cellComp = (o, key, maiorMelhor, fmtFn) => {
+                const vRec = (o.meses[o.rec] && o.meses[o.rec][key]) || 0;
+                const r = refMetricaRet(o.labels, o.meses, key, maiorMelhor);
+                return `${fmtFn(vRec)}<div class="text-[9px] mt-0.5">${deltaBadgeRet(vRec, r.ref, maiorMelhor)}</div>`;
+            };
+            tb.innerHTML = bases.map((o, i) => {
+                const trvC = o.trvRec >= 70 ? 'text-emerald-500' : o.trvRec >= 60 ? 'text-yellow-500' : 'text-red-500';
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-3 px-2 text-center"><span class="pos-badge">${i + 1}º</span></td>
+                    <td class="py-3 px-3 texto-contraste whitespace-nowrap cursor-pointer hover:underline" onclick="abrirCardAgenteRet('${(o.base||'').replace(/'/g,'')}')">${o.nome} <span class="text-[9px] opacity-60">👁️</span></td>
+                    <td class="py-3 px-2 text-center font-mono">${cellComp(o, 'tickets', true, v => v || 0)}</td>
+                    <td class="py-3 px-3 text-right font-mono">${cellComp(o, 'casos_atual', true, fmtDolar)}</td>
+                    <td class="py-3 px-3 text-right font-mono">${cellComp(o, 'refund', false, fmtDolar)}</td>
+                    <td class="py-3 px-3 text-right font-mono">${cellComp(o, 'recuperado', true, fmtDolar)}</td>
+                    <td class="py-3 px-3 text-center text-[10px] text-gray-500">vs ${o.labels.length <= 2 ? o.labels[0] : 'melhor mês'}</td>
+                    <td class="py-3 px-3 text-center font-mono text-gray-500">${o.labels.length}m</td>
+                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] ${trvC}">${cellComp(o, 'trv', true, fmtTrv)}</td>
+                    <td class="py-3 px-3 text-center text-[10px] text-gray-500">${o.rec}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function abrirCardAgenteRet(base) {
+            const info = detalheRet[base]; if (!info) return;
+            const meses = info.meses; const labels = Object.keys(meses); const rec = labels[labels.length - 1];
+            if (!document.getElementById('modal-agente-ret')) {
+                document.body.insertAdjacentHTML('beforeend', `
+                <div id="modal-agente-ret" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+                        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                            <div><h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-agente-ret-titulo">Agente</h3>
+                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1" id="modal-agente-ret-sub"></p></div>
+                            <button onclick="fecharCardAgenteRet()" class="text-gray-500 hover:text-red-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                        </div>
+                        <div class="p-6 overflow-y-auto custom-scrollbar flex-1" id="modal-agente-ret-conteudo"></div>
+                    </div>
+                </div>`);
+            }
+            document.getElementById('modal-agente-ret-titulo').innerText = info.nome;
+            document.getElementById('modal-agente-ret-sub').innerText = 'Comparativo por métrica — mês atual: ' + rec + (labels.length > 2 ? ' (vs melhor mês)' : (labels.length === 2 ? (' (vs ' + labels[0] + ')') : ''));
+            let head = '<th class="text-left py-2 px-3">Métrica</th>' + labels.map(L => `<th class="py-2 px-3 text-center ${L === rec ? 'text-gexCyan' : ''}">${L}</th>`).join('') + '<th class="py-2 px-3 text-center">Comparativo</th>';
+            let body = METRICAS_RET.map(m => {
+                const cells = labels.map(L => {
+                    const v = (meses[L] && meses[L][m.key]) || 0;
+                    return `<td class="py-2 px-3 text-center font-mono ${L === rec ? 'font-black text-gray-900 dark:text-white' : 'text-gray-500'}">${fmtMetricaRet(v, m)}</td>`;
+                }).join('');
+                const vRec = (meses[rec] && meses[rec][m.key]) || 0;
+                const r = refMetricaRet(labels, meses, m.key, m.maiorMelhor);
+                const comp = labels.length >= 2 ? (deltaBadgeRet(vRec, r.ref, m.maiorMelhor) + ' <span class="text-[9px] text-gray-400">vs ' + r.refLabel + '</span>') : '<span class="text-gray-400">—</span>';
+                return `<tr class="border-b border-gray-100 dark:border-gray-800"><td class="py-2 px-3 font-bold text-gray-700 dark:text-gray-200">${m.label}</td>${cells}<td class="py-2 px-3 text-center">${comp}</td></tr>`;
+            }).join('');
+            document.getElementById('modal-agente-ret-conteudo').innerHTML = `<table class="w-full text-sm"><thead class="text-[10px] uppercase tracking-widest text-gray-500 border-b border-gray-200 dark:border-gray-700"><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+            document.getElementById('modal-agente-ret').classList.remove('hidden');
+        }
+
+        function fecharCardAgenteRet() { const m = document.getElementById('modal-agente-ret'); if (m) m.classList.add('hidden'); }
+
         async function carregarDadosReais(pUrl = '') {
             try {
                 const btnSync = document.querySelector('button.bg-gradient-to-r');
@@ -1218,6 +1383,23 @@
                 const response = await fetch('/api/retencao' + pUrl); const data = await response.json();
                 if (data.success) {
                     dadosAgentes = data.agentes;
+                    detalheRet = data.detalhePorMes || {};
+                    multiMesRet = !!data.multiMes;
+                    mesRecenteRet = data.mesRecente || '';
+                    mesAtualFullRet = data.mesAtual || '';
+                    mesesDisponiveisRet = Array.isArray(data.meses) ? data.meses : [];
+                    if (!mesesSelecionadosRet.length && mesAtualFullRet) mesesSelecionadosRet = [mesAtualFullRet];
+                    const selU = document.getElementById('select-mes-unico-ret');
+                    if (selU) selU.innerHTML = mesesDisponiveisRet.map(mm => `<option value="${mm}" ${mm === mesAtualFullRet ? 'selected' : ''}>📅 ${mm.split('|').pop().trim()}</option>`).join('');
+                    if (comparativoAtivoRet) renderMesesCompBtns();
+                    const btnDif = document.getElementById('btn-ver-dif-ret');
+                    if (btnDif) btnDif.classList.toggle('hidden', !(comparativoAtivoRet && multiMesRet));
+                    if (!multiMesRet) modoComparativoRet = false;
+                    // 🔒 Novas funções (trocar mês / comparativo / card) só pra ADMIN
+                    const ehAdminRet = (usuarioAtual && usuarioAtual.role === 'admin');
+                    const ctrlMesRet = document.getElementById('controles-mes-ret');
+                    if (ctrlMesRet) ctrlMesRet.classList.toggle('hidden', !ehAdminRet);
+                    if (!ehAdminRet) { multiMesRet = false; comparativoAtivoRet = false; modoComparativoRet = false; }
                     document.getElementById('card-meta-trv').innerText = fmtTrv(data.globais.meta_trv); document.getElementById('card-trv-medio').innerText = fmtTrv(data.globais.trv_medio);
                     document.getElementById('card-meta-mes').innerText = fmtDolar(data.globais.meta_mes); document.getElementById('card-recuperado-total').innerText = fmtDolar(data.globais.recuperado_total);
                     document.getElementById('card-faltam').innerText = fmtDolar(data.globais.faltam); document.getElementById('card-meta-min-casos').innerText = fmtDolar(data.globais.meta_minima_casos);
@@ -1229,6 +1411,7 @@
 
         function renderTabelaRetencaoPremium() {
             const tb = document.getElementById('tabela-retencao-body'); if (!tb) return;
+            if (modoComparativoRet && multiMesRet) return renderComparativoRet();
             let rData = dadosAgentes.filter(a => a.time === 'RET');
             tb.innerHTML = rData.map((a, i) => {
                 const recuperado = (a.casos_atual || 0) - (a.refund || 0);
@@ -1242,7 +1425,7 @@
                 return `
                 <tr class="ranking-row ${trClass}">
                     <td class="py-3 px-2 text-center">${posEl}</td>
-                    <td class="py-3 px-3 ${nC} whitespace-nowrap">${a.nome}</td>
+                    ${nomeCellRet(a, nC)}
                     <td class="py-3 px-2 text-center font-mono font-black text-gexCyan">${a.tickets || 0}</td>
                     <td class="py-3 px-3 text-right font-mono ${tC}">${fmtDolar(a.casos_atual)}</td>
                     <td class="py-3 px-3 text-right font-mono ${tC}">${fmtDolar(a.refund)}</td>
