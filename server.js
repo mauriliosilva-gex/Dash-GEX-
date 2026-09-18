@@ -541,6 +541,7 @@ app.get('/api/qualidade', async (req, res) => {
             if (setorRaw.includes('SAC')) siglaSetor = 'SAC';
             else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) siglaSetor = 'BKO';
             else if (setorRaw.includes('SMS')) siglaSetor = 'SMS';
+            else if (setorRaw.includes('48H')) siglaSetor = '48H';
 
             monitoriasGerais.push({ mes: mesRaw, nome: nomeFormatado, time: siglaSetor, qual: nota, ciclo: cicloNum, nomeOriginal: nomeRaw });
         }
@@ -662,6 +663,7 @@ app.get('/api/sinalizacoes', async (req, res) => {
             if (setorRaw.includes('SAC')) siglaSetor = 'SAC';
             else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) siglaSetor = 'BKO';
             else if (setorRaw.includes('SMS')) siglaSetor = 'SMS';
+            else if (setorRaw.includes('48H')) siglaSetor = '48H';
 
             sinalizacoesGerais.push({
                 mes: mesRaw, nome: nomeFormatado, nomeOriginal: nomeRaw, time: siglaSetor,
@@ -711,7 +713,7 @@ app.get('/api/tickets', async (req, res) => {
         const agentesMap = {};
         result.rows.forEach(row => {
             const nome = (row.agente || '').toUpperCase();
-            if (!nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            if (!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
             if (!agentesMap[nome]) agentesMap[nome] = { nome: row.agente, seg:0, ter:0, qua:0, qui:0, sex:0, sab:0, dom:0, total:0 };
 
             const diaStr = row.dia instanceof Date ? row.dia.toISOString().split('T')[0] : String(row.dia).split('T')[0];
@@ -762,7 +764,7 @@ app.get('/api/tickets-geral', async (req, res) => {
         const agentesMap = {};
         result.rows.forEach(row => {
             const nome = (row.agente || '').toUpperCase();
-            if (!nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            if (!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
             if (!agentesMap[nome]) agentesMap[nome] = { nome: row.agente, semanas: new Array(totalSemanas).fill(0), total: 0 };
 
             const diaStr = row.dia instanceof Date ? row.dia.toISOString().split('T')[0] : String(row.dia).split('T')[0];
@@ -809,7 +811,7 @@ app.get('/api/distribuicao', async (req, res) => {
         
         resultDist.rows.forEach(r => {
             let nome = (r.agente || 'SEM ATRIBUIR').toUpperCase();
-            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
             
             let cx = r.caixa || '(Sem Time)';
             caixasSet.add(cx);
@@ -854,7 +856,7 @@ app.get('/api/distribuicao', async (req, res) => {
         
         resultCasos.rows.forEach(r => {
             let nome = (r.agente || 'SEM ATRIBUIR').toUpperCase();
-            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
             if (!resCasosMap[nome]) resCasosMap[nome] = { nome, ignorado: 0, aguardando: 0, parado: 0, andamento: 0, total: 0, detalhes: [] };
             
             const diffHoras = (agora - new Date(r.last_activity_at)) / (1000 * 60 * 60);
@@ -932,7 +934,7 @@ app.get('/api/produtividade', async (req, res) => {
         const relatorio = {};
         result.rows.forEach(r => {
             let nome = (r.agente || '').toUpperCase();
-            if (!nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
+            if (!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
             
             let d = new Date(r.data_hora.replace(' ', 'T'));
             let diaStr = r.data_hora.split(' ')[0];
@@ -1373,6 +1375,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
                     WHEN agente_nome ILIKE '%- SAC%' THEN 'SAC'
                     WHEN agente_nome ILIKE '%- BKO%' THEN 'BKO'
                     WHEN agente_nome ILIKE '%- SMS%' THEN 'SMS'
+                    WHEN agente_nome ILIKE '%- 48H%' THEN '48H'
                     ELSE 'OUTROS'
                 END AS equipe,
                 display_id,
@@ -1563,14 +1566,16 @@ app.get('/api/time48', async (req, res) => {
 
         const q = `
         WITH Etiquetas AS (
-            SELECT id FROM tags WHERE name ILIKE 'time-48h'
+            SELECT id FROM tags WHERE name ILIKE 'time-48h' OR name ILIKE 'painel-do-pedido'
         ),
         TargetConversations AS (
             SELECT c.id AS conv_id, c.display_id, c.contact_id, c.created_at, c.first_reply_created_at, c.assignee_id
             FROM conversations c
-            INNER JOIN taggings tg ON tg.taggable_id = c.id AND tg.taggable_type = 'Conversation'
-            WHERE tg.tag_id IN (SELECT id FROM Etiquetas)
-              AND c.account_id = 1
+            WHERE c.account_id = 1
+              AND c.id IN (
+                  SELECT tg.taggable_id FROM taggings tg
+                  WHERE tg.taggable_type = 'Conversation' AND tg.tag_id IN (SELECT id FROM Etiquetas)
+              )
               AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
         ),
@@ -1617,6 +1622,7 @@ app.get('/api/time48', async (req, res) => {
                 'tmc', ROUND(COALESCE(tmc_minutos, 0))
             ) ORDER BY interacoes_retorno DESC NULLS LAST) AS detalhes
         FROM MetricasAgente
+        WHERE agente ILIKE '%- 48H%'
         GROUP BY agente
         ORDER BY tickets DESC;
         `;
