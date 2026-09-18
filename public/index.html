@@ -683,7 +683,7 @@
             <!-- SUB-MENU CHATWOOT -->
             <div class="glass-panel bg-lightCard dark:bg-[#0a0f1c] border border-lightBorder dark:border-darkBorder rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-4 shadow-sm shrink-0">
                 <div class="flex items-center gap-2">
-                    <button id="btn-sub-cw-recorrencia" onclick="mudarSubAbaCw('recorrencia')" class="btn-setor btn-setor-ativo">📈 Evolução de Recorrência</button>
+                    <button id="btn-sub-cw-recorrencia" onclick="mudarSubAbaCw('recorrencia')" class="btn-setor btn-setor-ativo">📊 Cockpit do Atendimento</button>
                     <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
                     <button id="btn-sub-cw-tabulacao" onclick="mudarSubAbaCw('tabulacao')" class="btn-setor btn-setor-inativo">📦 Produtos Tabulados</button>
                     <button id="btn-sub-cw-mencoes" onclick="mudarSubAbaCw('mencoes')" class="btn-setor btn-setor-inativo">🔎 Radar de Menções (Fila)</button>
@@ -696,49 +696,18 @@
 
             <!-- TELA 1: RECORRÊNCIA -->
             <div id="tela-cw-recorrencia" class="block space-y-6">
-                <!-- CARDS DE MÉTRICAS MoM -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-5 shadow-sm">
-                        <h3 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total de Retornos (Mês Atual)</h3>
-                        <div class="flex items-end justify-between">
-                            <span class="text-3xl font-black text-gexCyan font-mono" id="cw-total-retornos">...</span>
-                            <div id="cw-mom-retornos"></div>
-                        </div>
-                    </div>
-                    <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-5 shadow-sm">
-                        <h3 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Clientes Únicos Recorrentes</h3>
-                        <div class="flex items-end justify-between">
-                            <span class="text-3xl font-black text-gray-800 dark:text-white font-mono" id="cw-clientes-unicos">...</span>
-                            <div id="cw-mom-unicos"></div>
-                        </div>
-                    </div>
-                    <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-5 shadow-sm">
-                        <h3 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Tempo Médio para Retornar</h3>
-                        <div class="flex items-end justify-between">
-                            <span class="text-3xl font-black text-gray-800 dark:text-white font-mono" id="cw-tempo-medio">...</span>
-                            <div id="cw-mom-tempo"></div>
-                        </div>
-                    </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Período</span>
+                    <div class="flex flex-wrap gap-1.5" id="resumo-periodo-btns"></div>
+                    <span class="text-[11px] text-gray-500 ml-1" id="resumo-periodo-lbl"></span>
                 </div>
-
-                <!-- TABELA DE EVOLUÇÃO HISTÓRICA -->
-                <div class="glass-panel bg-white dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[500px]">
-                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20 shrink-0">
-                        <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">📈 Evolução Histórica (Últimos 6 Meses)</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="resumo-kpis"></div>
+                <div class="glass-panel bg-white dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-lg">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20">
+                        <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">🗓️ Demanda por Dia da Semana × Hora</h3>
+                        <p class="text-[11px] text-gray-500 mt-1">Conversas criadas no período · quanto mais escuro, mais volume</p>
                     </div>
-                    <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
-                        <table class="w-full text-left border-separate min-w-[800px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white dark:bg-[#0a0f1c] z-10 shadow-sm">
-                                <tr class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                                    <th class="py-3 px-3 pl-4">Mês Base</th>
-                                    <th class="py-3 px-3 text-center">Volume de Retornos</th>
-                                    <th class="py-3 px-3 text-center">Clientes Envolvidos</th>
-                                    <th class="py-3 px-3 text-center text-gexCyan">Tempo Médio (Dias)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabela-recorrencia-body" class="text-sm"></tbody>
-                        </table>
-                    </div>
+                    <div class="p-4 overflow-x-auto custom-scrollbar" id="resumo-heatmap"></div>
                 </div>
             </div>
 
@@ -1971,54 +1940,92 @@
         // ==========================================
         // RECORRÊNCIA CHATWOOT E PRODUTOS
         // ==========================================
-        async function carregarRecorrencia() {
-            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
-            try {
-                const response = await fetch('/api/recorrencia');
-                const data = await response.json();
-                if (data.success && data.dados.length > 0) {
-                    const atual = data.dados[0];
-                    const anterior = data.dados[1] || { total_retornos: 0, clientes_unicos: 0, media_horas: 0 };
-                    
-                    const calcEvol = (vAtual, vAnt, isInverted = false) => {
-                        if (!vAnt || vAnt == 0) return '<span class="text-gray-500 text-[10px] font-bold uppercase">Sem base</span>';
-                        const diff = ((vAtual - vAnt) / vAnt) * 100;
-                        const isGood = isInverted ? diff < 0 : diff > 0;
-                        const color = isGood ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30' : 'text-red-500 bg-red-500/10 border-red-500/30';
-                        const icon = diff > 0 ? '▲' : '▼';
-                        return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border shadow-sm ${color}">${icon} ${Math.abs(diff).toFixed(1)}% vs Ant.</span>`;
-                    };
+        // ==========================================
+        // 📊 COCKPIT DO ATENDIMENTO (resumo executivo — admin)
+        // ==========================================
+        let periodoResumo = null, periodoResumoTipo = 'mes';
 
-                    document.getElementById('cw-total-retornos').innerText = atual.total_retornos;
-                    document.getElementById('cw-clientes-unicos').innerText = atual.clientes_unicos;
-                    document.getElementById('cw-tempo-medio').innerText = (atual.media_horas / 24).toFixed(1) + ' Dias';
+        function fmtTempoSeg(s){ if(s==null) return '—'; if(s<60) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; const h=Math.floor(s/3600), m=Math.round((s%3600)/60); return h+'h'+String(m).padStart(2,'0'); }
+        function sparkResumo(arr, cor){ if(!arr||arr.length<2) return ''; const mx=Math.max(...arr), mn=Math.min(...arr); const W=140,H=30; const y=v=>mx===mn?H/2:3+(mx-v)/(mx-mn)*(H-6); let p=''; arr.forEach((v,i)=>{p+=(i?'L':'M')+(i/(arr.length-1)*W).toFixed(1)+' '+y(v).toFixed(1)+' ';}); return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:30px;margin-top:6px"><path d="${p}L${W} ${H}L0 ${H}Z" fill="${cor}" opacity=".13"/><path d="${p}" fill="none" stroke="${cor}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`; }
 
-                    document.getElementById('cw-mom-retornos').innerHTML = calcEvol(atual.total_retornos, anterior.total_retornos);
-                    document.getElementById('cw-mom-unicos').innerHTML = calcEvol(atual.clientes_unicos, anterior.clientes_unicos);
-                    document.getElementById('cw-mom-tempo').innerHTML = calcEvol(atual.media_horas, anterior.media_horas, true);
-
-                    const tb = document.getElementById('tabela-recorrencia-body');
-                    const nomeMeses = { '01':'Jan', '02':'Fev', '03':'Mar', '04':'Abr', '05':'Mai', '06':'Jun', '07':'Jul', '08':'Ago', '09':'Set', '10':'Out', '11':'Nov', '12':'Dez' };
-
-                    tb.innerHTML = data.dados.map(d => {
-                        let mesStr = d.mes_retorno.split('-')[1];
-                        let anoStr = d.mes_retorno.split('-')[0];
-                        let mesFormatado = `${nomeMeses[mesStr]} / ${anoStr}`;
-                        let diasMedios = (d.media_horas / 24).toFixed(1);
-
-                        return `
-                        <tr class="ranking-row row-normal linha-animada">
-                            <td class="py-4 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap uppercase tracking-widest">${mesFormatado}</td>
-                            <td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px]">${d.total_retornos}</td>
-                            <td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px]">${d.clientes_unicos}</td>
-                            <td class="py-4 px-3 text-center font-mono font-black text-gexCyan text-[15px]">${diasMedios}</td>
-                        </tr>`;
-                    }).join('');
-                }
-            } catch (error) { console.error(error); }
+        function renderPeriodoResumoBtns() {
+            const el = document.getElementById('resumo-periodo-btns'); if (!el) return;
+            const opts = [['mes','Este Mês'],['7','Últimos 7 dias'],['30','Últimos 30 dias'],['mespassado','Mês Passado']];
+            el.innerHTML = opts.map(([t,l]) => `<button onclick="setPeriodoResumo('${t}')" class="btn-setor text-[11px] px-3 py-1 ${periodoResumoTipo===t?'btn-setor-ativo':'btn-setor-inativo'}">${l}</button>`).join('');
+        }
+        function setPeriodoResumo(tipo) {
+            periodoResumoTipo = tipo;
+            if (tipo === 'mes') { periodoResumo = null; carregarRecorrencia(); return; }
+            const hoje = new Date(); let ini, fim = new Date(hoje); fim.setHours(23,59,59,0);
+            if (tipo === '7') { ini = new Date(hoje); ini.setDate(hoje.getDate()-6); }
+            else if (tipo === '30') { ini = new Date(hoje); ini.setDate(hoje.getDate()-29); }
+            else if (tipo === 'mespassado') { ini = new Date(hoje.getFullYear(), hoje.getMonth()-1, 1); fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0); fim.setHours(23,59,59,0); }
+            ini.setHours(0,0,0,0);
+            periodoResumo = { since: Math.floor(ini.getTime()/1000), until: Math.floor(fim.getTime()/1000) };
+            carregarRecorrencia();
         }
 
-        let dadosProdutosGlobais = []; 
+        function renderHeatmapResumo(d) {
+            const el = document.getElementById('resumo-heatmap'); if (!el) return;
+            const M = Array.from({length:7},()=>new Array(24).fill(0));
+            (d.heatmap||[]).forEach(r => { if(r.dow>=0&&r.dow<7&&r.hora>=0&&r.hora<24) M[r.dow][r.hora]=r.n; });
+            const mx = Math.max(1, ...M.flat());
+            const SEM=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+            const cor = v => { if(!v) return 'background:rgba(148,163,184,.06);color:#64748b'; const t=v/mx; return `background:rgba(14,165,233,${(.14+t*.82).toFixed(2)});color:${t>.5?'#fff':'#94a3b8'}`; };
+            let g = '<div style="display:grid;grid-template-columns:34px repeat(24,1fr);gap:2px;font-size:9.5px;min-width:660px">';
+            g += '<div></div>'; for(let hr=0;hr<24;hr++) g+=`<div style="text-align:center;color:#64748b;font-weight:700">${hr}h</div>`;
+            for(const w of [1,2,3,4,5,6,0]) {
+                g += `<div style="color:#94a3b8;font-weight:700;display:flex;align-items:center">${SEM[w]}</div>`;
+                for(let hr=0;hr<24;hr++){ const v=M[w][hr]; g+=`<div title="${SEM[w]} ${hr}h: ${v} conversas" style="height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:600;${cor(v)}">${v>0?v:''}</div>`; }
+            }
+            el.innerHTML = g + '</div>';
+        }
+
+        function renderResumoCockpit(d) {
+            const fN = v => Math.round(v||0).toLocaleString('pt-BR');
+            const fP = v => (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+            const f1 = v => (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
+            const serieVol = (d.volume.por_dia||[]).map(x=>x.n);
+            const cards = [
+                {lbl:'Conversas no Período', val:fN(d.volume.total), sub:`Média ${fN(d.volume.media_dia)}/dia`, cor:'#0ea5e9', spark:serieVol},
+                {lbl:'SLA 1ª Resposta (Mediana)', val:fmtTempoSeg(d.sla_1a.mediana_s), sub:`Média ${fmtTempoSeg(d.sla_1a.media_s)}`, cor:'#fb923c'},
+                {lbl:'SLA Entre Respostas (Mediana)', val:fmtTempoSeg(d.sla_entre_s), sub:'Da 2ª resposta em diante', cor:'#7c3aed'},
+                {lbl:'Respondidas em Até 24h', val:fP(d.pct_24h), sub:`Em até 1h ${fP(d.pct_1h)}`, cor:'#15803d'},
+                {lbl:'Sem Nenhuma Resposta', val:fP(d.pct_sem_resposta), sub:`${fN(d.sem_resposta)} conversas`, cor:'#d97706'},
+                {lbl:'Fila Agora — Abertas', val:fN(d.fila.abertas), sub:`${fN(d.fila.sem_resposta)} nunca respondidas`, cor:'#db2777'},
+                {lbl:'Conversas por Agente/Dia', val:f1(d.produtividade), sub:'Humanos ativos no período', cor:'#14b8a6'},
+            ];
+            document.getElementById('resumo-kpis').innerHTML = cards.map(c => `
+                <div class="glass-panel bg-lightCard dark:bg-darkCard border border-lightBorder dark:border-darkBorder rounded-xl p-4 shadow-sm">
+                    <div class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">${c.lbl}</div>
+                    <div class="text-2xl font-black text-gray-800 dark:text-white font-mono mt-1">${c.val}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">${c.sub||''}</div>
+                    ${c.spark?sparkResumo(c.spark,c.cor):''}
+                </div>`).join('');
+            const lbl = document.getElementById('resumo-periodo-lbl');
+            if (lbl && d.periodo) lbl.textContent = `${d.periodo.ini} → ${d.periodo.fim} · ${d.dias} dias`;
+            renderHeatmapResumo(d);
+        }
+
+        async function carregarRecorrencia() {
+            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
+            renderPeriodoResumoBtns();
+            const kp = document.getElementById('resumo-kpis');
+            if (kp && !kp.innerHTML) kp.innerHTML = '<div class="text-gray-500 text-xs col-span-full py-4">⏳ Carregando resumo…</div>';
+            try {
+                let url = '/api/resumo-recorrencia';
+                if (periodoResumo) url += `?since=${periodoResumo.since}&until=${periodoResumo.until}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.success) renderResumoCockpit(data);
+                else if (kp) kp.innerHTML = `<div class="text-red-500 text-xs col-span-full py-4">⚠️ ${data.error||'Erro'}</div>`;
+            } catch (e) {
+                console.error(e);
+                if (kp) kp.innerHTML = '<div class="text-red-500 text-xs col-span-full py-4">⚠️ Erro de conexão.</div>';
+            }
+        }
+
+                let dadosProdutosGlobais = []; 
 
         async function carregarProdutosMetricas() {
             if(usuarioAtual && usuarioAtual.role !== 'admin') return;
