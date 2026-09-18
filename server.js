@@ -1522,7 +1522,7 @@ app.get('/api/time48', async (req, res) => {
             SELECT id FROM tags WHERE name ILIKE 'time-48h'
         ),
         TargetConversations AS (
-            SELECT c.id AS conv_id, c.created_at, c.first_reply_created_at, c.assignee_id
+            SELECT c.id AS conv_id, c.display_id, c.contact_id, c.created_at, c.first_reply_created_at, c.assignee_id
             FROM conversations c
             INNER JOIN taggings tg ON tg.taggable_id = c.id AND tg.taggable_type = 'Conversation'
             WHERE tg.tag_id IN (SELECT id FROM Etiquetas)
@@ -1543,6 +1543,8 @@ app.get('/api/time48', async (req, res) => {
         MetricasAgente AS (
             SELECT 
                 tc.conv_id,
+                tc.display_id,
+                ct.name AS cliente,
                 COALESCE(u.name, 'SEM ATRIBUIR') AS agente,
                 EXTRACT(EPOCH FROM (tc.first_reply_created_at - tc.created_at))/60 AS tmc_minutos,
                 (SELECT COUNT(*) FROM Mensagens m2 WHERE m2.conversation_id = tc.conv_id AND m2.message_type = 1) AS qtd_msgs_agente,
@@ -1554,6 +1556,7 @@ app.get('/api/time48', async (req, res) => {
                 ) AS tmr_minutos
             FROM TargetConversations tc
             LEFT JOIN users u ON u.id = tc.assignee_id
+            LEFT JOIN contacts ct ON ct.id = tc.contact_id
         )
         SELECT 
             agente,
@@ -1562,7 +1565,13 @@ app.get('/api/time48', async (req, res) => {
             COALESCE(SUM(CASE WHEN interacoes_retorno > 0 THEN 1 ELSE 0 END), 0) AS retornos,
             COALESCE(SUM(qtd_msgs_agente), 0) AS mensagens,
             COALESCE(AVG(tmc_minutos), 0) AS tmc_medio_minutos,
-            COALESCE(AVG(tmr_minutos), 0) AS tmr_medio_minutos
+            COALESCE(AVG(tmr_minutos), 0) AS tmr_medio_minutos,
+            json_agg(json_build_object(
+                'id', display_id,
+                'cliente', COALESCE(cliente, 'Cliente sem nome'),
+                'retornos', interacoes_retorno,
+                'tmc', ROUND(COALESCE(tmc_minutos, 0))
+            ) ORDER BY interacoes_retorno DESC NULLS LAST) AS detalhes
         FROM MetricasAgente
         GROUP BY agente
         ORDER BY tickets DESC;
