@@ -2606,11 +2606,11 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
                                     // diferença ~0 = botão "Até a próxima resposta"
                                     textAdiado = `⏳ ATÉ A PRÓXIMA RESPOSTA`;
                                 }
-                            } else if (Number(ev.status_conv) === 3) {
-                                // conversa AINDA adiada + snooze nulo = agente escolheu "Até a próxima resposta"
+                            } else if (ev.snooze_tipo === 'proxima' || Number(ev.status_conv) === 3) {
+                                // "Até a próxima resposta" (detectado pela captura ou pelo status atual)
                                 textAdiado = `⏳ ATÉ A PRÓXIMA RESPOSTA`;
                             } else {
-                                // conversa já reaberta/resolvida: o Chatwoot zerou o snooze e não registra a escolha
+                                // reaberta e sem registro de captura: escolha não recuperável
                                 textAdiado = `⏳ ADIADO (reaberto — não registrado)`;
                             }
                             
