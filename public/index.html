@@ -2547,6 +2547,13 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
 
         async function carregarMonitoriaTk(parametrosUrl = '') {
             if(usuarioAtual && usuarioAtual.role !== 'admin') return;
+
+            // 🔥 Padrão: DIA ATUAL (se não veio período do calendário). Calendário continua pra período maior.
+            if (!parametrosUrl) {
+                const ini = new Date(); ini.setHours(0, 0, 0, 0);
+                const fim = new Date(); fim.setHours(23, 59, 59, 0);
+                parametrosUrl = `?since=${Math.floor(ini.getTime() / 1000)}&until=${Math.floor(fim.getTime() / 1000)}`;
+            }
             
             const tb = document.getElementById('tabela-monitoriatk-body');
             const btnSync = document.getElementById('btn-aplicar-montk');
