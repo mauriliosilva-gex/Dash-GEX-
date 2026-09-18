@@ -289,6 +289,7 @@
                                 <button onclick="filtrarTkAtual('SAC')" id="btn-f-tk-atual-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarTkAtual('BKO')" id="btn-f-tk-atual-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarTkAtual('SMS')" id="btn-f-tk-atual-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="exportarTicketsAtual()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
                         <div class="flex gap-2">
@@ -336,6 +337,7 @@
                                 <button onclick="filtrarTkSemanal('SAC')" id="btn-f-tk-sem-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarTkSemanal('BKO')" id="btn-f-tk-sem-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarTkSemanal('SMS')" id="btn-f-tk-sem-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="exportarVisaoMensal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
                         <div id="botoes-semanas-container" class="flex flex-wrap gap-2"></div>
@@ -370,6 +372,7 @@
                             <button onclick="filtrarTkGeral('SAC')" id="btn-f-tk-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                             <button onclick="filtrarTkGeral('BKO')" id="btn-f-tk-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                             <button onclick="filtrarTkGeral('SMS')" id="btn-f-tk-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="exportarTicketsGeral()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                         </div>
                         <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
                             <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
@@ -399,6 +402,7 @@
                                 <button onclick="filtrarCasos('SAC')" id="btn-f-casos-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarCasos('BKO')" id="btn-f-casos-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarCasos('SMS')" id="btn-f-casos-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="exportarStatusCasos()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
                         <button onclick="carregarDistribuicao()" class="bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
@@ -441,6 +445,7 @@
                                 <button onclick="filtrarDistribuicao('SAC')" id="btn-f-dist-SAC" class="btn-setor btn-setor-inativo">SAC</button>
                                 <button onclick="filtrarDistribuicao('BKO')" id="btn-f-dist-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button onclick="filtrarDistribuicao('SMS')" id="btn-f-dist-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="exportarDistribuicao()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
                         <button onclick="carregarDistribuicao()" class="bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
@@ -1627,6 +1632,100 @@
         }
 
         function fecharModalPausas() { document.getElementById('modal-pausas').classList.add('hidden'); }
+
+        // 📥 Helper genérico de export Excel (usado pelas abas de Tickets)
+        async function baixarExcelGEX(nomeArquivo, colunas, linhas) {
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Dados', { views: [{ state: 'frozen', ySplit: 1 }] });
+            sheet.columns = colunas;
+            sheet.getRow(1).eachCell(cell => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } };
+                cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            });
+            linhas.forEach(l => sheet.addRow(l));
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${nomeArquivo}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        function exportarTicketsAtual() {
+            let l = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
+            if (!l || l.length === 0) return alert('Sem dados para exportar.');
+            const cols = [{ header: 'Analista', key: 'nome', width: 32 },
+                { header: 'Seg', key: 'seg', width: 8 }, { header: 'Ter', key: 'ter', width: 8 },
+                { header: 'Qua', key: 'qua', width: 8 }, { header: 'Qui', key: 'qui', width: 8 },
+                { header: 'Sex', key: 'sex', width: 8 }, { header: 'Sáb', key: 'sab', width: 8 },
+                { header: 'Dom', key: 'dom', width: 8 }, { header: 'Total', key: 'total', width: 10 },
+                { header: 'Meta %', key: 'meta', width: 10 }];
+            const linhas = l.map(a => ({ nome: a.nome, seg: a.seg||0, ter: a.ter||0, qua: a.qua||0, qui: a.qui||0, sex: a.sex||0, sab: a.sab||0, dom: a.dom||0, total: a.total||0, meta: (a.meta||0)+'%' }));
+            baixarExcelGEX('Tickets_Atual', cols, linhas);
+        }
+
+        function exportarVisaoMensal() {
+            let l = filtroTkSemanalSetor === 'TODOS' ? dadosTkSemanal : dadosTkSemanal.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
+            if (!l || l.length === 0) return alert('Sem dados para exportar.');
+            const cols = [{ header: 'Analista', key: 'nome', width: 32 },
+                { header: 'Seg', key: 'seg', width: 8 }, { header: 'Ter', key: 'ter', width: 8 },
+                { header: 'Qua', key: 'qua', width: 8 }, { header: 'Qui', key: 'qui', width: 8 },
+                { header: 'Sex', key: 'sex', width: 8 }, { header: 'Sáb', key: 'sab', width: 8 },
+                { header: 'Dom', key: 'dom', width: 8 }, { header: 'Total', key: 'total', width: 10 },
+                { header: 'Média/Dia', key: 'media', width: 12 }];
+            const linhas = l.map(a => ({ nome: a.nome, seg: a.seg||0, ter: a.ter||0, qua: a.qua||0, qui: a.qui||0, sex: a.sex||0, sab: a.sab||0, dom: a.dom||0, total: a.total||0, media: ((a.total||0)/(diasFiltroSemanal||7)).toFixed(1) }));
+            baixarExcelGEX('Visao_Mensal', cols, linhas);
+        }
+
+        function exportarTicketsGeral() {
+            let l = filtroTkGeralSetor === 'TODOS' ? dadosTkGeral : dadosTkGeral.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
+            if (!l || l.length === 0) return alert('Sem dados para exportar.');
+            const nSem = (l[0].semanas || []).length;
+            const cols = [{ header: 'Analista', key: 'nome', width: 32 }];
+            for (let i = 0; i < nSem; i++) cols.push({ header: `Semana ${i + 1}`, key: `s${i}`, width: 11 });
+            cols.push({ header: 'Total', key: 'total', width: 10 }, { header: 'Meta %', key: 'meta', width: 10 });
+            const linhas = l.map(a => {
+                const row = { nome: a.nome };
+                for (let i = 0; i < nSem; i++) row[`s${i}`] = (a.semanas && a.semanas[i]) || 0;
+                row.total = a.total || 0; row.meta = (a.meta || 0) + '%';
+                return row;
+            });
+            baixarExcelGEX('Tickets_Geral', cols, linhas);
+        }
+
+        function exportarStatusCasos() {
+            if (!dadosDistribuicao || !dadosDistribuicao.casos) return alert('Sem dados para exportar.');
+            let l = filtroCasosSetor === 'TODOS' ? dadosDistribuicao.casos : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroCasosSetor}`));
+            if (l.length === 0) return alert('Sem dados para exportar.');
+            const cols = [{ header: 'Agente', key: 'nome', width: 32 },
+                { header: 'Ignorado', key: 'ignorado', width: 12 },
+                { header: 'Aguardando', key: 'aguardando', width: 12 },
+                { header: 'Parado (>48h)', key: 'parado', width: 14 },
+                { header: 'Em Andamento', key: 'andamento', width: 14 },
+                { header: 'Total', key: 'total', width: 10 }];
+            const linhas = l.map(a => ({ nome: a.nome, ignorado: a.ignorado||0, aguardando: a.aguardando||0, parado: a.parado||0, andamento: a.andamento||0, total: a.total||0 }));
+            baixarExcelGEX('Status_de_Casos', cols, linhas);
+        }
+
+        function exportarDistribuicao() {
+            if (!dadosDistribuicao || !dadosDistribuicao.distribuicao) return alert('Sem dados para exportar.');
+            let l = filtroDistSetor === 'TODOS' ? dadosDistribuicao.distribuicao : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
+            if (l.length === 0) return alert('Sem dados para exportar.');
+            const caixas = dadosDistribuicao.caixas || [];
+            const cols = [{ header: 'Agente', key: 'nome', width: 32 }];
+            caixas.forEach((c, i) => cols.push({ header: c, key: `c${i}`, width: 16 }));
+            cols.push({ header: 'Total', key: 'total', width: 10 });
+            const linhas = l.map(a => {
+                const row = { nome: a.nome };
+                caixas.forEach((c, i) => row[`c${i}`] = a[c] || 0);
+                row.total = a.total || 0;
+                return row;
+            });
+            baixarExcelGEX('Distribuicao_Times', cols, linhas);
+        }
 
         async function exportarExcelProdutividade() {
             const btn = document.getElementById('btn-exportar-excel');
