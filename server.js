@@ -754,6 +754,7 @@ app.get('/api/distribuicao', async (req, res) => {
             LEFT JOIN users u ON u.id = c.assignee_id
             LEFT JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.status = 0 
+              AND c.account_id = 1
             GROUP BY u.name, i.name
         `;
         const resultDist = await pool.query(qDist);
@@ -778,7 +779,7 @@ app.get('/api/distribuicao', async (req, res) => {
             WITH OpenConversations AS (
                 SELECT id, display_id, assignee_id, contact_id, first_reply_created_at, last_activity_at
                 FROM conversations
-                WHERE status = 0
+                WHERE status = 0 AND account_id = 1
             ),
             LastMessages AS (
                 SELECT DISTINCT ON (conversation_id) conversation_id, message_type
