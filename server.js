@@ -250,7 +250,7 @@ app.post('/hook/snooze/:token', express.json({ limit: '3mb' }), async (req, res)
         const snoozedUntil = conv.snoozed_until != null ? conv.snoozed_until
             : (body.snoozed_until != null ? body.snoozed_until
             : (conv.additional_attributes && conv.additional_attributes.snoozed_until) || null);
-        if (String(status) !== 'snoozed' || !snoozedUntil) return; // só grava adiamento COM tempo
+        if (String(status) !== 'snoozed') return; // grava TODO adiamento (com tempo OU 'até a próxima resposta')
 
         const convId = conv.id || body.id || '';
         const displayId = conv.display_id || body.display_id || '';
@@ -262,7 +262,7 @@ app.post('/hook/snooze/:token', express.json({ limit: '3mb' }), async (req, res)
         await sheets.spreadsheets.values.append({
             spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A:F`,
             valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
-            requestBody: { values: [[new Date().toISOString(), String(convId), String(displayId), String(snoozedUntil), String(agente), String(status)]] }
+            requestBody: { values: [[new Date().toISOString(), String(convId), String(displayId), (snoozedUntil ? String(snoozedUntil) : ''), String(agente), String(status)]] }
         });
     } catch (e) {
         console.error('[snooze-hook] falha ao gravar no Sheets:', e.message);
@@ -1350,6 +1350,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
             json_agg(
                 json_build_object(
                     'id', display_id,
+                    'conversation_id', conversation_id,
                     'adiados', qtd_adiado,
                     'resolvidos', qtd_resolvido,
                     'eventos', eventos
@@ -1361,6 +1362,39 @@ app.get('/api/qualidade-tickets', async (req, res) => {
         ORDER BY total_alterados DESC;
         `;
         const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
+
+        // 🅱️ ENRIQUECER com o snooze capturado (planilha) — recupera a escolha até em conversas reabertas
+        try {
+            const sheetsLog = getSheetsRW();
+            const rlog = await sheetsLog.spreadsheets.values.get({ spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A2:F100000` });
+            const snoozeMap = {};
+            for (const row of (rlog.data.values || [])) {
+                const convId = row[1]; if (!convId) continue;
+                const ts = new Date(row[0]).getTime();
+                const until = (row[3] && String(row[3]).trim()) ? String(row[3]).trim() : null;
+                (snoozeMap[String(convId)] = snoozeMap[String(convId)] || []).push({ ts, until });
+            }
+            const JANELA = 30 * 60 * 1000; // 30 min de tolerância entre o evento e a captura
+            for (const linha of result.rows) {
+                for (const d of (linha.detalhes || [])) {
+                    const capturas = snoozeMap[String(d.conversation_id)] || [];
+                    for (const ev of (d.eventos || [])) {
+                        if (!((ev.texto || '').toLowerCase().includes('adiad'))) continue;
+                        if (ev.snooze) { ev.snooze_tipo = 'timed'; continue; } // já tem tempo vivo
+                        const tEv = new Date(ev.data).getTime();
+                        let melhor = null, melhorDif = Infinity;
+                        for (const c of capturas) { const dif = Math.abs(c.ts - tEv); if (dif < melhorDif) { melhorDif = dif; melhor = c; } }
+                        if (melhor && melhorDif <= JANELA) {
+                            if (melhor.until) { ev.snooze = melhor.until; ev.snooze_tipo = 'timed'; }
+                            else { ev.snooze_tipo = 'proxima'; }
+                        } else {
+                            ev.snooze_tipo = (Number(ev.status_conv) === 3) ? 'proxima' : 'desconhecido';
+                        }
+                    }
+                }
+            }
+        } catch (e) { console.error('[qualidade] enriquecer snooze falhou:', e.message); }
+
         res.json({ success: true, dados: result.rows });
     } catch (error) { 
         console.error("Erro Rota Monitoria:", error);
