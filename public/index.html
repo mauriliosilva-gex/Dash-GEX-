@@ -913,6 +913,7 @@
                                     <th class="py-3 px-3 text-center">Mensagens Enviadas</th>
                                     <th class="py-3 px-3 text-center text-emerald-500">TMC (1º Contato)</th>
                                     <th class="py-3 px-3 text-center text-gexCyan">TMR (Média de Retorno)</th>
+                                    <th class="py-3 px-3 text-center">Ação</th>
                                 </tr>
                             </thead>
                             <tbody id="tabela-time48-body" class="text-sm"></tbody>
@@ -1960,6 +1961,82 @@
             if (modal) modal.classList.add('hidden'); 
         }
 
+        function abrirModalTime48(nomeAgente) {
+            let item = (dadosTime48 || []).find(c => c.agente === nomeAgente);
+            if (!item) return;
+
+            if (!document.getElementById('modal-time48')) {
+                const modalHTML = `
+                <div id="modal-time48" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+                        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                            <div>
+                                <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-time48-titulo">Tickets Time 48h</h3>
+                                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Conversas com a etiqueta time-48h deste analista</p>
+                            </div>
+                            <button onclick="fecharModalTime48()" class="text-gray-500 hover:text-red-500 transition-colors">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                        <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-3" id="modal-time48-conteudo"></div>
+                    </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+            }
+
+            document.getElementById('modal-time48-titulo').innerText = `Time 48h — ${item.agente}`;
+
+            let html = '<div class="space-y-3">';
+            let tickets = (item.detalhes && Array.isArray(item.detalhes)) ? item.detalhes.filter(t => t && t.id) : [];
+            if (tickets.length > 0) {
+                tickets.sort((a, b) => (b.retornos || 0) - (a.retornos || 0));
+                let displayTks = tickets.slice(0, 300);
+                if (tickets.length > 300) {
+                    html += `<div class="bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 p-3 rounded-lg text-xs font-bold text-center border border-yellow-500/30 shadow-sm">Exibindo os 300 tickets com mais retornos.</div>`;
+                }
+                displayTks.forEach(tk => {
+                    const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
+                    const rets = parseInt(tk.retornos) || 0;
+                    const corStatus = rets > 0 ? 'bg-orange-500/10 text-orange-500 border border-orange-500/30 font-bold' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 font-bold';
+                    const statusTxt = rets > 0 ? `🔁 Retornou ${rets}x` : '✅ Sem retorno';
+                    html += `
+                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                            <p class="text-sm font-black text-gray-800 dark:text-white">${tk.cliente || 'Cliente sem nome'}</p>
+                            <p class="text-[10px] font-bold text-gray-500 mt-1">👤 ${item.agente}</p>
+                            <div class="flex flex-wrap items-center gap-2 mt-2">
+                                <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
+                                <span class="text-[10px] px-2 py-0.5 rounded ${corStatus}">${statusTxt}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 font-bold">⏱️ TMC ${formatarTempo(tk.tmc)}</span>
+                            </div>
+                        </div>
+                        <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">Abrir Conversa ↗️</a>
+                    </div>`;
+                });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket time-48h para este analista no período.</p>';
+            }
+            html += '</div>';
+
+            const conteudoEl = document.getElementById('modal-time48-conteudo');
+            if (conteudoEl) conteudoEl.innerHTML = html;
+            const modalEl = document.getElementById('modal-time48');
+            if (modalEl) modalEl.classList.remove('hidden');
+        }
+
+        function fecharModalTime48() {
+            const modal = document.getElementById('modal-time48');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        // ⌨️ ESC fecha qualquer modal aberto (overlays em tela cheia)
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            document.querySelectorAll('[id^="modal-"]').forEach(m => {
+                if (m.classList && m.classList.contains('fixed')) m.classList.add('hidden');
+            });
+        });
+
         async function exportarExcelProdutos() {
             if (!dadosProdutosGlobais || dadosProdutosGlobais.length === 0) return alert("Sem dados para exportar.");
             
@@ -2672,7 +2749,7 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
             
             try {
                 if(btnSync) btnSync.innerHTML = '⏳';
-                if(tb) tb.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando métricas...</td></tr>`;
+                if(tb) tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando métricas...</td></tr>`;
                 
                 const response = await fetch('/api/time48' + parametrosUrl);
                 const data = await response.json();
@@ -2681,11 +2758,11 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
                     dadosTime48 = data.dados || [];
                     renderTabelaTime48();
                 } else {
-                    if(tb) tb.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
+                    if(tb) tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
                 }
                 if(btnSync) btnSync.innerHTML = 'Buscar';
             } catch (error) { 
-                if(tb) tb.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de API.</td></tr>`;
+                if(tb) tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de API.</td></tr>`;
                 if(btnSync) btnSync.innerHTML = 'Buscar';
             }
         }
@@ -2695,7 +2772,7 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
             if(!tb) return;
 
             if (dadosTime48.length === 0) {
-                tb.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum ticket da etiqueta time-48h no período.</td></tr>`;
+                tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum ticket da etiqueta time-48h no período.</td></tr>`;
                 document.getElementById('card-t48-tickets').innerText = '0';
                 document.getElementById('card-t48-retornos').innerText = '0';
                 document.getElementById('card-t48-tx-retorno').innerText = '0%';
@@ -2731,6 +2808,9 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
                     <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${d.mensagens}</td>
                     <td class="py-4 px-3 text-center font-mono text-[14px] text-emerald-500">${formatarTempo(d.tmc_medio_minutos)}</td>
                     <td class="py-4 px-3 text-center font-mono text-[14px] text-gexCyan">${formatarTempo(d.tmr_medio_minutos)}</td>
+                    <td class="py-4 px-3 text-center">
+                        <button onclick="abrirModalTime48('${d.agente}')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap">Ver Tickets</button>
+                    </td>
                 </tr>`;
             }).join('');
 
