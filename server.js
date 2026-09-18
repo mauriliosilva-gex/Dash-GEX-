@@ -1892,32 +1892,34 @@ app.get('/api/resumo-recorrencia', async (req, res) => {
         const P = [ini, fim];
         const roda = async (sql, params = P) => { try { return (await pool.query(sql, params)).rows; } catch (e) { console.error('[resumo]', e.message); return null; } };
         const JAN = "created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'";
+        // 🔥 Só Casos Reais: fora Spam, Duplicado, Redirecionamento ClickBank e Automação ClickBank (igual ao Cockpit)
+        const JUNK = "(SELECT tg.taggable_id FROM taggings tg JOIN tags t ON t.id = tg.tag_id WHERE tg.taggable_type = 'Conversation' AND lower(t.name) IN ('spam','duplicado','redirecionamento-clickbank','automacao-clickbank'))";
 
         const [cont, sla, porDia, fila, entre, prod, heat] = await Promise.all([
             roda(`SELECT COUNT(*) AS total,
                      COUNT(*) FILTER (WHERE first_reply_created_at IS NOT NULL) AS com_resp,
                      COUNT(*) FILTER (WHERE first_reply_created_at IS NOT NULL AND first_reply_created_at - created_at <= interval '24 hours') AS ate24,
                      COUNT(*) FILTER (WHERE first_reply_created_at IS NOT NULL AND first_reply_created_at - created_at <= interval '1 hour') AS ate1
-                   FROM conversations WHERE account_id = 1 AND ${JAN}`),
+                   FROM conversations WHERE account_id = 1 AND id NOT IN ${JUNK} AND ${JAN}`),
             roda(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (first_reply_created_at - created_at))) AS med,
                      AVG(EXTRACT(EPOCH FROM (first_reply_created_at - created_at))) AS media
-                   FROM conversations WHERE account_id = 1 AND first_reply_created_at IS NOT NULL AND ${JAN}`),
+                   FROM conversations WHERE account_id = 1 AND first_reply_created_at IS NOT NULL AND id NOT IN ${JUNK} AND ${JAN}`),
             roda(`SELECT DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS dia, COUNT(*) AS n
-                   FROM conversations WHERE account_id = 1 AND ${JAN} GROUP BY 1 ORDER BY 1`),
+                   FROM conversations WHERE account_id = 1 AND id NOT IN ${JUNK} AND ${JAN} GROUP BY 1 ORDER BY 1`),
             roda(`SELECT COUNT(*) FILTER (WHERE status = 0) AS abertas,
                      COUNT(*) FILTER (WHERE status = 0 AND first_reply_created_at IS NULL) AS sem_resp
-                   FROM conversations WHERE account_id = 1`, []),
+                   FROM conversations WHERE account_id = 1 AND id NOT IN ${JUNK}`, []),
             roda(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY value) AS med
-                   FROM reporting_events WHERE account_id = 1 AND name = 'reply_time' AND ${JAN}`),
+                   FROM reporting_events WHERE account_id = 1 AND name = 'reply_time' AND conversation_id NOT IN ${JUNK} AND ${JAN}`),
             roda(`WITH atv AS (
                      SELECT DISTINCT m.sender_id AS ag, DATE(m.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS dia, m.conversation_id AS conv
                      FROM messages m
                      WHERE m.sender_type = 'User' AND m.message_type = 1 AND m.private = FALSE AND m.account_id = 1
-                       AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE AND m.${JAN}
+                       AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE AND m.conversation_id NOT IN ${JUNK} AND m.${JAN}
                    ) SELECT COUNT(*) AS conv_dias, COUNT(DISTINCT (ag::text || ':' || dia)) AS ag_dias FROM atv`),
             roda(`SELECT EXTRACT(DOW FROM created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::int AS dow,
                      EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::int AS hora, COUNT(*) AS n
-                   FROM conversations WHERE account_id = 1 AND ${JAN} GROUP BY 1, 2`)
+                   FROM conversations WHERE account_id = 1 AND id NOT IN ${JUNK} AND ${JAN} GROUP BY 1, 2`)
         ]);
 
         const c = (cont && cont[0]) || {}, s = (sla && sla[0]) || {}, f = (fila && fila[0]) || {}, pr = (prod && prod[0]) || {};
