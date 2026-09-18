@@ -1061,6 +1061,11 @@
                 const btnAbaChatwoot = document.getElementById('tab-btn-chatwoot');
                 if (btnAbaChatwoot) btnAbaChatwoot.style.display = 'none';
             }
+
+            // 🔒 Baixar Excel: só ADMIN (esconde todos os botões de exportar)
+            if (!usuarioAtual || usuarioAtual.role !== 'admin') {
+                document.querySelectorAll('button[onclick^="exportar"]').forEach(b => b.style.display = 'none');
+            }
         }
 
         // 🌙 MOTOR DO MODO ESCURO/CLARO
@@ -1818,6 +1823,7 @@
 
         // 📥 Helper genérico de export Excel (usado pelas abas de Tickets)
         async function baixarExcelGEX(nomeArquivo, colunas, linhas) {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Dados', { views: [{ state: 'frozen', ySplit: 1 }] });
             sheet.columns = colunas;
@@ -1911,6 +1917,7 @@
         }
 
         async function exportarExcelProdutividade() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
             const btn = document.getElementById('btn-exportar-excel');
             btn.innerHTML = '⏳ Gerando...';
             try {
@@ -2320,6 +2327,7 @@
         });
 
         async function exportarExcelProdutos() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
             if (!dadosProdutosGlobais || dadosProdutosGlobais.length === 0) return alert("Sem dados para exportar.");
             
             const btn = document.getElementById('btn-exportar-produtos');
@@ -2599,6 +2607,7 @@
         }
 
         async function exportarExcelMencoes() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
         const btn = document.getElementById('btn-exportar-mencoes');
         const originalText = btn.innerHTML;
         btn.innerHTML = '⏳ Gerando...';
@@ -3114,6 +3123,7 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
 
         // 🔥 GERADOR DE EXCEL DO TIME 48 HORAS
         async function exportarExcelTime48() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
             if (dadosTime48.length === 0) return alert("Não há dados para exportar.");
             
             const btn = document.getElementById('btn-exportar-time48');
