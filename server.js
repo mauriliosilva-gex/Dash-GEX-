@@ -1871,6 +1871,77 @@ app.get('/api/raio-x-webhook', async (req, res) => {
     res.send(html);
 });
 
+
+// ==========================================
+// 20. 📊 RESUMO EXECUTIVO (estilo Cockpit) p/ Evolução de Recorrência — SOMENTE ADMIN
+// ==========================================
+app.get('/api/resumo-recorrencia', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    if (!adms.includes(emailUser)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+
+    try {
+        let ini, fim;
+        if (req.query.since && req.query.until) {
+            ini = unixParaYYYYMMDD(req.query.since); fim = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1));
+            fim = formatarDataSQL(agora);
+        }
+        const P = [ini, fim];
+        const roda = async (sql, params = P) => { try { return (await pool.query(sql, params)).rows; } catch (e) { console.error('[resumo]', e.message); return null; } };
+        const JAN = "created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'";
+
+        const [cont, sla, porDia, fila, entre, prod, heat] = await Promise.all([
+            roda(`SELECT COUNT(*) AS total,
+                     COUNT(*) FILTER (WHERE first_reply_created_at IS NOT NULL) AS com_resp,
+                     COUNT(*) FILTER (WHERE first_reply_created_at IS NOT NULL AND first_reply_created_at - created_at <= interval '24 hours') AS ate24,
+                     COUNT(*) FILTER (WHERE first_reply_created_at IS NOT NULL AND first_reply_created_at - created_at <= interval '1 hour') AS ate1
+                   FROM conversations WHERE account_id = 1 AND ${JAN}`),
+            roda(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (first_reply_created_at - created_at))) AS med,
+                     AVG(EXTRACT(EPOCH FROM (first_reply_created_at - created_at))) AS media
+                   FROM conversations WHERE account_id = 1 AND first_reply_created_at IS NOT NULL AND ${JAN}`),
+            roda(`SELECT DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS dia, COUNT(*) AS n
+                   FROM conversations WHERE account_id = 1 AND ${JAN} GROUP BY 1 ORDER BY 1`),
+            roda(`SELECT COUNT(*) FILTER (WHERE status = 0) AS abertas,
+                     COUNT(*) FILTER (WHERE status = 0 AND first_reply_created_at IS NULL) AS sem_resp
+                   FROM conversations WHERE account_id = 1`, []),
+            roda(`SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY value) AS med
+                   FROM reporting_events WHERE account_id = 1 AND name = 'reply_time' AND ${JAN}`),
+            roda(`WITH atv AS (
+                     SELECT DISTINCT m.sender_id AS ag, DATE(m.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS dia, m.conversation_id AS conv
+                     FROM messages m
+                     WHERE m.sender_type = 'User' AND m.message_type = 1 AND m.private = FALSE AND m.account_id = 1
+                       AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE AND m.${JAN}
+                   ) SELECT COUNT(*) AS conv_dias, COUNT(DISTINCT (ag::text || ':' || dia)) AS ag_dias FROM atv`),
+            roda(`SELECT EXTRACT(DOW FROM created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::int AS dow,
+                     EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::int AS hora, COUNT(*) AS n
+                   FROM conversations WHERE account_id = 1 AND ${JAN} GROUP BY 1, 2`)
+        ]);
+
+        const c = (cont && cont[0]) || {}, s = (sla && sla[0]) || {}, f = (fila && fila[0]) || {}, pr = (prod && prod[0]) || {};
+        const total = parseInt(c.total) || 0, comResp = parseInt(c.com_resp) || 0;
+        const convDias = parseInt(pr.conv_dias) || 0, agDias = parseInt(pr.ag_dias) || 0;
+        const nDias = (porDia || []).length || 1;
+
+        res.json({
+            success: true, periodo: { ini, fim }, dias: nDias,
+            volume: { total, media_dia: total / nDias, por_dia: (porDia || []).map(r => ({ dia: r.dia, n: parseInt(r.n) || 0 })) },
+            sla_1a: { mediana_s: s.med != null ? Math.round(s.med) : null, media_s: s.media != null ? Math.round(s.media) : null },
+            pct_24h: total ? (parseInt(c.ate24) || 0) / total * 100 : 0,
+            pct_1h: total ? (parseInt(c.ate1) || 0) / total * 100 : 0,
+            sem_resposta: total - comResp,
+            pct_sem_resposta: total ? (total - comResp) / total * 100 : 0,
+            sla_entre_s: (entre && entre[0] && entre[0].med != null) ? Math.round(entre[0].med) : null,
+            fila: { abertas: parseInt(f.abertas) || 0, sem_resposta: parseInt(f.sem_resp) || 0 },
+            produtividade: agDias ? convDias / agDias : 0,
+            heatmap: (heat || []).map(r => ({ dow: parseInt(r.dow), hora: parseInt(r.hora), n: parseInt(r.n) || 0 }))
+        });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
+
 app.listen(PORT, () => {
     console.log(`✅ Servidor rodando na porta ${PORT}`);
 });
