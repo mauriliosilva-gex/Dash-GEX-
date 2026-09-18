@@ -2633,7 +2633,7 @@ function fecharModalPagAmerican() { document.getElementById('modal-pagamerican')
                     <div class="p-4 space-y-2">`;
                     
                 conversa.eventos.forEach(ev => {
-                    const dataHora = new Date(ev.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute:'2-digit' });
+                    const dataHora = new Date(ev.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute:'2-digit', timeZone: 'America/Sao_Paulo' });
                     
                     let tipoVisual = '', badgeExtra = '';
                     let textoAcao = ev.texto || 'Ação do Sistema';
