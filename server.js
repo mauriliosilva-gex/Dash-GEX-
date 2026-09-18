@@ -321,53 +321,7 @@ const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas) => {
 app.get('/api/retencao', async (req, res) => {
     try {
         const agoraBR = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-        
-        // ⚠️ ATUALIZAÇÃO MANUAL MENSAL AQUI:
         const anoPlanilha = 2026;
-        const mesPlanilha = 8; // 7 = Agosto (Lembrete: 0=Jan, 1=Fev ... 7=Ago, 8=Set)
-        const nomeAba = "📊 Análise | Metas | Setembro"; // Nome exato da aba na planilha
-        
-        const diasNoMesPlanilha = new Date(anoPlanilha, mesPlanilha + 1, 0).getDate(); 
-        const dInicioMes = new Date(anoPlanilha, mesPlanilha, 1);
-        const dFimMes = new Date(anoPlanilha, mesPlanilha + 1, 0);
-
-        let dInicioGraf, dFimGraf;
-        if (req.query.since && req.query.until) {
-            dInicioGraf = new Date(parseInt(req.query.since) * 1000);
-            dFimGraf = new Date(parseInt(req.query.until) * 1000);
-        } else {
-            const qtdMeses = req.query.meses ? parseInt(req.query.meses) : 2;
-            dInicioGraf = new Date(anoPlanilha, mesPlanilha - (qtdMeses - 1), 1);
-            dFimGraf = new Date(anoPlanilha, mesPlanilha + 1, 0); 
-        }
-
-        const domingoBase = new Date(dInicioGraf.getTime());
-        domingoBase.setUTCDate(dInicioGraf.getUTCDate() - dInicioGraf.getUTCDay());
-        const diffMsTotal = dFimGraf.getTime() - domingoBase.getTime();
-        const totalSemanas = Math.max(1, Math.floor((diffMsTotal / (1000 * 60 * 60 * 24)) / 7) + 1);
-
-        const [resultTicketsMes, resultTicketsGraf] = await Promise.all([
-            pool.query(queryTickets, [formatarDataSQL(dInicioMes), formatarDataSQL(dFimMes)]),
-            pool.query(queryTickets, [formatarDataSQL(dInicioGraf), formatarDataSQL(dFimGraf)])
-        ]);
-
-        const ticketsMap = {};
-        resultTicketsMes.rows.forEach(row => {
-            const nomeBase = normalizeNome(row.agente);
-            if (!ticketsMap[nomeBase]) ticketsMap[nomeBase] = { totalMes: 0, hist_tickets: new Array(totalSemanas).fill(0) };
-            ticketsMap[nomeBase].totalMes += parseInt(row.tickets) || 0;
-        });
-
-        resultTicketsGraf.rows.forEach(row => {
-            const nomeBase = normalizeNome(row.agente);
-            if (!ticketsMap[nomeBase]) ticketsMap[nomeBase] = { totalMes: 0, hist_tickets: new Array(totalSemanas).fill(0) };
-            const dataData = new Date(String(row.dia).split('T')[0] + 'T12:00:00Z');
-            const diasAposDomingo = Math.floor((dataData.getTime() - domingoBase.getTime()) / (1000 * 60 * 60 * 24));
-            const semanaIndex = Math.floor(diasAposDomingo / 7);
-            if (semanaIndex >= 0 && semanaIndex < totalSemanas) {
-                ticketsMap[nomeBase].hist_tickets[semanaIndex] += parseInt(row.tickets) || 0;
-            }
-        });
 
         let privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').replace(/"/g, '').trim();
         const auth = new google.auth.GoogleAuth({
@@ -377,56 +331,147 @@ app.get('/api/retencao', async (req, res) => {
         const sheets = google.sheets({ version: 'v4', auth });
         const sheetId = (process.env.GOOGLE_SHEET_ID || '').trim();
 
-        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'${nomeAba}'!A1:T300` });
-        const rows = response.data.values || [];
-        
-        let metaTrvGlobal = 70.00, trvMedioGlobal = 0, metaMesGlobal = 0, recuperadoGlobal = 0, faltamGlobal = 0, metaMinCasosGlobal = 0;
-        if (rows[5]) {
-            metaTrvGlobal = parsePct(rows[5][3] || rows[5][2]);
-            trvMedioGlobal = parsePct(rows[5][5] || rows[5][4]);
-            metaMesGlobal = parseMoeda(rows[5][9] || rows[5][8]);
-            recuperadoGlobal = parseMoeda(rows[5][11] || rows[5][10]);
-            faltamGlobal = parseMoeda(rows[5][15] || rows[5][14]);
-            metaMinCasosGlobal = parseMoeda(rows[5][17] || rows[5][16]);
-        }
-        
-        let idCounter = 1;
-        const agentes = rows.slice(10).filter(r => String(r[3] || r[2] || '').trim() !== '' && parseMoeda(r[6] || r[7]) > 0).map(row => {
-            const nomePlanilha = String(row[3] || row[2] || '').trim(); 
-            const meta_casos = parseMoeda(row[4] || row[3]);
-            const casosAtual = parseMoeda(row[6] || row[7]);          
-            const refund = parseMoeda(row[8] || row[9]);              
-            const recuperado = parseMoeda(row[10] || row[11]); 
-            const meta_trv_agente = parsePct(row[13] || row[12]);        
-            const trv = parsePct(row[15] || row[14]);  
-            const status_vol = String(row[17] || row[16] || '').trim();
-            const status_trv = String(row[19] || row[18] || '').trim();               
+        // --- Abas de "Metas" disponíveis (seletor de mês) ---
+        const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        let abasDisponiveis = [];
+        try {
+            const metaInfo = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'sheets.properties.title' });
+            abasDisponiveis = (metaInfo.data.sheets || []).map(sh => sh.properties.title).filter(t => /Metas/i.test(t) && MESES_PT.some(mm => t.toLowerCase().includes(mm.toLowerCase())));
+        } catch (e) {}
 
-            const ticketsAgente = vincularTickets(nomePlanilha, ticketsMap, totalSemanas);
-            const hist_trv = new Array(diasNoMesPlanilha).fill(trv);
+        // --- Meses selecionados: ?aba= (1 ou vários), validados; padrão Setembro ---
+        const PADRAO_ABA = "📊 Análise | Metas | Setembro";
+        let selecionadas = req.query.aba;
+        if (typeof selecionadas === 'string') selecionadas = [selecionadas];
+        if (!Array.isArray(selecionadas)) selecionadas = [];
+        selecionadas = selecionadas.map(a => (a || '').trim()).filter(a => abasDisponiveis.includes(a));
+        if (selecionadas.length === 0) selecionadas = abasDisponiveis.includes(PADRAO_ABA) ? [PADRAO_ABA] : (abasDisponiveis.length ? [abasDisponiveis[abasDisponiveis.length - 1]] : [PADRAO_ABA]);
 
-            return {
-                id: idCounter++, nome: nomePlanilha, time: 'RET', 
-                tickets: ticketsAgente.totalMes, 
-                hist_tickets: ticketsAgente.hist_tickets, 
-                meta_casos: meta_casos, casos_atual: casosAtual, refund: refund, recuperado: recuperado, meta_trv_agente: meta_trv_agente,
-                trv: trv, status_vol: status_vol, status_trv: status_trv, qual: 0, score: 0, hist_trv: hist_trv
-            };
+        // 🔒 Multi-mês/comparativo é só pra ADMIN. Não-admin vê sempre o mês atual (como sempre).
+        const emailUserRet = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+        const admsRet = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+        const isAdminRet = admsRet.includes(emailUserRet);
+        if (!isAdminRet) selecionadas = abasDisponiveis.includes(PADRAO_ABA) ? [PADRAO_ABA] : (abasDisponiveis.length ? [abasDisponiveis[abasDisponiveis.length - 1]] : [PADRAO_ABA]);
+
+        const mesDaAba = (aba) => { const i = MESES_PT.findIndex(mm => aba.toLowerCase().includes(mm.toLowerCase())); return i >= 0 ? i : 8; };
+        const labelDaAba = (aba) => aba.split('|').pop().trim();
+
+        const processarMes = async (aba) => {
+            const mesP = mesDaAba(aba);
+            const diasNoMes = new Date(anoPlanilha, mesP + 1, 0).getDate();
+            const dIni = new Date(anoPlanilha, mesP, 1);
+            const dFim = new Date(anoPlanilha, mesP + 1, 0);
+            const domBase = new Date(dIni.getTime());
+            domBase.setUTCDate(dIni.getUTCDate() - dIni.getUTCDay());
+            const nSem = Math.max(1, Math.floor(((dFim.getTime() - domBase.getTime()) / 86400000) / 7) + 1);
+
+            const [tkRes, shRes] = await Promise.all([
+                pool.query(queryTickets, [formatarDataSQL(dIni), formatarDataSQL(dFim)]),
+                sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'${aba}'!A1:T300` })
+            ]);
+
+            const tkMap = {};
+            tkRes.rows.forEach(row => {
+                const nb = normalizeNome(row.agente);
+                if (!tkMap[nb]) tkMap[nb] = { totalMes: 0, hist_tickets: new Array(nSem).fill(0) };
+                tkMap[nb].totalMes += parseInt(row.tickets) || 0;
+                const dd = new Date(String(row.dia).split('T')[0] + 'T12:00:00Z');
+                const idx = Math.floor(((dd.getTime() - domBase.getTime()) / 86400000) / 7);
+                if (idx >= 0 && idx < nSem) tkMap[nb].hist_tickets[idx] += parseInt(row.tickets) || 0;
+            });
+
+            const rows = shRes.data.values || [];
+            let g = { meta_trv: 70, trv_medio: 0, meta_mes: 0, recuperado_total: 0, faltam: 0, meta_minima_casos: 0 };
+            if (rows[5]) {
+                g.meta_trv = parsePct(rows[5][3] || rows[5][2]);
+                g.trv_medio = parsePct(rows[5][5] || rows[5][4]);
+                g.meta_mes = parseMoeda(rows[5][9] || rows[5][8]);
+                g.recuperado_total = parseMoeda(rows[5][11] || rows[5][10]);
+                g.faltam = parseMoeda(rows[5][15] || rows[5][14]);
+                g.meta_minima_casos = parseMoeda(rows[5][17] || rows[5][16]);
+            }
+            const ags = {};
+            rows.slice(10).filter(r => String(r[3] || r[2] || '').trim() !== '' && parseMoeda(r[6] || r[7]) > 0).forEach(row => {
+                const nome = String(row[3] || row[2] || '').trim();
+                const nb = normalizeNome(nome);
+                const tk = vincularTickets(nome, tkMap, nSem);
+                ags[nb] = {
+                    nome, meta_casos: parseMoeda(row[4] || row[3]),
+                    casos_atual: parseMoeda(row[6] || row[7]), refund: parseMoeda(row[8] || row[9]),
+                    recuperado: parseMoeda(row[10] || row[11]), meta_trv_agente: parsePct(row[13] || row[12]),
+                    trv: parsePct(row[15] || row[14]), status_vol: String(row[17] || row[16] || '').trim(),
+                    status_trv: String(row[19] || row[18] || '').trim(),
+                    tickets: tk.totalMes, hist_tickets: tk.hist_tickets
+                };
+            });
+            return { aba, label: labelDaAba(aba), mesP, diasNoMes, nSem, globais: g, ags };
+        };
+
+        selecionadas.sort((a, b) => mesDaAba(a) - mesDaAba(b));
+        const meses = await Promise.all(selecionadas.map(processarMes));
+        const mesRecenteObj = meses[meses.length - 1];
+        const multiMes = meses.length > 1;
+
+        // detalhe por mês (card / comparativo)
+        const detalhePorMes = {};
+        meses.forEach(mo => {
+            Object.entries(mo.ags).forEach(([nb, a]) => {
+                if (!detalhePorMes[nb]) detalhePorMes[nb] = { nome: a.nome, meses: {} };
+                detalhePorMes[nb].meses[mo.label] = {
+                    casos_atual: a.casos_atual, refund: a.refund, recuperado: a.recuperado,
+                    tickets: a.tickets, trv: a.trv, meta_casos: a.meta_casos, meta_trv_agente: a.meta_trv_agente
+                };
+            });
         });
 
-        // 🌟 NOVO CÁLCULO DE RANKING PESADO (60% % TRV + 40% $ CASOS)
+        // ranking combinado (soma; TRV ponderada por casos)
+        let idCounter = 1;
+        const basesSet = new Set();
+        meses.forEach(mo => Object.keys(mo.ags).forEach(nb => basesSet.add(nb)));
+        const agentes = Array.from(basesSet).map(nb => {
+            let casos = 0, refund = 0, recuperado = 0, tickets = 0, meta_casos = 0, trvNum = 0, trvDen = 0, hist = [];
+            let nome = nb, status_vol = '', status_trv = '', meta_trv_agente = 0;
+            meses.forEach(mo => {
+                const a = mo.ags[nb];
+                if (a) {
+                    nome = a.nome;
+                    casos += a.casos_atual; refund += a.refund; recuperado += a.recuperado;
+                    tickets += a.tickets; meta_casos += a.meta_casos;
+                    trvNum += a.trv * (a.casos_atual || 0); trvDen += (a.casos_atual || 0);
+                    hist = hist.concat(a.hist_tickets || []);
+                    if (mo === mesRecenteObj) { status_vol = a.status_vol; status_trv = a.status_trv; meta_trv_agente = a.meta_trv_agente; }
+                } else {
+                    hist = hist.concat(new Array(mo.nSem).fill(0));
+                }
+            });
+            if (!meta_trv_agente) { for (let k = meses.length - 1; k >= 0; k--) { if (meses[k].ags[nb]) { meta_trv_agente = meses[k].ags[nb].meta_trv_agente; status_vol = status_vol || meses[k].ags[nb].status_vol; status_trv = status_trv || meses[k].ags[nb].status_trv; break; } } }
+            const trv = trvDen > 0 ? (trvNum / trvDen) : 0;
+            return { id: idCounter++, base: nb, nome, time: 'RET', tickets, hist_tickets: hist,
+                meta_casos, casos_atual: casos, refund, recuperado, meta_trv_agente,
+                trv, status_vol, status_trv, qual: 0, score: 0, hist_trv: [] };
+        });
+
         const maxTrv = Math.max(...agentes.map(a => a.trv), 1);
         const maxCasos = Math.max(...agentes.map(a => a.casos_atual), 1);
-
-        agentes.forEach(a => {
-            const pctTrvRelativo = maxTrv > 0 ? (a.trv / maxTrv) : 0;
-            const pctCasosRelativo = maxCasos > 0 ? (a.casos_atual / maxCasos) : 0;
-            a.score = ((pctTrvRelativo * 0.60) + (pctCasosRelativo * 0.40)) * 100;
-        });
-
+        agentes.forEach(a => { a.score = (((maxTrv > 0 ? a.trv / maxTrv : 0) * 0.60) + ((maxCasos > 0 ? a.casos_atual / maxCasos : 0) * 0.40)) * 100; });
         agentes.sort((a, b) => b.score - a.score);
-        const globais = { meta_trv: metaTrvGlobal, trv_medio: trvMedioGlobal, meta_mes: metaMesGlobal, recuperado_total: recuperadoGlobal, faltam: faltamGlobal, meta_minima_casos: metaMinCasosGlobal, dias_mes_atual: diasNoMesPlanilha };
-        res.json({ success: true, globais, agentes });
+
+        // globais: mês único = valores da planilha (mantém cards originais); multi = combinado
+        let globais;
+        if (!multiMes) {
+            const g0 = mesRecenteObj.globais;
+            globais = { meta_trv: g0.meta_trv, trv_medio: g0.trv_medio, meta_mes: g0.meta_mes, recuperado_total: g0.recuperado_total, faltam: g0.faltam, meta_minima_casos: g0.meta_minima_casos, dias_mes_atual: mesRecenteObj.diasNoMes };
+        } else {
+            let gMetaMes = 0, gRecup = 0, gFaltam = 0, gMetaMin = 0, gTrvNum = 0, gTrvDen = 0, gDias = 0;
+            meses.forEach(mo => {
+                gMetaMes += mo.globais.meta_mes; gRecup += mo.globais.recuperado_total;
+                gFaltam += mo.globais.faltam; gMetaMin += mo.globais.meta_minima_casos; gDias += mo.diasNoMes;
+                Object.values(mo.ags).forEach(a => { gTrvNum += a.trv * (a.casos_atual || 0); gTrvDen += (a.casos_atual || 0); });
+            });
+            globais = { meta_trv: mesRecenteObj.globais.meta_trv, trv_medio: gTrvDen > 0 ? (gTrvNum / gTrvDen) : mesRecenteObj.globais.trv_medio, meta_mes: gMetaMes, recuperado_total: gRecup, faltam: gFaltam, meta_minima_casos: gMetaMin, dias_mes_atual: gDias };
+        }
+
+        res.json({ success: true, globais, agentes, meses: abasDisponiveis, selecionados: meses.map(mo => mo.label), mesAtual: mesRecenteObj.aba, multiMes, mesRecente: mesRecenteObj.label, detalhePorMes });
 
     } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
