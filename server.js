@@ -1284,11 +1284,9 @@ app.get('/api/qualidade-tickets', async (req, res) => {
             dataInicioSQL = unixParaYYYYMMDD(req.query.since);
             dataFimSQL = unixParaYYYYMMDD(req.query.until);
         } else {
+            // Padrão: DIA ATUAL (o calendário fica pra escolher um período maior, ex.: o mês todo)
             const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-            const seteDiasAtras = new Date(agora);
-            seteDiasAtras.setDate(agora.getDate() - 7);
-            
-            dataInicioSQL = formatarDataSQL(seteDiasAtras);
+            dataInicioSQL = formatarDataSQL(agora);
             dataFimSQL = formatarDataSQL(agora);
         }
 
