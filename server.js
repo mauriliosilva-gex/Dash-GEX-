@@ -3,6 +3,7 @@ const cors = require('cors');
 const { google } = require('googleapis');
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const session = require('express-session');
@@ -202,6 +203,71 @@ const cacheMiddleware = (req, res, next) => {
     };
     next();
 };
+
+// ==========================================
+// 🅱️ PLANO B — CAPTURA DE SNOOZE (grava no GOOGLE SHEETS; NÃO toca no banco do Chatwoot)
+// O webhook do Chatwoot manda pra cá no momento do adiamento.
+// ==========================================
+const SNOOZE_SHEET_ID = (process.env.GOOGLE_SHEET_ID_SNOOZE_LOG || process.env.GOOGLE_SHEET_ID_SNOOZE || '1GD58KTkrCIJUdU0TLQQfg9SbI5jXi3C803RLXWL698M').trim();
+const SNOOZE_ABA = 'snooze_log';
+const SNOOZE_TOKEN = process.env.SNOOZE_HOOK_TOKEN || 'gex-snooze-2026';
+const snoozeRawRecentes = []; // últimos payloads crus (em memória) pra conferir o formato
+let snoozeHeaderOk = false;
+
+function getSheetsRW() {
+    const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').replace(/"/g, '').trim();
+    const auth = new google.auth.GoogleAuth({
+        credentials: { client_email: (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '').trim(), private_key: privateKey },
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'] // escrita só nesta planilha (a service account só tem Editor aqui)
+    });
+    return google.sheets({ version: 'v4', auth });
+}
+
+async function garantirCabecalhoSnooze(sheets) {
+    if (snoozeHeaderOk) return;
+    try {
+        const r = await sheets.spreadsheets.values.get({ spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A1:F1` });
+        if (!r.data.values || r.data.values.length === 0) {
+            await sheets.spreadsheets.values.update({
+                spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A1`, valueInputOption: 'RAW',
+                requestBody: { values: [['capturado_em', 'conversation_id', 'display_id', 'snoozed_until', 'agente', 'status']] }
+            });
+        }
+        snoozeHeaderOk = true;
+    } catch (e) { /* segue mesmo sem cabeçalho */ }
+}
+
+app.post('/hook/snooze/:token', express.json({ limit: '3mb' }), async (req, res) => {
+    if (req.params.token !== SNOOZE_TOKEN) return res.status(401).json({ ok: false, motivo: 'token invalido' });
+    const body = req.body || {};
+    snoozeRawRecentes.unshift({ recebido_em: new Date().toISOString(), body });
+    if (snoozeRawRecentes.length > 10) snoozeRawRecentes.pop();
+    res.json({ ok: true }); // responde já; o Chatwoot não espera o Google Sheets
+
+    try {
+        const conv = body.conversation || body || {};
+        const status = conv.status || body.status;
+        const snoozedUntil = conv.snoozed_until != null ? conv.snoozed_until
+            : (body.snoozed_until != null ? body.snoozed_until
+            : (conv.additional_attributes && conv.additional_attributes.snoozed_until) || null);
+        if (String(status) !== 'snoozed' || !snoozedUntil) return; // só grava adiamento COM tempo
+
+        const convId = conv.id || body.id || '';
+        const displayId = conv.display_id || body.display_id || '';
+        const agente = (conv.meta && conv.meta.assignee && conv.meta.assignee.name)
+            || (body.meta && body.meta.assignee && body.meta.assignee.name) || '';
+
+        const sheets = getSheetsRW();
+        await garantirCabecalhoSnooze(sheets);
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A:F`,
+            valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: [[new Date().toISOString(), String(convId), String(displayId), String(snoozedUntil), String(agente), String(status)]] }
+        });
+    } catch (e) {
+        console.error('[snooze-hook] falha ao gravar no Sheets:', e.message);
+    }
+});
 
 app.use('/api', verificarLogin, cacheMiddleware);
 app.use(verificarLogin, express.static(path.join(__dirname, 'public')));
@@ -784,8 +850,12 @@ app.get('/api/produtividade', async (req, res) => {
             dataInicioSQL = unixParaYYYYMMDD(req.query.since); 
             dataFimSQL = unixParaYYYYMMDD(req.query.until);
         } else {
+            // 🔥 CORREÇÃO RESTAURADA: Busca os últimos 7 dias por padrão em vez de só "hoje"
             const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-            dataInicioSQL = formatarDataSQL(agora); 
+            const seteDiasAtras = new Date(agora);
+            seteDiasAtras.setDate(agora.getDate() - 7);
+            
+            dataInicioSQL = formatarDataSQL(seteDiasAtras); 
             dataFimSQL = formatarDataSQL(agora);    
         }
 
@@ -795,7 +865,8 @@ app.get('/api/produtividade', async (req, res) => {
                 TO_CHAR(m.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') AS data_hora
             FROM messages m
             INNER JOIN users u ON u.id = m.sender_id
-            WHERE m.sender_type = 'User'
+            WHERE m.account_id = 1
+              AND m.sender_type = 'User'
               AND m.message_type = 1
               AND m.private = FALSE
               AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
@@ -860,18 +931,15 @@ app.get('/api/produtividade', async (req, res) => {
                         ticketsPorHora[h] = (ticketsPorHora[h] || 0) + 1;
                     }
 
-                    // Regra: Uma pausa é qualquer tempo inativo >= 20 minutos (ignorando gaps noturnos longos > 12h)
+                    // Regra: Uma pausa é qualquer tempo inativo >= 20 minutos
                     if (diffMinRaw >= 20 && diffMinRaw < 60 * 12) {
                         let startMin = msgAnterior.getHours() * 60 + msgAnterior.getMinutes();
                         let endMin = msgAtual.getHours() * 60 + msgAtual.getMinutes();
                         
-                        // Função matemática inteligente para calcular interseção de tempo
                         const overlap = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
                         
-                        // Tempo ocioso útil (fora do almoço e DENTRO do expediente 09-18h)
                         let idleUtil = overlap(startMin, endMin, 9*60, 12*60+30) + overlap(startMin, endMin, 14*60, 18*60);
                         
-                        // Verifica se o período inativo cruzou com o almoço (12:30 às 14:00)
                         let overlapAlmoco = overlap(startMin, endMin, 12*60+30, 14*60);
                         let isAlmoco = overlapAlmoco > 0;
                         
@@ -880,7 +948,6 @@ app.get('/api/produtividade', async (req, res) => {
                         if (isFDS) {
                             historicoPausas.push(`🏖️ FDS: ${strPausa}`);
                         } else if (isAlmoco) {
-                            // Se pegou horário de almoço, MAS teve tempo ocioso junto, registra os dois!
                             if (idleUtil > 0) {
                                 totalMinutosAciosos += idleUtil;
                                 ociosoPorDia[objDia] += idleUtil;
@@ -897,12 +964,11 @@ app.get('/api/produtividade', async (req, res) => {
                 }
             }
             
-            // --- CÁLCULO DAS MÉTRICAS AVANÇADAS (Apenas Seg-Sex, 09h às 18h) ---
             let horaMaisAtiva = 0, maxT = -1;
             let horaMenosAtiva = 0, minT = 999999;
             
             for(let h=9; h<18; h++) {
-                if (h === 13) continue; // Pula horário de almoço na média de pior/melhor hora
+                if (h === 13) continue; // Pula horário de almoço na média
                 if(ticketsPorHora[h] > maxT) { maxT = ticketsPorHora[h]; horaMaisAtiva = h; }
                 if(ticketsPorHora[h] < minT) { minT = ticketsPorHora[h]; horaMenosAtiva = h; }
             }
@@ -946,10 +1012,6 @@ app.get('/api/produtividade', async (req, res) => {
 // ==========================================
 app.get('/api/recorrencia', async (req, res) => {
     try {
-        // Query de Inteligência Avançada: 
-        // 1. Agrupa pelo E-mail (ou ID). 
-        // 2. Calcula o tempo entre a mensagem atual e a anterior do mesmo cliente.
-        // 3. Se a diferença for MAIOR que 24 horas, conta como um "Retorno".
         const q = `
         WITH ClientMessages AS (
             SELECT 
@@ -960,6 +1022,8 @@ app.get('/api/recorrencia', async (req, res) => {
             JOIN contacts c ON c.id = m.sender_id
             WHERE m.sender_type = 'Contact'
               AND m.message_type = 0
+              AND m.account_id = 1 -- 🔥 A BALA DE PRATA: Filtrando apenas a conta real
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE -- Ignora msgs apagadas
         ),
         Returns AS (
             SELECT 
@@ -988,61 +1052,732 @@ app.get('/api/recorrencia', async (req, res) => {
 });
 
 // ==========================================
-// 13. ROTA INTELIGÊNCIA DE PRODUTOS E ATRITO (VIA ATRIBUTO)
+// 13. ROTA INTELIGÊNCIA DE PRODUTOS E ATRITO (ÚLTIMO RETORNO + FCR + SLA)
 // ==========================================
 app.get('/api/produtos-metricas', async (req, res) => {
     try {
         const q = `
-        WITH BaseMessages AS (
+        WITH ConversasBase AS (
+            SELECT 
+                c.id AS conversation_id,
+                c.display_id,
+                COALESCE(u.name, 'SEM ATRIBUIR') AS agente_nome,
+                COALESCE(ct.name, 'Sem Nome') AS contato_nome,
+                TRIM(BOTH '.' FROM INITCAP(LOWER(TRIM(COALESCE(c.custom_attributes->>'produtos', c.custom_attributes->>'produto', c.custom_attributes->>'Produto'))))) AS produto
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            WHERE c.account_id = 1
+              AND COALESCE(c.custom_attributes->>'produtos', c.custom_attributes->>'produto', c.custom_attributes->>'Produto') IS NOT NULL
+              AND TRIM(COALESCE(c.custom_attributes->>'produtos', c.custom_attributes->>'produto', c.custom_attributes->>'Produto')) != ''
+              AND c.created_at >= NOW() - INTERVAL '30 days'
+        ),
+        BaseMessages AS (
             SELECT 
                 m.conversation_id,
-                -- Puxa o campo 'produto' direto dos Atributos Personalizados da Conversa no Chatwoot
-                COALESCE(NULLIF(c.custom_attributes->>'produto', ''), 'Sem Tabulação') AS produto,
-                m.sender_id,
+                cb.display_id,
+                cb.produto,
+                cb.agente_nome,
+                cb.contato_nome,
                 m.message_type,
                 m.created_at,
-                LAG(m.created_at) OVER (PARTITION BY m.sender_id, COALESCE(NULLIF(c.custom_attributes->>'produto', ''), 'Sem Tabulação') ORDER BY m.created_at) as prev_user_msg_time,
+                LAG(m.created_at) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_time,
                 LAG(m.message_type) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_type
             FROM messages m
-            JOIN conversations c ON c.id = m.conversation_id
+            JOIN ConversasBase cb ON cb.conversation_id = m.conversation_id
             WHERE m.private = FALSE 
-              AND m.created_at >= CURRENT_DATE - INTERVAL '30 days'
+              AND m.account_id = 1 
+              AND m.message_type IN (0, 1) 
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
         ),
-        Analise AS (
-            SELECT 
-                produto,
-                COUNT(*) FILTER (WHERE message_type = 0) AS total_recebidas,
-                
-                -- Retornos: Gap entre mensagens do MESMO cliente no MESMO produto
-                COUNT(*) FILTER (WHERE message_type = 0 AND prev_user_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 <= 24) AS retornos_24h,
-                COUNT(*) FILTER (WHERE message_type = 0 AND prev_user_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 > 24 AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 <= 48) AS retornos_48h,
-                COUNT(*) FILTER (WHERE message_type = 0 AND prev_user_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_user_msg_time))/3600 > 48) AS retornos_mais_48h,
-                
-                -- Taxa de Desespero (Cliente mandou msg logo após outra msg dele mesmo, sem o agente responder)
-                COUNT(*) FILTER (WHERE message_type = 0 AND prev_msg_type = 0) AS flood_desespero,
-                
-                COUNT(DISTINCT conversation_id) AS total_conversas
+        UltimoRetorno AS (
+            SELECT DISTINCT ON (conversation_id)
+                conversation_id,
+                EXTRACT(EPOCH FROM (created_at - prev_msg_time))/3600 AS gap_horas
             FROM BaseMessages
-            GROUP BY produto
+            WHERE message_type = 0 AND prev_msg_type = 1
+            ORDER BY conversation_id, created_at DESC
+        ),
+        AgregacaoGeral AS (
+            SELECT 
+                conversation_id,
+                MAX(display_id) AS display_id,
+                produto,
+                MAX(agente_nome) AS agente_nome,
+                MAX(contato_nome) AS contato_nome,
+                COUNT(*) FILTER (WHERE message_type = 0) AS qtd_msgs_cliente,
+                SUM(CASE WHEN message_type = 0 AND prev_msg_type = 0 AND prev_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_msg_time))/3600 <= 1 THEN 1 ELSE 0 END) AS qtd_floods,
+                -- 🔥 SLA: Calcula o tempo que o AGENTE (1) levou para responder o CLIENTE (0)
+                AVG(EXTRACT(EPOCH FROM (created_at - prev_msg_time))/60) FILTER (WHERE message_type = 1 AND prev_msg_type = 0) AS tmr_minutos
+            FROM BaseMessages
+            GROUP BY conversation_id, produto
         )
         SELECT 
-            produto,
-            total_recebidas,
-            retornos_24h,
-            retornos_48h,
-            retornos_mais_48h,
-            flood_desespero,
-            -- Esforço/Atrito (Média de mensagens que o cliente precisa mandar por ticket para ser resolvido)
-            ROUND((total_recebidas::numeric / GREATEST(total_conversas, 1)), 1) AS atrito_msg_por_conv
-        FROM Analise
+            a.produto,
+            COUNT(DISTINCT a.conversation_id) AS total_recebidas,
+            COUNT(DISTINCT ur.conversation_id) AS total_retornos,
+            
+            COUNT(DISTINCT ur.conversation_id) FILTER (WHERE ur.gap_horas > 0 AND ur.gap_horas <= 24) AS retornos_24h,
+            COUNT(DISTINCT ur.conversation_id) FILTER (WHERE ur.gap_horas > 24 AND ur.gap_horas <= 48) AS retornos_48h,
+            COUNT(DISTINCT ur.conversation_id) FILTER (WHERE ur.gap_horas > 48) AS retornos_mais_48h,
+            
+            COALESCE(SUM(a.qtd_floods), 0) AS flood_desespero,
+            ROUND(AVG(a.qtd_msgs_cliente), 1) AS atrito_msg_por_conv,
+            COALESCE(AVG(a.tmr_minutos), 0) AS sla_tmr_minutos,
+            
+            json_agg(
+                json_build_object(
+                    'id', a.display_id,
+                    'agente', a.agente_nome,
+                    'cliente', a.contato_nome,
+                    'status', CASE 
+                        WHEN ur.gap_horas > 0 AND ur.gap_horas <= 24 THEN 'Retorno < 24h'
+                        WHEN ur.gap_horas > 24 AND ur.gap_horas <= 48 THEN 'Retorno 24-48h'
+                        WHEN ur.gap_horas > 48 THEN 'Retorno > 48h'
+                        ELSE 'Sem Retorno'
+                    END
+                )
+            ) AS detalhes
+        FROM AgregacaoGeral a
+        LEFT JOIN UltimoRetorno ur ON ur.conversation_id = a.conversation_id
+        GROUP BY a.produto
         ORDER BY total_recebidas DESC;
         `;
         const result = await pool.query(q);
         res.json({ success: true, dados: result.rows });
-    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    } catch (error) { 
+        console.error("Erro Produtos:", error);
+        res.status(500).json({ success: false, error: error.message }); 
+    }
+});
+
+// ==========================================
+// 14. ROTA DE PRODUTOS CITADOS (MINERAÇÃO DE TEXTO NA FILA)
+// ==========================================
+app.get('/api/mencoes-abertos', async (req, res) => {
+    try {
+        const q = `
+        WITH OpenConversations AS (
+            SELECT 
+                c.id AS conv_id,
+                c.display_id, 
+                c.contact_id, 
+                COALESCE(c.additional_attributes->>'subject', '') AS email_subject, 
+                CASE 
+                    WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
+                    WHEN t.name ILIKE '%retenção%' THEN 'RET'
+                    WHEN t.name ILIKE '%sac%' THEN 'SAC'
+                    WHEN t.name ILIKE '%back office%' THEN 'BKO'
+                    WHEN c.team_id IS NULL THEN 'SEM ATRIBUIR'
+                    ELSE 'OUTROS'
+                END as equipe
+            FROM conversations c
+            LEFT JOIN teams t ON t.id = c.team_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            WHERE c.status = 0 
+              AND c.assignee_id IS NULL 
+              AND c.account_id = 1 
+              AND (i.name IS NULL OR i.name != 'Atendimento | Brasil')
+        ),
+        Keywords AS (
+            SELECT unnest(ARRAY[
+                'Alpha Max', 'BoostBurn', 'Clean Eye', 'Coffee Burn', 'DentaGuard', 'BioGutix', 'Dream Night', 
+                'Eros Lift', 'Fit Burn', 'Flash Burn', 'Flexi Move', 'FloraZen', 'FocusVibe', 'Giant Max', 
+                'Gluco Control', 'Gluco Pure', 'GlycoNaturals', 'Glycotide', 'Lipo Flow', 'Lipo Rise', 
+                'Liver Revive', 'Manergy', 'Memo Revive', 'Memory Lift', 'Men''s Growth', 'Metarise', 
+                'Mindora', 'Nerve Alive', 'Nerve Zen', 'Nerve Vital', 'Nervion', 'NeuroPezil', 'Neuro Silence', 
+                'Oral Defense', 'Prime Age', 'Prostate Max', 'Red Burn', 'Relax Pure', 'Revital Gluco', 
+                'SkinFlex Collagen', 'Slim Rise', 'Sonus Zen', 'Sugar Control', 'Sugar Drop', 'Vigor Boost', 
+                'VirileForce', 'Vital Blood', 'Vital Green', 'VitaLust', 'Vivid Essence', 'VoluMax', 'Lipotide', 
+                'HairLift', 'NailPure', 'BreathiZen', 'GoldenVita Pure', 'NeuronGold', 'Honey Sharp', 'Lipo Advance', 
+                'Nervify', 'Power HoneyX', 'Neuro Drops', 'Sleep Protocol', 'Retikora', 'Gelatide', 'GelaBurn', 
+                'Nervontix', 'Mentho Flow', 'OtoHear Drops', 'TrimX', 'Nervory', 'Man ForceX', 'Brainergy', 
+                'Vision Vance', 'Braincept', 'Prosta Renew', 'GlycoPezil', 'Prosta Defender', 'CoffeeLean', 
+                'Nerve Defender', 'Barisalt', 'VertiBalance', 'Derma Essential', 'Hearing Harmony', 'MemoPezil', 
+                'Gelatine Sculpt', 'Memocept', 'Sleepem', 'JointBrex', 'VapoFil', 'HoneyCept', 'BloodPril', 
+                'Longevant', 'Sleepidem', 'Alpha Honey', 'Blueberry GLP', 'Chocotide', 'HunterPower', 
+                'Gluco Master', 'Slim Jelly', 'HunterPowerX', 'Leanrise', 'GlucoEnergy', 'Gelatide-1', 'NeuroSalt', 
+                'Derma Clean', 'Skin Revive', 'Lean Jaro', 'Erefil', 'Honetide31', 'FlaxBurn', 'Liver Balance', 
+                'Respiratory Support', 'PressureGuard', 'MetaboSlim', 'NeuroFlux', 'GlucoForce', 'MaxiDure', 
+                'NeuroVix', 'Arthmira', 'Cutide', 'NeuroSharp', 'Neurozen', 'Prime Age Caps', 'BrainLive', 
+                'Glyco Harmony', 'Cinna Harmony', 'Javatide', 'Mens Power', 'SlimTide', 'LeanBurn', 'Cognicept', 
+                'Memo+50', 'LeanBurn Drops', 'Sugar Reset', 'Mojatide', 'GlucoVive', 'SugarVita Gummies', 
+                'GlucoSteady', 'Memo Rise', 'Neuro Sharp Caps', 'NeuroBlast', 'Erecmax', 'Vigor Prime', 'GelaSlim', 
+                'PeptiBurn Gummies', 'Lipotutide', 'Glucotide', 'JellyTide', 'MemoVance', 'TestoMax', 'Dermapure', 
+                'Gumitide', 'Eronix', 'PowerZenX', 'PowerNox', 'Glyvoryn', 'Sugarzen', 'Sugarflex', 'SugarCalm', 
+                'Glucovex', 'SugarPure', 'NerveHarmony', 'NeuroHarmony', 'Nerveyn', 'NerveMax', 'Nervetide', 
+                'MindCervy', 'Mindoryx', 'FocusSnap', 'Leantide', 'TorchFat', 'MomBurn', 'Slim40', 'TestoHorse', 
+                'Vigor40', 'NeuroOil', 'Horse Boost', 'Neuro Cinnamon', 'FocusLock', 'MemoGuard', 'Renew31', 
+                'Tinizen', 'Slimpeak', 'SleepGood', 'FastBurn', 'Javacept', 'NeuroVex', 'Lipolean', 'TadaGummies', 
+                'AlphaPulse', 'Eresurge', 'GlucoBliss', 'GlycoBalance', 'Sodatide', 'VigorRise', 'Horse Pulse', 
+                'MindCept', 'MemoClear', 'HoneyHarmony', 'Glycoformin', 'OzemPeak', 'OzemSlim', 'SodaSlim', 
+                'SodaBurn', 'Gumiflow', 'AlphaSteel', 'VigorFil', 'SodaFil', 'Sugarjaro', 'Sugariance', 'JellyFil', 
+                'Memodyne', 'HoneyPezil', 'MemoHoney', 'Neuroflow', 'Gabaflow Mix', 'LyriBalm', 'JelloBurn', 
+                'GlucoAloha', 'HorseFil', 'GelaFil', 'VapoCept', 'NerveHarmonny', 'SodaLean', 'Neurapezil', 
+                'PrimeHoney', 'HoneyBalance', 'GlycoBloom', 'JellyBoost', 'Hydrofil', 'SteelPulse', 'Sugartide', 
+                'Gumipic', 'Nervecept', 'Neuradyne', 'HorseSteel', 'Hydroryn', 'Honeyfil', 'Cognidyne', 'AlkaPic', 
+                'AlkaBurn', 'GelaLean', 'AlkaTide', 'Gelacept', 'Gelanic', 'Gumipezil', 'Glycopic', 'SodaFit', 
+                'Sweetide', 'Sodaryn', 'RoyalFil', 'Gelagen', 'Turmeric Harmony', 'Jellyblue', 'HoneyBoost', 
+                'Iron Boost', 'HearBetter', 'Gelafen', 'Gelataro', 'OliveBrain', 'CartiVex', 'Glycofit', 
+                'HoneyFlush', 'GiantMax', 'Vinetaro', 'Cardiopril', 'Cardiocept', 'MeltCore', 'SodaPeak', 
+                'MatchaSlim', 'MatchaTide', 'CardioHarmony', 'SugarClear', 'SodaPower', 'Goldtin', 'Melonex', 
+                'AlkaFit', 'NerveHoney', 'Roscept', 'Payarmin', 'Lympnex', 'GlycoGenesis', 'Nervactil', 
+                'NeuroGolden', 'Marycept', 'YogTide', 'Rosedil', 'Retride', 'Olivaro', 'Lasiberry', 'USBREX'
+            ]) AS kw
+        ),
+        MatchedTickets AS (
+            SELECT DISTINCT
+                oc.equipe,
+                k.kw AS produto_mencionado,
+                oc.conv_id,
+                oc.display_id,
+                ct.name AS contato_nome,
+                ct.email AS contato_email
+            FROM OpenConversations oc
+            JOIN messages m ON m.conversation_id = oc.conv_id AND m.message_type = 0 
+            LEFT JOIN contacts ct ON ct.id = oc.contact_id
+            CROSS JOIN Keywords k
+            WHERE oc.equipe != 'OUTROS'
+              AND (COALESCE(m.content, '') ILIKE '%' || k.kw || '%' OR oc.email_subject ILIKE '%' || k.kw || '%')
+        )
+        SELECT 
+            equipe,
+            produto_mencionado,
+            COUNT(conv_id) as qtd_casos,
+            json_agg(json_build_object(
+                'id', display_id,
+                'nome', COALESCE(contato_nome, 'Sem Nome'), 
+                'email', COALESCE(contato_email, 'Sem Email')
+            )) AS detalhes
+        FROM MatchedTickets
+        GROUP BY equipe, produto_mencionado
+        ORDER BY qtd_casos DESC;
+        `;
+        const result = await pool.query(q);
+        res.json({ success: true, dados: result.rows });
+    } catch (error) { 
+        console.error("Erro Rota Menções:", error);
+        res.status(500).json({ success: false, error: error.message }); 
+    }
+});
+
+// ==========================================
+// 15. ROTA DE AUDITORIA DE TICKETS (QUALIDADE)
+// ==========================================
+app.get('/api/qualidade-tickets', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    
+    if (!adms.includes(emailUser)) {
+        return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    }
+    
+    try {
+        let dataInicioSQL, dataFimSQL;
+        if (req.query.since && req.query.until) {
+            dataInicioSQL = unixParaYYYYMMDD(req.query.since);
+            dataFimSQL = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+            const seteDiasAtras = new Date(agora);
+            seteDiasAtras.setDate(agora.getDate() - 7);
+            
+            dataInicioSQL = formatarDataSQL(seteDiasAtras);
+            dataFimSQL = formatarDataSQL(agora);
+        }
+
+        const q = `
+        WITH BaseAcoes AS (
+            SELECT 
+                m.conversation_id,
+                c.display_id,
+                m.message_type,
+                m.content,
+                m.created_at AS m_created_at,
+                c.status AS conv_status,
+                -- 🔥 O HISTORIADOR: Tenta pegar o tempo exato no momento que o botão foi clicado!
+                COALESCE(m.content_attributes->>'snoozed_until', c.snoozed_until::text) AS snoozed_until,
+                COALESCE(
+                    (CASE WHEN m.message_type = 1 THEN u_sender.name END), 
+                    SUBSTRING(m.content FROM '(?i)por (.*? - (?:RET|SAC|BKO|SMS))'), 
+                    u_assignee.name 
+                ) AS agente_nome
+            FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+            LEFT JOIN users u_sender ON u_sender.id = m.sender_id
+            LEFT JOIN users u_assignee ON u_assignee.id = c.assignee_id
+            WHERE m.account_id = 1
+              AND m.message_type IN (1, 2) 
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+              AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND m.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+        ),
+        AcoesValidas AS (
+            SELECT * FROM BaseAcoes WHERE agente_nome IS NOT NULL AND agente_nome != ''
+        ),
+        ConversasAgrupadas AS (
+            SELECT 
+                agente_nome,
+                CASE 
+                    WHEN agente_nome ILIKE '%- RET%' THEN 'RET'
+                    WHEN agente_nome ILIKE '%- SAC%' THEN 'SAC'
+                    WHEN agente_nome ILIKE '%- BKO%' THEN 'BKO'
+                    WHEN agente_nome ILIKE '%- SMS%' THEN 'SMS'
+                    ELSE 'OUTROS'
+                END AS equipe,
+                display_id,
+                conversation_id,
+                COUNT(CASE WHEN message_type = 2 AND content ILIKE '%adiad%' THEN 1 END) AS qtd_adiado,
+                COUNT(CASE WHEN message_type = 2 AND content ILIKE '%resolvid%' THEN 1 END) AS qtd_resolvido,
+                json_agg(
+                    json_build_object(
+                        'tipo', message_type,
+                        'texto', COALESCE(content, 'Ação do Sistema'),
+                        'data', m_created_at,
+                        'snooze', snoozed_until,
+                        'status_conv', conv_status
+                    ) ORDER BY m_created_at ASC
+                ) AS eventos
+            FROM AcoesValidas
+            GROUP BY agente_nome, display_id, conversation_id
+        )
+        SELECT 
+            agente_nome,
+            equipe,
+            COUNT(DISTINCT conversation_id) AS total_alterados,
+            SUM(CASE WHEN qtd_adiado > 0 THEN 1 ELSE 0 END) AS total_adiados,
+            SUM(CASE WHEN qtd_resolvido > 0 THEN 1 ELSE 0 END) AS total_resolvidos,
+            json_agg(
+                json_build_object(
+                    'id', display_id,
+                    'adiados', qtd_adiado,
+                    'resolvidos', qtd_resolvido,
+                    'eventos', eventos
+                ) ORDER BY display_id DESC
+            ) AS detalhes
+        FROM ConversasAgrupadas
+        WHERE equipe != 'OUTROS'
+        GROUP BY agente_nome, equipe
+        ORDER BY total_alterados DESC;
+        `;
+        const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
+        res.json({ success: true, dados: result.rows });
+    } catch (error) { 
+        console.error("Erro Rota Monitoria:", error);
+        res.status(500).json({ success: false, error: error.message }); 
+    }
+});
+
+// ==========================================
+// 16. ROTA DE URGÊNCIA: REEMBOLSOS PAGAMERICAN (SEGMENTADO E BLINDADO)
+// ==========================================
+app.get('/api/reembolsos-pagamerican', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    
+    if (!adms.includes(emailUser)) {
+        return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    }
+    
+    try {
+        // 🔥 AGORA ACEITA FILTRO DE PERÍODO (since/until). Sem filtro = mês atual.
+        let dataInicioSQL, dataFimSQL;
+        if (req.query.since && req.query.until) {
+            dataInicioSQL = unixParaYYYYMMDD(req.query.since);
+            dataFimSQL = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dataInicioSQL = formatarDataSQL(dInicio);
+            dataFimSQL = formatarDataSQL(agora);
+        }
+
+        const q = `
+        WITH CasosFiltrados AS (
+            SELECT 
+                c.id AS conv_id,
+                c.display_id,
+                COALESCE(u.name, 'SEM ATRIBUIR') AS agente_nome,
+                ct.name AS contato_nome,
+                ct.email AS contato_email,
+                c.created_at,
+                COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') AS tipo_retencao
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            WHERE c.account_id = 1
+              AND (
+                  (c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo')
+                  OR
+                  (c.updated_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND c.updated_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo')
+              )
+              
+              -- 🔥 1. PLATAFORMA: Caça todas as variações possíveis de PagAmerican de uma vez só
+              AND (
+                  COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%']) OR
+                  COALESCE(ct.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%'])
+              )
+              
+              -- 🔥 2. OBRIGATÓRIO TER REEMBOLSO: A gaveta do Tipo de Retenção não pode estar vazia
+              AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
+              
+              -- 🔥 3. EXCEÇÃO: Bloqueia se for "Sem reembolso"
+              AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
+        )
+        SELECT 
+            agente_nome,
+            COUNT(conv_id) AS total_reembolsos,
+            
+            COUNT(CASE WHEN tipo_retencao ILIKE '%10 a 30%' THEN 1 END) AS r_10_30,
+            COUNT(CASE WHEN tipo_retencao ILIKE '%40 a 50%' THEN 1 END) AS r_40_50,
+            COUNT(CASE WHEN tipo_retencao ILIKE '%60 a 90%' THEN 1 END) AS r_60_90,
+            COUNT(CASE WHEN tipo_retencao ILIKE '%100%' THEN 1 END) AS r_100,
+            COUNT(CASE WHEN tipo_retencao NOT ILIKE '%10 a 30%' AND tipo_retencao NOT ILIKE '%40 a 50%' AND tipo_retencao NOT ILIKE '%60 a 90%' AND tipo_retencao NOT ILIKE '%100%' THEN 1 END) AS r_outros,
+            
+            json_agg(
+                json_build_object(
+                    'id', display_id,
+                    'nome', COALESCE(contato_nome, 'Sem Nome'),
+                    'email', COALESCE(contato_email, 'Sem Email'),
+                    'data', created_at,
+                    'tipo', tipo_retencao
+                ) ORDER BY created_at DESC
+            ) AS detalhes
+        FROM CasosFiltrados
+        GROUP BY agente_nome
+        ORDER BY total_reembolsos DESC;
+        `;
+        
+        const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
+        res.json({ success: true, dados: result.rows });
+    } catch (error) { 
+        console.error("Erro PagAmerican:", error);
+        res.status(500).json({ success: false, error: error.message }); 
+    }
+});
+
+// ==========================================
+// 17. ROTA: TIME 48 HORAS (ETIQUETAS + RETORNOS)
+// ==========================================
+app.get('/api/time48', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    
+    if (!adms.includes(emailUser)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    
+    try {
+        let dataInicioSQL, dataFimSQL;
+        if (req.query.since && req.query.until) {
+            dataInicioSQL = unixParaYYYYMMDD(req.query.since);
+            dataFimSQL = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dataInicioSQL = formatarDataSQL(dInicio);
+            dataFimSQL = formatarDataSQL(agora);
+        }
+
+        const q = `
+        WITH Etiquetas AS (
+            SELECT id FROM tags WHERE name ILIKE 'time-48h'
+        ),
+        TargetConversations AS (
+            SELECT c.id AS conv_id, c.created_at, c.first_reply_created_at, c.assignee_id
+            FROM conversations c
+            INNER JOIN taggings tg ON tg.taggable_id = c.id AND tg.taggable_type = 'Conversation'
+            WHERE tg.tag_id IN (SELECT id FROM Etiquetas)
+              AND c.account_id = 1
+              AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+        ),
+        Mensagens AS (
+            SELECT 
+                m.conversation_id, m.message_type, m.created_at,
+                LAG(m.created_at) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_time,
+                LAG(m.message_type) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_type
+            FROM messages m
+            WHERE m.conversation_id IN (SELECT conv_id FROM TargetConversations)
+              AND m.private = FALSE
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+        ),
+        MetricasAgente AS (
+            SELECT 
+                tc.conv_id,
+                COALESCE(u.name, 'SEM ATRIBUIR') AS agente,
+                EXTRACT(EPOCH FROM (tc.first_reply_created_at - tc.created_at))/60 AS tmc_minutos,
+                (SELECT COUNT(*) FROM Mensagens m2 WHERE m2.conversation_id = tc.conv_id AND m2.message_type = 1) AS qtd_msgs_agente,
+                -- 🔥 INTELIGÊNCIA: Se o cliente (0) mandou msg DEPOIS do agente (1), foi um retorno!
+                (SELECT COUNT(*) FROM Mensagens m5 WHERE m5.conversation_id = tc.conv_id AND m5.message_type = 0 AND m5.prev_msg_type = 1) AS interacoes_retorno,
+                (SELECT AVG(EXTRACT(EPOCH FROM (m4.created_at - m4.prev_msg_time))/60) 
+                 FROM Mensagens m4 
+                 WHERE m4.conversation_id = tc.conv_id AND m4.message_type = 1 AND m4.prev_msg_type = 0
+                ) AS tmr_minutos
+            FROM TargetConversations tc
+            LEFT JOIN users u ON u.id = tc.assignee_id
+        )
+        SELECT 
+            agente,
+            COUNT(conv_id) AS tickets,
+            -- Se teve 1 ou mais interações de retorno, marca este ticket como "Retornado"
+            COALESCE(SUM(CASE WHEN interacoes_retorno > 0 THEN 1 ELSE 0 END), 0) AS retornos,
+            COALESCE(SUM(qtd_msgs_agente), 0) AS mensagens,
+            COALESCE(AVG(tmc_minutos), 0) AS tmc_medio_minutos,
+            COALESCE(AVG(tmr_minutos), 0) AS tmr_medio_minutos
+        FROM MetricasAgente
+        GROUP BY agente
+        ORDER BY tickets DESC;
+        `;
+        const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
+        res.json({ success: true, dados: result.rows });
+    } catch (error) { 
+        console.error("Erro Time 48h:", error);
+        res.status(500).json({ success: false, error: error.message }); 
+    }
 });
 
 const PORT = process.env.PORT || 3003;
+
+// ==========================================
+// 18. 🩻 RAIO-X DO SNOOZE (diagnóstico do log de auditoria) — SOMENTE ADMIN
+// Abra no navegador (logado): https://SEU-DASH/api/raio-x-snooze
+// ==========================================
+app.get('/api/raio-x-snooze', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    if (!adms.includes(emailUser)) {
+        return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
+    }
+
+    const blocos = [];
+    async function testar(titulo, sql) {
+        try {
+            const r = await pool.query(sql);
+            blocos.push({ titulo, ok: true, linhas: r.rows });
+        } catch (e) {
+            blocos.push({ titulo, ok: false, erro: e.message });
+        }
+    }
+
+    await testar('1) Tabela "audits" existe?',
+        `SELECT to_regclass('public.audits') AS audits_existe`);
+
+    await testar('2) Tipo da coluna audited_changes',
+        `SELECT column_name, data_type FROM information_schema.columns
+         WHERE table_name = 'audits' AND column_name IN ('audited_changes','action','auditable_type')`);
+
+    await testar('3) Qtd de audits de snooze (via JSONB "?")',
+        `SELECT COUNT(*) AS total FROM audits
+         WHERE auditable_type = 'Conversation' AND audited_changes ? 'snoozed_until'`);
+
+    await testar('3b) Qtd de audits de snooze (via TEXTO) — fallback',
+        `SELECT COUNT(*) AS total FROM audits
+         WHERE auditable_type = 'Conversation' AND audited_changes::text ILIKE '%snoozed_until%'`);
+
+    await testar('4) Amostras (JSONB): valor escolhido do snooze',
+        `SELECT auditable_id AS conversa, created_at,
+                audited_changes -> 'snoozed_until' AS mudanca_snooze,
+                audited_changes -> 'snoozed_until' ->> 1 AS valor_novo
+         FROM audits
+         WHERE auditable_type = 'Conversation' AND audited_changes ? 'snoozed_until'
+         ORDER BY created_at DESC LIMIT 15`);
+
+    await testar('4b) Amostras (TEXTO cru) — fallback',
+        `SELECT auditable_id AS conversa, created_at, LEFT(audited_changes::text, 300) AS audited_changes_cru
+         FROM audits
+         WHERE auditable_type = 'Conversation' AND audited_changes::text ILIKE '%snoozed_until%'
+         ORDER BY created_at DESC LIMIT 15`);
+
+    await testar('5) 🎯 PROVA FINAL: adiamento x audit correspondente',
+        `SELECT m.conversation_id AS conversa, m.created_at AS hora_adiamento,
+                aud.created_at AS hora_audit,
+                aud.audited_changes -> 'snoozed_until' ->> 1 AS snooze_escolhido
+         FROM messages m
+         LEFT JOIN LATERAL (
+             SELECT a.created_at, a.audited_changes
+             FROM audits a
+             WHERE a.auditable_type = 'Conversation'
+               AND a.auditable_id = m.conversation_id
+               AND a.audited_changes ? 'snoozed_until'
+               AND a.created_at BETWEEN m.created_at - interval '15 seconds' AND m.created_at + interval '15 seconds'
+             ORDER BY abs(extract(epoch from (a.created_at - m.created_at))) LIMIT 1
+         ) aud ON true
+         WHERE m.account_id = 1 AND m.message_type = 2 AND m.content ILIKE '%adiad%'
+         ORDER BY m.created_at DESC LIMIT 15`);
+
+    await testar('6) 🔬 O que vem DENTRO de cada adiamento (content_attributes + snooze vivo)',
+        `SELECT m.conversation_id AS conversa, m.created_at AS hora,
+                m.content_attributes AS atributos_da_mensagem,
+                c.status AS status_atual_num, c.snoozed_until AS snooze_vivo
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         WHERE m.account_id = 1 AND m.message_type = 2 AND m.content ILIKE '%adiad%'
+         ORDER BY m.created_at DESC LIMIT 15`);
+
+    let html = `<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>Raio-X Snooze</title>
+    <style>
+      body{font-family:system-ui,Segoe UI,Arial;background:#0f172a;color:#e2e8f0;padding:24px;}
+      h1{color:#22d3ee;} h2{color:#93c5fd;margin-top:26px;border-bottom:1px solid #334155;padding-bottom:6px;font-size:16px;}
+      .ok{color:#34d399;} .fail{color:#f87171;}
+      table{border-collapse:collapse;width:100%;margin-top:8px;font-size:13px;}
+      th,td{border:1px solid #334155;padding:6px 8px;text-align:left;vertical-align:top;}
+      th{background:#1e293b;color:#cbd5e1;} tr:nth-child(even){background:#111c30;}
+      .box{background:#1e293b;padding:10px 14px;border-radius:8px;margin-top:6px;}
+      code{color:#fbbf24;}
+    </style></head><body>
+    <h1>🩻 Raio-X do Snooze — log de auditoria</h1>
+    <p>Se o bloco <b>5</b> mostrar <code>snooze_escolhido</code> com data (ex.: 2026-09-17T20:30) ou vazio (= próxima resposta), dá pra corrigir de vez. <b>Tire print desta página inteira e me mande.</b></p>`;
+
+    for (const b of blocos) {
+        html += `<h2>${b.titulo} — ${b.ok ? '<span class="ok">OK</span>' : '<span class="fail">FALHOU</span>'}</h2>`;
+        if (!b.ok) { html += `<div class="box fail">Erro: ${String(b.erro).replace(/</g,'&lt;')}</div>`; continue; }
+        if (!b.linhas.length) { html += `<div class="box">(sem linhas)</div>`; continue; }
+        const cols = Object.keys(b.linhas[0]);
+        html += '<table><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+        for (const row of b.linhas) {
+            html += '<tr>' + cols.map(c => {
+                let v = row[c];
+                if (v === null || v === undefined) v = '<i style="color:#64748b">null</i>';
+                else v = String(typeof v === 'object' ? JSON.stringify(v) : v).replace(/</g,'&lt;');
+                return `<td>${v}</td>`;
+            }).join('') + '</tr>';
+        }
+        html += '</table>';
+    }
+    html += '</body></html>';
+    res.send(html);
+});
+
+
+
+// ==========================================
+// 19. 🩻 RAIO-X DO BANCO (somente leitura) — SOMENTE ADMIN
+// Abra: /api/raio-x  (visão geral)  |  /api/raio-x?tabela=conversations (detalhe)
+// NÃO altera nada: executa apenas SELECT.
+// ==========================================
+app.get('/api/raio-x', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    if (!adms.includes(emailUser)) {
+        return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
+    }
+
+    const esc = (v) => (v === null || v === undefined) ? '<i style="color:#64748b">null</i>'
+        : String(typeof v === 'object' ? JSON.stringify(v) : v).replace(/</g, '&lt;');
+    const estilo = `<style>
+      body{font-family:system-ui,Segoe UI,Arial;background:#0f172a;color:#e2e8f0;padding:24px;}
+      h1{color:#22d3ee;} h2{color:#93c5fd;margin-top:22px;border-bottom:1px solid #334155;padding-bottom:6px;font-size:16px;}
+      a{color:#38bdf8;text-decoration:none;} a:hover{text-decoration:underline;}
+      table{border-collapse:collapse;width:100%;margin-top:8px;font-size:13px;}
+      th,td{border:1px solid #334155;padding:6px 8px;text-align:left;vertical-align:top;max-width:340px;overflow:hidden;text-overflow:ellipsis;}
+      th{background:#1e293b;color:#cbd5e1;} tr:nth-child(even){background:#111c30;}
+      .tag{background:#1e293b;color:#fbbf24;padding:2px 6px;border-radius:4px;font-size:11px;}
+      .aviso{background:#064e3b;color:#a7f3d0;padding:8px 12px;border-radius:8px;display:inline-block;margin-bottom:10px;}
+    </style>`;
+
+    try {
+        const tabsRes = await pool.query(
+            `SELECT table_name FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`);
+        const tabelasValidas = tabsRes.rows.map(r => r.table_name);
+        const tabela = (req.query.tabela || '').trim();
+
+        let html = `<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>Raio-X do Banco</title>${estilo}</head><body>`;
+        html += `<h1>🩻 Raio-X do Banco — somente leitura</h1><div class="aviso">🔒 Modo leitura: só executa SELECT. Nada é criado, alterado ou apagado.</div>`;
+
+        if (tabela && tabelasValidas.includes(tabela)) {
+            // ----- DETALHE DE UMA TABELA (validada contra a lista real) -----
+            const cols = await pool.query(
+                `SELECT column_name, data_type, is_nullable FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`, [tabela]);
+            const amostra = await pool.query(`SELECT * FROM "${tabela}" LIMIT 20`); // tabela já validada = seguro
+
+            html += `<p><a href="/api/raio-x">&larr; voltar pra lista</a></p>`;
+            html += `<h2>Tabela: ${tabela} — ${cols.rows.length} colunas</h2>`;
+            html += '<table><tr><th>Coluna</th><th>Tipo</th><th>Aceita null?</th></tr>';
+            for (const c of cols.rows) html += `<tr><td>${esc(c.column_name)}</td><td>${esc(c.data_type)}</td><td>${esc(c.is_nullable)}</td></tr>`;
+            html += '</table>';
+
+            html += `<h2>Amostra (20 primeiras linhas)</h2>`;
+            if (!amostra.rows.length) { html += '<p>(tabela vazia)</p>'; }
+            else {
+                const ck = Object.keys(amostra.rows[0]);
+                html += '<table><tr>' + ck.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+                for (const row of amostra.rows) html += '<tr>' + ck.map(c => `<td>${esc(row[c])}</td>`).join('') + '</tr>';
+                html += '</table>';
+            }
+        } else {
+            // ----- VISÃO GERAL: TODAS AS TABELAS + Nº APROX. DE LINHAS -----
+            const contagem = await pool.query(
+                `SELECT relname AS tabela, n_live_tup AS linhas_aprox
+                 FROM pg_stat_user_tables ORDER BY n_live_tup DESC`);
+            const mapaCont = {}; contagem.rows.forEach(r => mapaCont[r.tabela] = r.linhas_aprox);
+
+            html += `<h2>${tabelasValidas.length} tabelas no banco (clique pra explorar)</h2>`;
+            html += '<table><tr><th>Tabela</th><th>Linhas (aprox.)</th></tr>';
+            const ordenadas = [...tabelasValidas].sort((a,b) => (mapaCont[b]||0) - (mapaCont[a]||0));
+            for (const t of ordenadas) {
+                html += `<tr><td><a href="/api/raio-x?tabela=${encodeURIComponent(t)}">${esc(t)}</a></td><td>${esc(mapaCont[t] ?? '?')}</td></tr>`;
+            }
+            html += '</table>';
+            html += `<p style="margin-top:16px;color:#94a3b8">Dica: pra ver o snooze do jeito que o agente escolheu, abra <a href="/api/raio-x-snooze">/api/raio-x-snooze</a>.</p>`;
+        }
+        html += '</body></html>';
+        res.send(html);
+    } catch (e) {
+        res.status(500).send(`<body style="background:#0f172a;color:#f87171;font-family:system-ui;padding:24px"><h1>Erro (nada foi alterado)</h1><pre>${String(e.message).replace(/</g,'&lt;')}</pre></body>`);
+    }
+});
+
+
+// ==========================================
+// 🅱️ RAIO-X DO WEBHOOK DE SNOOZE (lê a planilha capturada) — SOMENTE ADMIN
+// Abra: /api/raio-x-webhook
+// ==========================================
+app.get('/api/raio-x-webhook', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    if (!adms.includes(emailUser)) return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
+
+    const esc = (v) => (v === null || v === undefined) ? '<i style="color:#64748b">null</i>'
+        : String(typeof v === 'object' ? JSON.stringify(v) : v).replace(/</g, '&lt;');
+
+    let linhas = [], erroSheets = null;
+    try {
+        const sheets = getSheetsRW();
+        const r = await sheets.spreadsheets.values.get({ spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A1:F5000` });
+        linhas = r.data.values || [];
+    } catch (e) { erroSheets = e.message; }
+
+    let html = `<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>Raio-X Webhook Snooze</title>
+    <style>body{font-family:system-ui,Segoe UI,Arial;background:#0f172a;color:#e2e8f0;padding:24px;}
+    h1{color:#22d3ee;}h2{color:#93c5fd;margin-top:22px;border-bottom:1px solid #334155;padding-bottom:6px;font-size:16px;}
+    table{border-collapse:collapse;width:100%;margin-top:8px;font-size:13px;}th,td{border:1px solid #334155;padding:6px 8px;text-align:left;vertical-align:top;}
+    th{background:#1e293b;}tr:nth-child(even){background:#111c30;}pre{background:#1e293b;padding:10px;border-radius:8px;overflow:auto;font-size:12px;}
+    .aviso{background:#064e3b;color:#a7f3d0;padding:8px 12px;border-radius:8px;display:inline-block;}.fail{background:#7f1d1d;color:#fecaca;padding:8px 12px;border-radius:8px;display:inline-block;}</style></head><body>
+    <h1>🅱️ Raio-X do Webhook de Snooze</h1>
+    <div class="aviso">🔒 Grava/lê só na planilha separada. O banco do Chatwoot não é tocado.</div>`;
+
+    if (erroSheets) html += `<h2 class="fail">Erro ao ler a planilha</h2><pre>${esc(erroSheets)}</pre><p>Confira: planilha compartilhada como <b>Editor</b> com a service account, aba <code>${SNOOZE_ABA}</code>, e <code>GOOGLE_PRIVATE_KEY</code> no ambiente.</p>`;
+
+    const dados = linhas.length > 1 ? linhas.slice(1) : [];
+    html += `<h2>Adiamentos capturados na planilha: ${dados.length}</h2>`;
+    if (dados.length) {
+        const head = linhas[0];
+        html += '<table><tr>' + head.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+        for (const row of dados.slice(-40).reverse()) html += '<tr>' + head.map((_, i) => `<td>${esc(row[i])}</td>`).join('') + '</tr>';
+        html += '</table>';
+    } else if (!erroSheets) {
+        html += `<p>Vazio. Confira: (1) webhook criado no Chatwoot; (2) houve um adiamento COM tempo depois disso.</p>`;
+    }
+
+    html += `<h2>Últimos payloads crus recebidos (confira se vem o snoozed_until)</h2>`;
+    if (snoozeRawRecentes.length) { for (const rr of snoozeRawRecentes) html += `<pre>${esc(JSON.stringify(rr, null, 2))}</pre>`; }
+    else html += `<p>(nenhum payload recebido ainda — faça um adiamento de teste)</p>`;
+
+    html += '</body></html>';
+    res.send(html);
+});
+
 app.listen(PORT, () => {
     console.log(`✅ Servidor rodando na porta ${PORT}`);
 });
