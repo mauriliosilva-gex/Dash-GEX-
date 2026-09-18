@@ -776,7 +776,7 @@ app.get('/api/distribuicao', async (req, res) => {
         // 2. Query Resumo Casos Agente (Apenas Abertos) - Lógica de SLA
         const qCasos = `
             WITH OpenConversations AS (
-                SELECT id, assignee_id, first_reply_created_at, last_activity_at
+                SELECT id, display_id, assignee_id, contact_id, first_reply_created_at, last_activity_at
                 FROM conversations
                 WHERE status = 0
             ),
@@ -791,11 +791,15 @@ app.get('/api/distribuicao', async (req, res) => {
             )
             SELECT 
                 u.name AS agente,
+                oc.id AS conv_id,
+                oc.display_id,
+                ct.name AS cliente,
                 oc.first_reply_created_at,
                 oc.last_activity_at,
                 lm.message_type AS last_msg_type
             FROM OpenConversations oc
             LEFT JOIN users u ON u.id = oc.assignee_id
+            LEFT JOIN contacts ct ON ct.id = oc.contact_id
             LEFT JOIN LastMessages lm ON lm.conversation_id = oc.id
         `;
         const resultCasos = await pool.query(qCasos);
@@ -805,30 +809,32 @@ app.get('/api/distribuicao', async (req, res) => {
         resultCasos.rows.forEach(r => {
             let nome = (r.agente || 'SEM ATRIBUIR').toUpperCase();
             if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS/)) return;
-            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, ignorado: 0, aguardando: 0, parado: 0, andamento: 0, total: 0 };
+            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, ignorado: 0, aguardando: 0, parado: 0, andamento: 0, total: 0, detalhes: [] };
             
             const diffHoras = (agora - new Date(r.last_activity_at)) / (1000 * 60 * 60);
             const isClientLast = (r.last_msg_type === 0);
             const agentRepliedBefore = (r.first_reply_created_at !== null);
             
+            let statusLabel, ordem;
             if (isClientLast) {
                 if (!agentRepliedBefore) {
-                    // Novo caso: Cliente mandou msg e o agente NUNCA respondeu
-                    resCasosMap[nome].aguardando += 1;
+                    resCasosMap[nome].aguardando += 1;   statusLabel = '⏳ Aguardando 1ª Resposta';    ordem = 3;
+                } else if (diffHoras > 48) {
+                    resCasosMap[nome].parado += 1;        statusLabel = '🟣 Parado (+48h)';             ordem = 1;
                 } else {
-                    // Retorno: Agente já tinha conversado, e cliente mandou msg novamente
-                    if (diffHoras > 48) {
-                        resCasosMap[nome].parado += 1; // Quebrou SLA de 48h
-                    } else {
-                        resCasosMap[nome].ignorado += 1; // Dentro do SLA de 48h
-                    }
+                    resCasosMap[nome].ignorado += 1;      statusLabel = '🔴 Ignorado (dentro do SLA)';  ordem = 2;
                 }
             } else {
-                // Última mensagem foi do Agente (ou não tem msg válida), está com o cliente
-                resCasosMap[nome].andamento += 1;
+                resCasosMap[nome].andamento += 1;         statusLabel = '🔵 Em Andamento';              ordem = 4;
             }
             
             resCasosMap[nome].total += 1;
+            resCasosMap[nome].detalhes.push({
+                id: r.display_id || r.conv_id,
+                cliente: r.cliente || 'Cliente sem nome',
+                status: statusLabel,
+                ordem: ordem
+            });
         });
 
         res.json({ 
@@ -1266,7 +1272,7 @@ app.get('/api/mencoes-abertos', async (req, res) => {
 // ==========================================
 app.get('/api/qualidade-tickets', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
-    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
     
     if (!adms.includes(emailUser)) {
         return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
@@ -1407,7 +1413,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
 // ==========================================
 app.get('/api/reembolsos-pagamerican', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
-    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
     
     if (!adms.includes(emailUser)) {
         return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
@@ -1495,7 +1501,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
 // ==========================================
 app.get('/api/time48', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
-    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
     
     if (!adms.includes(emailUser)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
     
@@ -1577,7 +1583,7 @@ const PORT = process.env.PORT || 3003;
 // ==========================================
 app.get('/api/raio-x-snooze', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
-    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
     if (!adms.includes(emailUser)) {
         return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
     }
@@ -1690,7 +1696,7 @@ app.get('/api/raio-x-snooze', async (req, res) => {
 // ==========================================
 app.get('/api/raio-x', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
-    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
     if (!adms.includes(emailUser)) {
         return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
     }
@@ -1769,7 +1775,7 @@ app.get('/api/raio-x', async (req, res) => {
 // ==========================================
 app.get('/api/raio-x-webhook', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
-    const adms = (process.env.EMAILS_ADM || '').split(',').map(e => e.trim().toLowerCase());
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
     if (!adms.includes(emailUser)) return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
 
     const esc = (v) => (v === null || v === undefined) ? '<i style="color:#64748b">null</i>'
