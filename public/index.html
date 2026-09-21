@@ -816,10 +816,16 @@
                             <h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">💳 Reembolsos PagAmerican</h3>
                             <p class="text-[10px] font-bold text-gray-500 mt-1">Classificados por Tipo de Retenção de Reembolso</p>
                         </div>
-                        <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
-                            <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                            <input type="text" id="calendario-pagamerican" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wider">
-                            <button id="btn-aplicar-pagam" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Buscar</button>
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-lg border border-gray-300 dark:border-transparent h-8 relative min-w-[240px]">
+                                <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                <input type="text" id="calendario-pagamerican" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wider">
+                                <button id="btn-aplicar-pagam" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Buscar</button>
+                            </div>
+                            <!-- 🔥 NOVO BOTÃO DE EXCEL -->
+                            <button id="btn-exportar-pagamerican" onclick="exportarExcelPagAmerican()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-2">
+                                📥 Baixar Excel
+                            </button>
                         </div>
                     </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
@@ -2063,8 +2069,7 @@
                         let taxaTotal = d.total_recebidas > 0 ? ((d.total_retornos / d.total_recebidas) * 100).toFixed(1) : 0;
                         
                         let semRetorno = parseInt(d.sem_retorno_48h) || 0;
-                        semRetorno = semRetorno - (parseInt(d.retornos_24h || 0) + parseInt(d.retornos_48h || 0) + parseInt(d.retornos_mais_48h || 0));
-                        if (semRetorno < 0) semRetorno = 0;
+                        
                         let slaTmr = formatarTempo(d.sla_tmr_minutos);
 
                         return `
@@ -2132,9 +2137,11 @@
             if (item.detalhes && Array.isArray(item.detalhes)) {
                 let ticketsLimpos = item.detalhes.filter(t => t && t.id);
                 let ticketsOrdenados = ticketsLimpos.sort((a,b) => {
-                    if (a.status !== 'Sem Retorno' && b.status === 'Sem Retorno') return -1;
-                    if (a.status === 'Sem Retorno' && b.status !== 'Sem Retorno') return 1;
-                    return b.id - a.id;
+                    const isSemA = a.status && a.status.includes('Sem Retorno');
+                    const isSemB = b.status && b.status.includes('Sem Retorno');
+                    if (!isSemA && isSemB) return -1;
+                    if (isSemA && !isSemB) return 1;
+                    return (b.id || 0) - (a.id || 0);
                 });
                 
                 let limit = 300; 
@@ -2153,10 +2160,10 @@
                         const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`; 
                         
                         let corStatus = 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
-                        if(tk.status === 'Retorno < 24h') corStatus = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
-                        if(tk.status === 'Retorno 24-48h') corStatus = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
-                        if(tk.status === 'Retorno > 48h') corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
-                        if (tk.status === 'Sem Retorno (>48h)') corStatus = 'bg-gray-500/10 text-gray-500 border border-gray-500/30';
+                        if(tk.status && tk.status.includes('< 24h')) corStatus = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
+                        if(tk.status && tk.status.includes('24-48h')) corStatus = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
+                        if(tk.status && tk.status.includes('> 48h')) corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
+                        if(tk.status && tk.status.includes('Sem Retorno')) corStatus = 'bg-gray-500/10 text-gray-500 border border-gray-500/30 font-bold';
 
                         html += `
                         <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
@@ -2165,7 +2172,7 @@
                                 <p class="text-[10px] font-bold text-gray-500 mt-1">👤 ${tk.agente || 'Sem Agente'}</p>
                                 <div class="flex flex-wrap items-center gap-2 mt-2">
                                     <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
-                                    <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corStatus}">${tk.status}</span>
+                                    <span class="text-[10px] px-2 py-0.5 rounded ${corStatus}">${tk.status}</span>
                                 </div>
                             </div>
                             <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
@@ -2484,143 +2491,143 @@
         }
 
         function renderTabelaMencoes() {
-        const tb = document.getElementById('tabela-mencoes-body');
-        if(!tb) return;
+            const tb = document.getElementById('tabela-mencoes-body');
+            if(!tb) return;
 
-        let lista = filtroMencaoSetor === 'TODOS' 
-            ? dadosMencoesBrutos 
-            : dadosMencoesBrutos.filter(a => a.equipe === filtroMencaoSetor);
+            let lista = filtroMencaoSetor === 'TODOS' 
+                ? dadosMencoesBrutos 
+                : dadosMencoesBrutos.filter(a => a.equipe === filtroMencaoSetor);
 
-        if (lista.length === 0) {
-            tb.innerHTML = `<tr><td colspan="12" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum produto mencionado na fila de ${filtroMencaoSetor}.</td></tr>`;
-            return;
-        }
-
-        const mapaAgrupado = {};
-        lista.forEach(item => {
-            const key = filtroMencaoSetor === 'TODOS' ? item.produto_mencionado : `${item.produto_mencionado}-${item.equipe}`;
-            if(!mapaAgrupado[key]) {
-                mapaAgrupado[key] = { 
-                    produto: item.produto_mencionado, 
-                    equipe: filtroMencaoSetor === 'TODOS' ? 'TODOS' : item.equipe,
-                    qtd: 0, total_retornos: 0, retornos_24h: 0, retornos_48h: 0, retornos_mais_48h: 0,
-                    sla_tmr_sum: 0, atrito_sum: 0, flood_desespero: 0, detalhes: []
-                };
+            if (lista.length === 0) {
+                tb.innerHTML = `<tr><td colspan="12" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum produto mencionado na fila de ${filtroMencaoSetor}.</td></tr>`;
+                return;
             }
-            
-            const volume = parseInt(item.qtd_casos || item.total_recebidas || 0);
-            mapaAgrupado[key].qtd += parseInt(item.qtd_casos || item.total_recebidas || 0);
-            mapaAgrupado[key].total_retornos += parseInt(item.total_retornos || 0);
-            mapaAgrupado[key].retornos_24h += parseInt(item.retornos_24h || 0);
-            mapaAgrupado[key].retornos_48h += parseInt(item.retornos_48h || 0);
-            mapaAgrupado[key].retornos_mais_48h += parseInt(item.retornos_mais_48h || 0);
-            mapaAgrupado[key].sem_retorno_48h += parseInt(item.sem_retorno_48h || 0);
-            mapaAgrupado[key].flood_desespero += parseInt(item.flood_desespero || 0);
-            mapaAgrupado[key].sla_tmr_sum += parseFloat(item.sla_tmr_minutos || 0) * parseInt(item.qtd_casos || 0);
-            mapaAgrupado[key].atrito_sum += parseFloat(item.atrito_msg_por_conv || 0) * parseInt(item.qtd_casos || 0);
-            
-            if(item.detalhes) mapaAgrupado[key].detalhes.push(...item.detalhes);
-        });
 
-        window.dadosMencoesAgrupados = mapaAgrupado;
-        const arrayRender = Object.values(mapaAgrupado).sort((a, b) => b.qtd - a.qtd);
-
-        tb.innerHTML = arrayRender.map(d => {
-            const alertaCritico = d.qtd > 50 ? 'text-red-500 font-black' : (d.qtd > 20 ? 'text-yellow-500 font-bold' : 'text-emerald-500 font-bold');
-            const mapKey = filtroMencaoSetor === 'TODOS' ? d.produto : `${d.produto}-${d.equipe}`;
-            
-            let taxaTotal = d.qtd > 0 ? ((d.total_retornos / d.qtd) * 100).toFixed(1) : 0;
-            let semRetorno = parseInt(d.sem_retorno_48h) || 0;
-            semRetorno = semRetorno - (parseInt(d.retornos_24h || 0) + parseInt(d.retornos_48h || 0) + parseInt(d.retornos_mais_48h || 0));
-            if (semRetorno < 0) semRetorno = 0;
-
-            let slaTmr = d.qtd > 0 ? formatarTempo(d.sla_tmr_sum / d.qtd) : '-';
-            let avgAtrito = d.qtd > 0 ? (d.atrito_sum / d.qtd).toFixed(1) : '0.0';
-            let corAtrito = avgAtrito > 5 ? 'text-red-500 bg-red-500/10 border-red-500/30' : (avgAtrito > 3 ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30');
-            let corDesespero = d.flood_desespero > 100 ? 'text-red-500 font-black' : (d.flood_desespero > 30 ? 'text-yellow-500 font-bold' : 'text-gray-500');
-
-            return `
-            <tr class="ranking-row row-normal linha-animada">
-                <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">💬 ${d.produto}</td>
-                <td class="py-4 px-3 text-center"><span class="badge-setor">${d.equipe}</span></td>
-                <td class="py-4 px-3 text-center font-mono text-[16px] ${alertaCritico}">${d.qtd}</td>
+            const mapaAgrupado = {};
+            lista.forEach(item => {
+                const key = filtroMencaoSetor === 'TODOS' ? item.produto_mencionado : `${item.produto_mencionado}-${item.equipe}`;
+                if(!mapaAgrupado[key]) {
+                    mapaAgrupado[key] = { 
+                        produto: item.produto_mencionado, 
+                        equipe: filtroMencaoSetor === 'TODOS' ? 'TODOS' : item.equipe,
+                        qtd: 0, total_retornos: 0, retornos_24h: 0, retornos_48h: 0, retornos_mais_48h: 0,
+                        sla_tmr_sum: 0, atrito_sum: 0, flood_desespero: 0, detalhes: []
+                    };
+                }
                 
-                <td class="py-4 px-3 text-center">
-                    <span class="font-mono text-[16px] font-black text-orange-500">${d.total_retornos}</span>
-                    <span class="text-[10px] text-gray-500 ml-1 font-bold">(${taxaTotal}%)</span>
-                </td>
-
-                <td class="py-4 px-3 text-center font-mono font-black text-emerald-500 text-[15px]">${d.retornos_24h}</td>
-                <td class="py-4 px-3 text-center font-mono font-black text-yellow-500 text-[15px]">${d.retornos_48h}</td>
-                <td class="py-4 px-3 text-center font-mono font-black text-orange-500 text-[15px]">${d.retornos_mais_48h}</td>
+                const volume = parseInt(item.qtd_casos || item.total_recebidas || 0);
+                mapaAgrupado[key].qtd += parseInt(item.qtd_casos || item.total_recebidas || 0);
+                mapaAgrupado[key].total_retornos += parseInt(item.total_retornos || 0);
+                mapaAgrupado[key].retornos_24h += parseInt(item.retornos_24h || 0);
+                mapaAgrupado[key].retornos_48h += parseInt(item.retornos_48h || 0);
+                mapaAgrupado[key].retornos_mais_48h += parseInt(item.retornos_mais_48h || 0);
+                mapaAgrupado[key].sem_retorno_48h += parseInt(item.sem_retorno_48h || 0);
+                mapaAgrupado[key].flood_desespero += parseInt(item.flood_desespero || 0);
+                mapaAgrupado[key].sla_tmr_sum += parseFloat(item.sla_tmr_minutos || 0) * parseInt(item.qtd_casos || 0);
+                mapaAgrupado[key].atrito_sum += parseFloat(item.atrito_msg_por_conv || 0) * parseInt(item.qtd_casos || 0);
                 
-                <td class="py-4 px-3 text-center font-mono font-bold text-gray-500 dark:text-gray-400 text-[15px]">${semRetorno}</td>
-                <td class="py-4 px-3 text-center font-mono font-bold text-gexCyan text-[14px]">${slaTmr}</td>
-                
-                <td class="py-4 px-3 text-center">
-                    <span class="inline-flex items-center justify-center px-2 py-1 rounded text-[11px] font-black border shadow-sm ${corAtrito}">
-                        ${avgAtrito} msg/tk
-                    </span>
-                </td>
-                <td class="py-4 px-3 text-center font-mono text-[15px] ${corDesespero}">${d.flood_desespero}x</td>
+                if(item.detalhes) mapaAgrupado[key].detalhes.push(...item.detalhes);
+            });
 
-                <td class="py-4 px-3 text-center pr-4">
-                    <button onclick="abrirModalMencoes('${mapKey.replace(/'/g, "\\'")}')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap">
-                        👁️ Ver E-mails
-                    </button>
-                </td>
-            </tr>`;
-        }).join('');
-    }
+            window.dadosMencoesAgrupados = mapaAgrupado;
+            const arrayRender = Object.values(mapaAgrupado).sort((a, b) => b.qtd - a.qtd);
+
+            tb.innerHTML = arrayRender.map(d => {
+                const alertaCritico = d.qtd > 50 ? 'text-red-500 font-black' : (d.qtd > 20 ? 'text-yellow-500 font-bold' : 'text-emerald-500 font-bold');
+                const mapKey = filtroMencaoSetor === 'TODOS' ? d.produto : `${d.produto}-${d.equipe}`;
+                
+                let taxaTotal = d.qtd > 0 ? ((d.total_retornos / d.qtd) * 100).toFixed(1) : 0;
+                let semRetorno = parseInt(d.sem_retorno_48h) || 0;
+
+                let slaTmr = d.qtd > 0 ? formatarTempo(d.sla_tmr_sum / d.qtd) : '-';
+                let avgAtrito = d.qtd > 0 ? (d.atrito_sum / d.qtd).toFixed(1) : '0.0';
+                let corAtrito = avgAtrito > 5 ? 'text-red-500 bg-red-500/10 border-red-500/30' : (avgAtrito > 3 ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30');
+                let corDesespero = d.flood_desespero > 100 ? 'text-red-500 font-black' : (d.flood_desespero > 30 ? 'text-yellow-500 font-bold' : 'text-gray-500');
+
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">💬 ${d.produto}</td>
+                    <td class="py-4 px-3 text-center"><span class="badge-setor">${d.equipe}</span></td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] ${alertaCritico}">${d.qtd}</td>
+                    
+                    <td class="py-4 px-3 text-center">
+                        <span class="font-mono text-[16px] font-black text-orange-500">${d.total_retornos}</span>
+                        <span class="text-[10px] text-gray-500 ml-1 font-bold">(${taxaTotal}%)</span>
+                    </td>
+
+                    <td class="py-4 px-3 text-center font-mono font-black text-emerald-500 text-[15px]">${d.retornos_24h}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-yellow-500 text-[15px]">${d.retornos_48h}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-orange-500 text-[15px]">${d.retornos_mais_48h}</td>
+                    
+                    <td class="py-4 px-3 text-center font-mono font-bold text-gray-500 dark:text-gray-400 text-[15px]">${semRetorno}</td>
+                    <td class="py-4 px-3 text-center font-mono font-bold text-gexCyan text-[14px]">${slaTmr}</td>
+                    
+                    <td class="py-4 px-3 text-center">
+                        <span class="inline-flex items-center justify-center px-2 py-1 rounded text-[11px] font-black border shadow-sm ${corAtrito}">
+                            ${avgAtrito} msg/tk
+                        </span>
+                    </td>
+                    <td class="py-4 px-3 text-center font-mono text-[15px] ${corDesespero}">${d.flood_desespero}x</td>
+
+                    <td class="py-4 px-3 text-center pr-4">
+                        <button onclick="abrirModalMencoes('${mapKey.replace(/'/g, "\\'")}')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap">
+                            👁️ Ver E-mails
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
 
         function abrirModalMencoes(mapKey) {
-        const item = window.dadosMencoesAgrupados[mapKey];
-        if (!item) return;
+            const item = window.dadosMencoesAgrupados[mapKey];
+            if (!item) return;
 
-        document.getElementById('modal-mencoes-titulo').innerText = `Casos Citando: ${item.produto} (${item.equipe})`;
-        
-        let html = '<div class="space-y-3">';
-        if (item.detalhes && item.detalhes.length > 0) {
-            const uniqueTickets = Array.from(new Map(item.detalhes.map(t => [t.id, t])).values());
+            document.getElementById('modal-mencoes-titulo').innerText = `Casos Citando: ${item.produto} (${item.equipe})`;
             
-            let ticketsOrdenados = uniqueTickets.sort((a,b) => {
-                if (a.status !== 'Sem Retorno' && b.status === 'Sem Retorno') return -1;
-                if (a.status === 'Sem Retorno' && b.status !== 'Sem Retorno') return 1;
-                return b.id - a.id;
-            });
-
-            ticketsOrdenados.forEach(tk => {
-                const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`; 
+            let html = '<div class="space-y-3">';
+            if (item.detalhes && item.detalhes.length > 0) {
+                const uniqueTickets = Array.from(new Map(item.detalhes.map(t => [t.id, t])).values());
                 
-                let corStatus = 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
-                if(tk.status === 'Retorno < 24h') corStatus = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
-                if(tk.status === 'Retorno 24-48h') corStatus = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
-                if(tk.status === 'Retorno > 48h') corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
-                if (tk.status === 'Sem Retorno (>48h)') corStatus = 'bg-gray-500/10 text-gray-500 border border-gray-500/30';
+                let ticketsOrdenados = uniqueTickets.sort((a,b) => {
+                    const isSemA = a.status && a.status.includes('Sem Retorno');
+                    const isSemB = b.status && b.status.includes('Sem Retorno');
+                    if (!isSemA && isSemB) return -1;
+                    if (isSemA && !isSemB) return 1;
+                    return (b.id || 0) - (a.id || 0);
+                });
 
-                html += `
-                <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-                    <div>
-                        <p class="text-sm font-black text-gray-800 dark:text-white">${tk.nome || tk.cliente || 'Sem Nome'}</p>
-                        <p class="text-xs font-bold text-gray-500 mt-1">📧 ${tk.email || tk.agente || 'Sem Info'}</p>
-                        <div class="flex flex-wrap items-center gap-2 mt-2">
-                            <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
-                            <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corStatus}">${tk.status || 'Sem Retorno'}</span>
+                ticketsOrdenados.forEach(tk => {
+                    const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`; 
+                    
+                    let corStatus = 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+                    if(tk.status && tk.status.includes('< 24h')) corStatus = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
+                    if(tk.status && tk.status.includes('24-48h')) corStatus = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
+                    if(tk.status && tk.status.includes('> 48h')) corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
+                    if(tk.status && tk.status.includes('Sem Retorno')) corStatus = 'bg-gray-500/10 text-gray-500 border border-gray-500/30 font-bold';
+
+                    html += `
+                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                            <p class="text-sm font-black text-gray-800 dark:text-white">${tk.nome || tk.cliente || 'Sem Nome'}</p>
+                            <p class="text-xs font-bold text-gray-500 mt-1">📧 ${tk.email || tk.agente || 'Sem Info'}</p>
+                            <div class="flex flex-wrap items-center gap-2 mt-2">
+                                <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
+                                <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corStatus}">${tk.status || 'Sem Retorno'}</span>
+                            </div>
                         </div>
-                    </div>
-                    <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
-                        Abrir Conversa ↗️
-                    </a>
-                </div>`;
-            });
-        } else {
-            html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum detalhe encontrado.</p>';
-        }
-        html += '</div>';
+                        <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                            Abrir Conversa ↗️
+                        </a>
+                    </div>`;
+                });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum detalhe encontrado.</p>';
+            }
+            html += '</div>';
 
-        document.getElementById('modal-mencoes-conteudo').innerHTML = html;
-        document.getElementById('modal-mencoes-detalhes').classList.remove('hidden');
-    }
+            document.getElementById('modal-mencoes-conteudo').innerHTML = html;
+            document.getElementById('modal-mencoes-detalhes').classList.remove('hidden');
+        }
 
         function fecharModalMencoes() {
             document.getElementById('modal-mencoes-detalhes').classList.add('hidden');
@@ -2628,115 +2635,114 @@
 
         async function exportarExcelMencoes() {
             if (usuarioAtual && usuarioAtual.role !== 'admin') return;
-        const btn = document.getElementById('btn-exportar-mencoes');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '⏳ Gerando...';
-        
-        try {
-            const workbook = new ExcelJS.Workbook();
+            const btn = document.getElementById('btn-exportar-mencoes');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Gerando...';
             
-            // --- ABA 1: RESUMO ---
-            const sheet = workbook.addWorksheet('Radar_Mencoes', {views: [{state: 'frozen', ySplit: 1}]});
-            sheet.columns = [
-                { header: 'PRODUTO CITADO NO TEXTO', key: 'produto', width: 40 },
-                { header: 'FILA / EQUIPE', key: 'equipe', width: 25 },
-                { header: 'TOTAL DE TICKETS', key: 'qtd', width: 20 },
-                { header: 'TOTAL DE RETORNOS', key: 'total_ret', width: 20 },
-                { header: 'TAXA DE RETORNO (%)', key: 'tx_ret', width: 22 },
-                { header: 'RETORNOS < 24H', key: 'r24', width: 20 },
-                { header: 'RETORNOS 24-48H', key: 'r48', width: 20 },
-                { header: 'RETORNOS > 48H', key: 'rMais48', width: 20 },
-                { header: 'SEM RETORNO (>48H)', key: 'sem_ret', width: 22 },
-                { header: 'SLA TMR (MÉDIA RESPOSTA)', key: 'sla', width: 25 },
-                { header: 'ATRITO (MSG/TICKET)', key: 'atrito', width: 22 },
-                { header: 'FLOOD / DESESPERO', key: 'flood', width: 22 }
-            ];
-
-            sheet.getRow(1).eachCell(cell => {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
-                cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-                cell.alignment = { vertical: 'middle', horizontal: 'center' };
-            });
-
-            const arrayRender = Object.values(window.dadosMencoesAgrupados).sort((a, b) => b.qtd - a.qtd);
-
-            arrayRender.forEach(d => {
-                let taxaTotal = d.qtd > 0 ? (d.total_retornos / d.qtd) * 100 : 0;
-                let semRetorno = d.total_retornos - (d.retornos_24h + d.retornos_48h + d.retornos_mais_48h);
-                if(semRetorno < 0) semRetorno = 0;
+            try {
+                const workbook = new ExcelJS.Workbook();
                 
-                let row = sheet.addRow({
-                    produto: d.produto,
-                    equipe: d.equipe,
-                    qtd: d.qtd,
-                    total_ret: d.total_retornos,
-                    tx_ret: taxaTotal.toFixed(1) + '%',
-                    r24: d.retornos_24h,
-                    r48: d.retornos_48h,
-                    rMais48: d.retornos_mais_48h,
-                    sem_ret: parseInt(d.sem_retorno_48h) || 0,
-                    sla: formatarTempo(d.qtd > 0 ? d.sla_tmr_sum / d.qtd : 0),
-                    atrito: (d.qtd > 0 ? d.atrito_sum / d.qtd : 0).toFixed(1),
-                    flood: d.flood_desespero
+                // --- ABA 1: RESUMO ---
+                const sheet = workbook.addWorksheet('Radar_Mencoes', {views: [{state: 'frozen', ySplit: 1}]});
+                sheet.columns = [
+                    { header: 'PRODUTO CITADO NO TEXTO', key: 'produto', width: 40 },
+                    { header: 'FILA / EQUIPE', key: 'equipe', width: 25 },
+                    { header: 'TOTAL DE TICKETS', key: 'qtd', width: 20 },
+                    { header: 'TOTAL DE RETORNOS', key: 'total_ret', width: 20 },
+                    { header: 'TAXA DE RETORNO (%)', key: 'tx_ret', width: 22 },
+                    { header: 'RETORNOS < 24H', key: 'r24', width: 20 },
+                    { header: 'RETORNOS 24-48H', key: 'r48', width: 20 },
+                    { header: 'RETORNOS > 48H', key: 'rMais48', width: 20 },
+                    { header: 'SEM RETORNO (>48H)', key: 'sem_ret', width: 22 },
+                    { header: 'SLA TMR (MÉDIA RESPOSTA)', key: 'sla', width: 25 },
+                    { header: 'ATRITO (MSG/TICKET)', key: 'atrito', width: 22 },
+                    { header: 'FLOOD / DESESPERO', key: 'flood', width: 22 }
+                ];
+
+                sheet.getRow(1).eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
                 });
-                row.alignment = { vertical: 'middle', horizontal: 'center' };
-                row.getCell('produto').alignment = { vertical: 'middle', horizontal: 'left' };
-            });
 
-            // --- ABA 2: AUDITORIA DE TICKETS ---
-            const sheetAuditoria = workbook.addWorksheet('Auditoria de Tickets', {views: [{state: 'frozen', ySplit: 1}]});
-            sheetAuditoria.columns = [
-                { header: 'PRODUTO', key: 'produto', width: 30 },
-                { header: 'TICKET ID', key: 'ticket_id', width: 15 },
-                { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
-                { header: 'EMAIL', key: 'email', width: 35 },
-                { header: 'STATUS DE RETORNO', key: 'status', width: 25 },
-                { header: 'LINK CHATWOOT', key: 'link', width: 60 }
-            ];
-            sheetAuditoria.getRow(1).eachCell(cell => {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
-                cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-                cell.alignment = { vertical: 'middle', horizontal: 'center' };
-            });
+                const arrayRender = Object.values(window.dadosMencoesAgrupados).sort((a, b) => b.qtd - a.qtd);
 
-            arrayRender.forEach(d => {
-                if(d.detalhes && d.detalhes.length > 0) {
-                    const uniqueTickets = Array.from(new Map(d.detalhes.map(t => [t.id, t])).values());
-                    uniqueTickets.forEach(tk => {
-                        let row = sheetAuditoria.addRow({
-                            produto: d.produto,
-                            ticket_id: tk.id,
-                            cliente: tk.nome || tk.cliente || 'Sem Nome',
-                            email: tk.email || tk.agente || 'Sem Info',
-                            status: tk.status || 'Sem Retorno',
-                            link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
-                        });
-                        row.alignment = { vertical: 'middle', horizontal: 'center' };
-                        row.getCell('link').alignment = { horizontal: 'left' };
-                        
-                        if(tk.status && tk.status !== 'Sem Retorno') {
-                            row.getCell('status').font = { color: { argb: 'FFCC0000' }, bold: true };
-                        }
+                arrayRender.forEach(d => {
+                    let taxaTotal = d.qtd > 0 ? (d.total_retornos / d.qtd) * 100 : 0;
+                    let semRetorno = parseInt(d.sem_retorno_48h) || 0;
+                    
+                    let row = sheet.addRow({
+                        produto: d.produto,
+                        equipe: d.equipe,
+                        qtd: d.qtd,
+                        total_ret: d.total_retornos,
+                        tx_ret: taxaTotal.toFixed(1) + '%',
+                        r24: d.retornos_24h,
+                        r48: d.retornos_48h,
+                        rMais48: d.retornos_mais_48h,
+                        sem_ret: semRetorno,
+                        sla: formatarTempo(d.qtd > 0 ? d.sla_tmr_sum / d.qtd : 0),
+                        atrito: (d.qtd > 0 ? d.atrito_sum / d.qtd : 0).toFixed(1),
+                        flood: d.flood_desespero
                     });
-                }
-            });
+                    row.alignment = { vertical: 'middle', horizontal: 'center' };
+                    row.getCell('produto').alignment = { vertical: 'middle', horizontal: 'left' };
+                });
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Mencoes_Fila_GEX_${new Date().toISOString().split('T')[0]}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+                // --- ABA 2: AUDITORIA DE TICKETS ---
+                const sheetAuditoria = workbook.addWorksheet('Auditoria de Tickets', {views: [{state: 'frozen', ySplit: 1}]});
+                sheetAuditoria.columns = [
+                    { header: 'PRODUTO', key: 'produto', width: 30 },
+                    { header: 'TICKET ID', key: 'ticket_id', width: 15 },
+                    { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
+                    { header: 'EMAIL', key: 'email', width: 35 },
+                    { header: 'STATUS DE RETORNO', key: 'status', width: 25 },
+                    { header: 'LINK CHATWOOT', key: 'link', width: 60 }
+                ];
+                sheetAuditoria.getRow(1).eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                });
+
+                arrayRender.forEach(d => {
+                    if(d.detalhes && d.detalhes.length > 0) {
+                        const uniqueTickets = Array.from(new Map(d.detalhes.map(t => [t.id, t])).values());
+                        uniqueTickets.forEach(tk => {
+                            let row = sheetAuditoria.addRow({
+                                produto: d.produto,
+                                ticket_id: tk.id,
+                                cliente: tk.nome || tk.cliente || 'Sem Nome',
+                                email: tk.email || tk.agente || 'Sem Info',
+                                status: tk.status || 'Sem Retorno',
+                                link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                            });
+                            row.alignment = { vertical: 'middle', horizontal: 'center' };
+                            row.getCell('link').alignment = { horizontal: 'left' };
+                            
+                            if(tk.status && tk.status !== 'Sem Retorno') {
+                                row.getCell('status').font = { color: { argb: 'FFCC0000' }, bold: true };
+                            }
+                        });
+                    }
+                });
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Mencoes_Fila_GEX_${new Date().toISOString().split('T')[0]}.xlsx`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+            } catch(e) { 
+                console.error(e); 
+                alert('Erro ao gerar o arquivo Excel.'); 
+            }
             
-        } catch(e) { 
-            console.error(e); 
-            alert('Erro ao gerar o arquivo Excel.'); 
+            btn.innerHTML = originalText;
         }
-        
-        btn.innerHTML = originalText;
-    }
 
         // ==========================================
 // URGÊNCIA: REEMBOLSOS PAGAMERICAN
@@ -2848,6 +2854,110 @@ function abrirModalPagAmerican(index) {
 }
 
 function fecharModalPagAmerican() { document.getElementById('modal-pagamerican').classList.add('hidden'); }    
+
+async function exportarExcelPagAmerican() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            if (!dadosPagAmerican || dadosPagAmerican.length === 0) return alert("Sem dados para exportar.");
+            
+            const btn = document.getElementById('btn-exportar-pagamerican');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Gerando...';
+            
+            try {
+                const workbook = new ExcelJS.Workbook();
+                
+                // --- ABA 1: RESUMO DO TIME ---
+                const sheet = workbook.addWorksheet('Resumo_PagAmerican', {views: [{state: 'frozen', ySplit: 1}]});
+                sheet.columns = [
+                    { header: 'ANALISTA (TICKET)', key: 'agente', width: 35 },
+                    { header: '10 A 30%', key: 'r10', width: 15 },
+                    { header: '40 A 50%', key: 'r40', width: 15 },
+                    { header: '60 A 90%', key: 'r60', width: 15 },
+                    { header: 'PERDA (100%)', key: 'r100', width: 18 },
+                    { header: 'OUTROS', key: 'routros', width: 15 },
+                    { header: 'TOTAL DE REEMBOLSOS', key: 'total', width: 25 }
+                ];
+
+                sheet.getRow(1).eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                });
+
+                dadosPagAmerican.forEach(d => {
+                    let row = sheet.addRow({
+                        agente: d.agente_nome,
+                        r10: parseInt(d.r_10_30) || 0,
+                        r40: parseInt(d.r_40_50) || 0,
+                        r60: parseInt(d.r_60_90) || 0,
+                        r100: parseInt(d.r_100) || 0,
+                        routros: parseInt(d.r_outros) || 0,
+                        total: parseInt(d.total_reembolsos) || 0
+                    });
+                    row.alignment = { vertical: 'middle', horizontal: 'center' };
+                    row.getCell('agente').alignment = { vertical: 'middle', horizontal: 'left' };
+                });
+
+                // --- ABA 2: DETALHES E AUDITORIA DE TICKETS ---
+                const sheetAuditoria = workbook.addWorksheet('Auditoria de Tickets', {views: [{state: 'frozen', ySplit: 1}]});
+                sheetAuditoria.columns = [
+                    { header: 'ANALISTA RESPONSÁVEL', key: 'agente', width: 35 },
+                    { header: 'TICKET ID', key: 'ticket_id', width: 15 },
+                    { header: 'DATA E HORA', key: 'data', width: 22 },
+                    { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
+                    { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
+                    { header: 'E-MAIL', key: 'email', width: 35 },
+                    { header: 'LINK DO CHATWOOT', key: 'link', width: 60 }
+                ];
+
+                sheetAuditoria.getRow(1).eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                });
+
+                dadosPagAmerican.forEach(d => {
+                    if(d.detalhes && d.detalhes.length > 0) {
+                        d.detalhes.forEach(tk => {
+                            const dataFormatada = new Date(tk.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+                            let row = sheetAuditoria.addRow({
+                                agente: d.agente_nome,
+                                ticket_id: tk.id,
+                                data: dataFormatada,
+                                tipo: tk.tipo,
+                                cliente: tk.nome || 'Sem Nome',
+                                email: tk.email || 'Sem Info',
+                                link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                            });
+                            row.alignment = { vertical: 'middle', horizontal: 'center' };
+                            row.getCell('agente').alignment = { horizontal: 'left' };
+                            row.getCell('cliente').alignment = { horizontal: 'left' };
+                            row.getCell('link').alignment = { horizontal: 'left' };
+                            
+                            // Destaca em vermelho quem teve Perda 100%
+                            if(tk.tipo && tk.tipo.includes('100%')) {
+                                row.getCell('tipo').font = { color: { argb: 'FFCC0000' }, bold: true };
+                            }
+                        });
+                    }
+                });
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `PagAmerican_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}.xlsx`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+            } catch(e) { 
+                console.error(e); 
+                alert('Erro ao gerar o arquivo Excel.'); 
+            }
+            
+            btn.innerHTML = originalText;
+        }
 
 // ==========================================
         // INTELIGÊNCIA: MONITORIA DE TICKETS (AUDITORIA)
