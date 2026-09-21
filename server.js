@@ -538,10 +538,36 @@ app.get('/api/qualidade', async (req, res) => {
 
             let setorRaw = String(row[idxSetor] || '').toUpperCase();
             let siglaSetor = 'RET'; 
-            if (setorRaw.includes('SAC')) siglaSetor = 'SAC';
-            else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) siglaSetor = 'BKO';
-            else if (setorRaw.includes('SMS')) siglaSetor = 'SMS';
-            else if (setorRaw.includes('48H')) siglaSetor = '48H';
+            
+            // 🔥 ARRAY COM OS NOMES DO TIME 48H
+            const nomes48H = [
+                'THAUANE GARCIA', 
+                'BRUNO SILVA', 
+                'ALEXANDRE FILHO', 
+                'DARYSON MATHEUS', 
+                'DARYSON NASCIMENTO', 
+                'GABRIELA ANDRADE', 
+                'GABRIELA PENHA'
+            ];
+
+            // 🔥 ARRAY COM OS NOMES DO TIME SMS
+            const nomesSMS = [
+                'ANA GODINHO',
+                'REBECA SILVA',
+                'BRUNO LIMA',
+                'KEULIANE MOURA'
+            ];
+            
+            // A ordem importa! 48H e SMS são lidos primeiro para evitar conflito com "SAC - SMS"
+            if (setorRaw.includes('48H') || nomes48H.some(n => nomeFormatado.includes(n))) {
+                siglaSetor = '48H';
+            } else if (setorRaw.includes('SMS') || nomesSMS.some(n => nomeFormatado.includes(n))) {
+                siglaSetor = 'SMS';
+            } else if (setorRaw.includes('SAC')) {
+                siglaSetor = 'SAC';
+            } else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) {
+                siglaSetor = 'BKO';
+            }
 
             monitoriasGerais.push({ mes: mesRaw, nome: nomeFormatado, time: siglaSetor, qual: nota, ciclo: cicloNum, nomeOriginal: nomeRaw });
         }
@@ -660,10 +686,18 @@ app.get('/api/sinalizacoes', async (req, res) => {
 
             let setorRaw = String(row[idxSetor] || '').toUpperCase();
             let siglaSetor = 'RET'; 
-            if (setorRaw.includes('SAC')) siglaSetor = 'SAC';
-            else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) siglaSetor = 'BKO';
-            else if (setorRaw.includes('SMS')) siglaSetor = 'SMS';
-            else if (setorRaw.includes('48H')) siglaSetor = '48H';
+            
+            const nomes48H = ['THAUANE GARCIA', 'BRUNO SILVA', 'BRUNO LIMA', 'ALEXANDRE FILHO', 'DARYSON MATHEUS', 'DARYSON NASCIMENTO', 'GABRIELA ANDRADE', 'GABRIELA PENHA'];
+            
+            if (setorRaw.includes('48H') || nomes48H.some(n => nomeFormatado.includes(n))) {
+                siglaSetor = '48H';
+            } else if (setorRaw.includes('SAC')) {
+                siglaSetor = 'SAC';
+            } else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) {
+                siglaSetor = 'BKO';
+            } else if (setorRaw.includes('SMS')) {
+                siglaSetor = 'SMS';
+            }
 
             sinalizacoesGerais.push({
                 mes: mesRaw, nome: nomeFormatado, nomeOriginal: nomeRaw, time: siglaSetor,
@@ -1152,6 +1186,14 @@ app.get('/api/produtos-metricas', async (req, res) => {
             WHERE message_type = 0 AND prev_msg_type = 1
             ORDER BY conversation_id, created_at DESC
         ),
+        UltimaMensagem AS (
+            SELECT DISTINCT ON (conversation_id)
+                conversation_id,
+                message_type,
+                created_at
+            FROM BaseMessages
+            ORDER BY conversation_id, created_at DESC
+        ),
         AgregacaoGeral AS (
             SELECT 
                 conversation_id,
@@ -1161,7 +1203,6 @@ app.get('/api/produtos-metricas', async (req, res) => {
                 MAX(contato_nome) AS contato_nome,
                 COUNT(*) FILTER (WHERE message_type = 0) AS qtd_msgs_cliente,
                 SUM(CASE WHEN message_type = 0 AND prev_msg_type = 0 AND prev_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_msg_time))/3600 <= 1 THEN 1 ELSE 0 END) AS qtd_floods,
-                -- 🔥 SLA: Calcula o tempo que o AGENTE (1) levou para responder o CLIENTE (0)
                 AVG(EXTRACT(EPOCH FROM (created_at - prev_msg_time))/60) FILTER (WHERE message_type = 1 AND prev_msg_type = 0) AS tmr_minutos
             FROM BaseMessages
             GROUP BY conversation_id, produto
@@ -1175,6 +1216,9 @@ app.get('/api/produtos-metricas', async (req, res) => {
             COUNT(DISTINCT ur.conversation_id) FILTER (WHERE ur.gap_horas > 24 AND ur.gap_horas <= 48) AS retornos_48h,
             COUNT(DISTINCT ur.conversation_id) FILTER (WHERE ur.gap_horas > 48) AS retornos_mais_48h,
             
+            -- 🔥 O CÁLCULO DE SEM RETORNO DE VOLTA AO BANCO
+            COUNT(DISTINCT um.conversation_id) FILTER (WHERE um.message_type = 1 AND EXTRACT(EPOCH FROM (NOW() AT TIME ZONE 'UTC' - um.created_at))/3600 > 48) AS sem_retorno_48h,
+            
             COALESCE(SUM(a.qtd_floods), 0) AS flood_desespero,
             ROUND(AVG(a.qtd_msgs_cliente), 1) AS atrito_msg_por_conv,
             COALESCE(AVG(a.tmr_minutos), 0) AS sla_tmr_minutos,
@@ -1185,15 +1229,17 @@ app.get('/api/produtos-metricas', async (req, res) => {
                     'agente', a.agente_nome,
                     'cliente', a.contato_nome,
                     'status', CASE 
+                        WHEN um.message_type = 1 AND EXTRACT(EPOCH FROM (NOW() AT TIME ZONE 'UTC' - um.created_at))/3600 > 48 THEN 'Sem Retorno (>48h)'
                         WHEN ur.gap_horas > 0 AND ur.gap_horas <= 24 THEN 'Retorno < 24h'
                         WHEN ur.gap_horas > 24 AND ur.gap_horas <= 48 THEN 'Retorno 24-48h'
                         WHEN ur.gap_horas > 48 THEN 'Retorno > 48h'
-                        ELSE 'Sem Retorno'
+                        ELSE 'Em Andamento / Novo'
                     END
                 )
             ) AS detalhes
         FROM AgregacaoGeral a
         LEFT JOIN UltimoRetorno ur ON ur.conversation_id = a.conversation_id
+        LEFT JOIN UltimaMensagem um ON um.conversation_id = a.conversation_id
         GROUP BY a.produto
         ORDER BY total_recebidas DESC;
         `;
