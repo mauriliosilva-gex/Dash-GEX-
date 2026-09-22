@@ -14,6 +14,15 @@ const { Pool } = require('pg');
 const app = express();
 
 // ==========================================
+// 🛡️ VALIDAÇÃO DE SEGURANÇA (Fail Secure)
+// ==========================================
+if (!process.env.SESSION_SECRET || !process.env.SNOOZE_HOOK_TOKEN) {
+    console.error("🚨 ERRO FATAL DE SEGURANÇA: Variáveis SESSION_SECRET ou SNOOZE_HOOK_TOKEN ausentes no ambiente.");
+    console.error("O servidor não será iniciado usando chaves de fallback públicas. Configure o arquivo .env!");
+    process.exit(1); // Derruba a aplicação instantaneamente
+}
+
+// ==========================================
 // 1. BLINDAGEM DE SEGURANÇA BASE E BANCO DE DADOS
 // ==========================================
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -174,13 +183,20 @@ app.get('/api/me', verificarLogin, (req, res) => {
 });
 
 // ==========================================
-// 4.5. SISTEMA DE CACHE INTELIGENTE
+// 4.5. SISTEMA DE CACHE INTELIGENTE BLINDADO (Anti-DoS)
 // ==========================================
-const cacheMemoria = {};
+let cacheMemoria = {};
+const MAX_CACHE_KEYS = 200; // Trava de segurança para impedir estouro de RAM
 
 const cacheMiddleware = (req, res, next) => {
     const chaveUrl = req.originalUrl; 
     const agora = Date.now();
+
+    // 🛡️ PROTEÇÃO DoS: Se o cache inchar de forma anormal, limpa a memória
+    if (Object.keys(cacheMemoria).length > MAX_CACHE_KEYS) {
+        console.warn("🚨 ALERTA: Limite de cache atingido. Esvaziando memória para prevenir Memory Exhaustion (DoS).");
+        cacheMemoria = {}; 
+    }
 
     // Lógica inteligente: Planilhas = 15 min / Banco de Dados (Tickets puros) = 30 min
     let tempoCacheMinutos = 30; 
@@ -825,7 +841,7 @@ app.get('/api/tickets-geral', async (req, res) => {
 // ==========================================
 app.get('/api/distribuicao', async (req, res) => {
     try {
-        // 1. Query de Distribuição de Tickets por Inbox (APENAS ABERTOS: status = 0)
+        // 1. Query de Distribuição de Tickets por Inbox
         const qDist = `
             SELECT 
                 u.name AS agente,
@@ -844,21 +860,38 @@ app.get('/api/distribuicao', async (req, res) => {
         const caixasSet = new Set();
         
         resultDist.rows.forEach(r => {
-            let nome = (r.agente || 'SEM ATRIBUIR').toUpperCase();
-            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
-            
+            let nomeAgente = (r.agente || '').toUpperCase();
             let cx = r.caixa || '(Sem Time)';
+            let cxUpper = cx.toUpperCase();
+            
             caixasSet.add(cx);
+            
+            // Descobre a sigla do time baseada na caixa/inbox
+            let siglaSetor = 'OUTROS';
+            if (cxUpper.includes('RETEN') || cxUpper.includes('RET')) siglaSetor = 'RET';
+            else if (cxUpper.includes('SAC')) siglaSetor = 'SAC';
+            else if (cxUpper.includes('BACK') || cxUpper.includes('BKO')) siglaSetor = 'BKO';
+            else if (cxUpper.includes('SMS')) siglaSetor = 'SMS';
+            else if (cxUpper.includes('48')) siglaSetor = '48H';
+
+            let nome;
+            if (!nomeAgente) {
+                if (siglaSetor === 'OUTROS') return; // Ignora as filas irrelevantes
+                nome = `SEM ATRIBUIR - ${siglaSetor}`;
+            } else {
+                nome = nomeAgente;
+                if(!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
+            }
             
             if (!distAgentes[nome]) distAgentes[nome] = { nome, total: 0 };
             distAgentes[nome][cx] = parseInt(r.qtd) || 0;
             distAgentes[nome].total += parseInt(r.qtd) || 0;
         });
 
-        // 2. Query Resumo Casos Agente (Apenas Abertos) - Lógica de SLA
+        // 2. Query Resumo Casos Agente - Lógica de SLA
         const qCasos = `
             WITH OpenConversations AS (
-                SELECT id, display_id, assignee_id, contact_id, first_reply_created_at, last_activity_at
+                SELECT id, display_id, assignee_id, contact_id, first_reply_created_at, last_activity_at, team_id, inbox_id
                 FROM conversations
                 WHERE status = 0 AND account_id = 1
             ),
@@ -873,6 +906,8 @@ app.get('/api/distribuicao', async (req, res) => {
             )
             SELECT 
                 u.name AS agente,
+                t.name AS equipe_nome,
+                i.name AS inbox_nome,
                 oc.id AS conv_id,
                 oc.display_id,
                 ct.name AS cliente,
@@ -881,6 +916,8 @@ app.get('/api/distribuicao', async (req, res) => {
                 lm.message_type AS last_msg_type
             FROM OpenConversations oc
             LEFT JOIN users u ON u.id = oc.assignee_id
+            LEFT JOIN teams t ON t.id = oc.team_id
+            LEFT JOIN inboxes i ON i.id = oc.inbox_id
             LEFT JOIN contacts ct ON ct.id = oc.contact_id
             LEFT JOIN LastMessages lm ON lm.conversation_id = oc.id
         `;
@@ -889,34 +926,58 @@ app.get('/api/distribuicao', async (req, res) => {
         const agora = new Date();
         
         resultCasos.rows.forEach(r => {
-            let nome = (r.agente || 'SEM ATRIBUIR').toUpperCase();
-            if(nome !== 'SEM ATRIBUIR' && !nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
-            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, ignorado: 0, aguardando: 0, parado: 0, andamento: 0, total: 0, detalhes: [] };
+            let nomeAgente = (r.agente || '').toUpperCase();
+            let equipeNome = (r.equipe_nome || r.inbox_nome || '').toUpperCase();
+
+            // Descobre a sigla do time baseada no Inbox ou Team da conversa
+            let siglaSetor = 'OUTROS';
+            if (equipeNome.includes('RETEN') || equipeNome.includes('RET')) siglaSetor = 'RET';
+            else if (equipeNome.includes('SAC')) siglaSetor = 'SAC';
+            else if (equipeNome.includes('BACK') || equipeNome.includes('BKO')) siglaSetor = 'BKO';
+            else if (equipeNome.includes('SMS')) siglaSetor = 'SMS';
+            else if (equipeNome.includes('48')) siglaSetor = '48H';
+
+            let nome;
+            if (!nomeAgente) {
+                if (siglaSetor === 'OUTROS') return;
+                nome = `SEM ATRIBUIR - ${siglaSetor}`;
+            } else {
+                nome = nomeAgente;
+                if(!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
+            }
+            
+            // Criando os novos baldes de SLA
+            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
             
             const diffHoras = (agora - new Date(r.last_activity_at)) / (1000 * 60 * 60);
             const isClientLast = (r.last_msg_type === 0);
-            const agentRepliedBefore = (r.first_reply_created_at !== null);
             
-            let statusLabel, ordem;
             if (isClientLast) {
-                if (!agentRepliedBefore) {
-                    resCasosMap[nome].aguardando += 1;   statusLabel = '⏳ Aguardando 1ª Resposta';    ordem = 3;
-                } else if (diffHoras > 48) {
-                    resCasosMap[nome].parado += 1;        statusLabel = '🟣 Parado (+48h)';             ordem = 1;
+                let statusLabel, ordem;
+                
+                if (diffHoras > 48) {
+                    resCasosMap[nome].fora_sla += 1;
+                    statusLabel = '🔴 Fora do SLA';
+                    ordem = 1;
+                } else if (diffHoras >= 24 && diffHoras <= 48) {
+                    resCasosMap[nome].aguardando += 1;
+                    statusLabel = '🟡 Aguardando';
+                    ordem = 2;
                 } else {
-                    resCasosMap[nome].ignorado += 1;      statusLabel = '🔴 Ignorado (dentro do SLA)';  ordem = 2;
+                    resCasosMap[nome].retornos += 1;
+                    statusLabel = '🟢 Retornos';
+                    ordem = 3;
                 }
-            } else {
-                resCasosMap[nome].andamento += 1;         statusLabel = '🔵 Em Andamento';              ordem = 4;
+                
+                resCasosMap[nome].total += 1;
+                resCasosMap[nome].detalhes.push({
+                    id: r.display_id || r.conv_id,
+                    cliente: r.cliente || 'Cliente sem nome',
+                    status: statusLabel,
+                    ordem: ordem,
+                    horas_parado: Math.round(diffHoras)
+                });
             }
-            
-            resCasosMap[nome].total += 1;
-            resCasosMap[nome].detalhes.push({
-                id: r.display_id || r.conv_id,
-                cliente: r.cliente || 'Cliente sem nome',
-                status: statusLabel,
-                ordem: ordem
-            });
         });
 
         res.json({ 
