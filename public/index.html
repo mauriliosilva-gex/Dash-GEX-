@@ -588,10 +588,9 @@
                                     <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                         <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                             <th class="py-3 px-3 pl-4">Agente</th>
-                                            <th class="py-3 px-3 text-center" title="Agente já respondeu, cliente mandou dnv (<= 48h)">🔴 Ignorado</th>
-                                            <th class="py-3 px-3 text-center" title="Novo chamado ou aguardando ação">🟡 Aguardando</th>
-                                            <th class="py-3 px-3 text-center" title="Esquecido há mais de 48h">💤 Parado (>48h)</th>
-                                            <th class="py-3 px-3 text-center" title="A bola está com o cliente">⚙️ Em Andamento</th>
+                                            <th class="py-3 px-3 text-center" title="Casos com menos de 24h">🟢 Retornos</th>
+                                            <th class="py-3 px-3 text-center" title="Casos entre 24h e 48h">🟡 Aguardando</th>
+                                            <th class="py-3 px-3 text-center" title="Mais de 48h sem resposta">🔴 Fora do SLA</th>
                                             <th class="py-3 px-3 text-center font-black text-gexCyan">Total</th>
                                             <th class="py-3 px-3 text-center pr-4">Auditoria</th>
                                         </tr>
@@ -1921,26 +1920,30 @@
             const tf = document.getElementById('tabela-casos-foot');
             if (!tb || !tf || !dadosDistribuicao) return;
             
-            let lista = filtroCasosSetor === 'TODOS' ? dadosDistribuicao.casos : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroCasosSetor}`));
+            let lista = filtroCasosSetor === 'TODOS' 
+                ? dadosDistribuicao.casos 
+                : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroCasosSetor}`));
 
             if(lista.length === 0){ 
-                tb.innerHTML=`<tr><td colspan="7" class="py-6 text-center text-gray-500 font-bold">Nenhum caso em aberto neste setor.</td></tr>`; 
+                tb.innerHTML=`<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum caso pendente neste setor.</td></tr>`; 
                 tf.innerHTML='';
                 return;
             }
             
-            let tIgnorado = 0, tAguardando = 0, tParado = 0, tAndamento = 0, tGeral = 0;
+            let tRetornos = 0, tAguardando = 0, tForaSLA = 0, tGeral = 0;
 
             tb.innerHTML = lista.map(a => {
-                tIgnorado += a.ignorado; tAguardando += a.aguardando; tParado += a.parado; tAndamento += a.andamento; tGeral += a.total;
+                tRetornos += a.retornos || 0; 
+                tAguardando += a.aguardando || 0; 
+                tForaSLA += a.fora_sla || 0; 
+                tGeral += a.total || 0;
                 return `
                 <tr class="ranking-row row-normal linha-animada">
                     <td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>
-                    <td class="py-3 px-3 text-center font-mono ${a.ignorado>0?'text-red-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.ignorado}</td>
-                    <td class="py-3 px-3 text-center font-mono ${a.aguardando>0?'text-yellow-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.aguardando}</td>
-                    <td class="py-3 px-3 text-center font-mono ${a.parado>0?'text-purple-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.parado}</td>
-                    <td class="py-3 px-3 text-center font-mono ${a.andamento>0?'text-blue-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.andamento}</td>
-                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] text-gexCyan">${a.total}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.retornos>0?'text-emerald-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.retornos || 0}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.aguardando>0?'text-yellow-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.aguardando || 0}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.fora_sla>0?'text-red-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.fora_sla || 0}</td>
+                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] text-gexCyan">${a.total || 0}</td>
                     <td class="py-3 px-3 text-center pr-4">
                         <button onclick="abrirModalCasos('${a.nome}')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap border border-white/5">
                             👁️ Ver Tickets
@@ -1952,14 +1955,93 @@
             tf.innerHTML = `
                 <tr>
                     <td class="py-4 px-3 pl-4 font-black text-gray-800 dark:text-white uppercase tracking-widest text-xs bg-transparent">Total Filtrado</td>
-                    <td class="py-4 px-3 text-center font-mono font-black text-red-500 text-[15px] bg-transparent">${tIgnorado}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-emerald-500 text-[15px] bg-transparent">${tRetornos}</td>
                     <td class="py-4 px-3 text-center font-mono font-black text-yellow-500 text-[15px] bg-transparent">${tAguardando}</td>
-                    <td class="py-4 px-3 text-center font-mono font-black text-purple-500 text-[15px] bg-transparent">${tParado}</td>
-                    <td class="py-4 px-3 text-center font-mono font-black text-blue-500 text-[15px] bg-transparent">${tAndamento}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-red-500 text-[15px] bg-transparent">${tForaSLA}</td>
                     <td class="py-4 px-3 text-center font-mono font-black text-gexCyan text-lg bg-transparent">${tGeral}</td>
                     <td class="bg-transparent"></td>
                 </tr>
             `;
+        }
+
+        function renderTabelaDist() {
+            const th = document.getElementById('thead-dist-dinamico'), tb = document.getElementById('tabela-dist-body'), tf = document.getElementById('tabela-dist-foot'); 
+            if (!th || !tb || !tf || !dadosDistribuicao) return;
+            
+            let lista = filtroDistSetor === 'TODOS' 
+                ? dadosDistribuicao.distribuicao 
+                : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
+
+            let headH = `<th class="py-3 px-3 pl-4 bg-transparent">Agente</th>`; 
+            dadosDistribuicao.caixas.forEach(c => headH+=`<th class="py-3 px-3 text-center max-w-[120px] truncate bg-transparent" title="${c}">${c}</th>`); 
+            headH+=`<th class="py-3 px-3 text-center font-black text-gexCyan bg-transparent">Total</th>`; 
+            th.innerHTML = headH;
+            
+            if(lista.length === 0){ 
+                tb.innerHTML=`<tr><td colspan="${dadosDistribuicao.caixas.length + 2}" class="py-6 text-center text-gray-500 font-bold">Nenhum dado neste setor.</td></tr>`; 
+                tf.innerHTML='';
+                return;
+            }
+
+            let totaisCaixas = {}; dadosDistribuicao.caixas.forEach(c => totaisCaixas[c] = 0); let totGeral = 0;
+
+            tb.innerHTML = lista.map(a => {
+                let r = `<td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>`;
+                dadosDistribuicao.caixas.forEach(c => { 
+                    const v = a[c]||0; totaisCaixas[c] += v;
+                    r+=`<td class="py-3 px-3 text-center font-mono ${v>0?'text-gray-800 dark:text-gray-200 font-bold':'text-gray-400 dark:text-gray-600 opacity-30'}">${v}</td>`; 
+                });
+                totGeral += a.total;
+                r += `<td class="py-3 px-3 text-center font-mono font-black text-[15px] text-gexCyan">${a.total}</td>`; 
+                return `<tr class="ranking-row row-normal linha-animada">${r}</tr>`;
+            }).join('');
+
+            let footR = `<tr><td class="py-4 px-3 pl-4 font-black text-gray-800 dark:text-white uppercase tracking-widest text-xs bg-transparent">Total Filtrado</td>`;
+            dadosDistribuicao.caixas.forEach(c => { footR += `<td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px] bg-transparent">${totaisCaixas[c]}</td>`; });
+            footR += `<td class="py-4 px-3 text-center font-mono font-black text-gexCyan text-lg bg-transparent">${totGeral}</td></tr>`;
+            tf.innerHTML = footR;
+        }
+
+        function exportarStatusCasos() {
+            if (!dadosDistribuicao || !dadosDistribuicao.casos) return alert('Sem dados para exportar.');
+            let l = filtroCasosSetor === 'TODOS' 
+                ? dadosDistribuicao.casos 
+                : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroCasosSetor}`));
+            if (l.length === 0) return alert('Sem dados para exportar.');
+            const cols = [
+                { header: 'Agente', key: 'nome', width: 32 },
+                { header: 'Retornos (<24h)', key: 'retornos', width: 16 },
+                { header: 'Aguardando (24-48h)', key: 'aguardando', width: 22 },
+                { header: 'Fora do SLA (>48h)', key: 'fora_sla', width: 20 },
+                { header: 'Total Pendente', key: 'total', width: 15 }
+            ];
+            const linhas = l.map(a => ({ 
+                nome: a.nome, 
+                retornos: a.retornos || 0, 
+                aguardando: a.aguardando || 0, 
+                fora_sla: a.fora_sla || 0, 
+                total: a.total || 0 
+            }));
+            baixarExcelGEX('Status_de_Casos_SLA', cols, linhas);
+        }
+
+        function exportarDistribuicao() {
+            if (!dadosDistribuicao || !dadosDistribuicao.distribuicao) return alert('Sem dados para exportar.');
+            let l = filtroDistSetor === 'TODOS' 
+                ? dadosDistribuicao.distribuicao 
+                : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
+            if (l.length === 0) return alert('Sem dados para exportar.');
+            const caixas = dadosDistribuicao.caixas || [];
+            const cols = [{ header: 'Agente', key: 'nome', width: 32 }];
+            caixas.forEach((c, i) => cols.push({ header: c, key: `c${i}`, width: 16 }));
+            cols.push({ header: 'Total', key: 'total', width: 10 });
+            const linhas = l.map(a => {
+                const row = { nome: a.nome };
+                caixas.forEach((c, i) => row[`c${i}`] = a[c] || 0);
+                row.total = a.total || 0;
+                return row;
+            });
+            baixarExcelGEX('Distribuicao_Times', cols, linhas);
         }
 
         function abrirModalCasos(nomeAgente) {
@@ -1971,17 +2053,15 @@
 
             let html = '<div class="space-y-3">';
             if (agente.detalhes && agente.detalhes.length > 0) {
-                // Ordenar por ordem de criticidade (Parado, Ignorado, Aguardando, Em Andamento)
                 let detalhesOrdenados = agente.detalhes.sort((a, b) => a.ordem - b.ordem);
 
                 detalhesOrdenados.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
                     
                     let corStatus = 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
-                    if(tk.status.includes('Em Andamento')) corStatus = 'bg-blue-500/10 text-blue-500 border border-blue-500/30';
+                    if(tk.status.includes('Retornos')) corStatus = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
                     if(tk.status.includes('Aguardando')) corStatus = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
-                    if(tk.status.includes('Ignorado')) corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
-                    if(tk.status.includes('Parado')) corStatus = 'bg-purple-500/10 text-purple-500 border border-purple-500/30';
+                    if(tk.status.includes('Fora do SLA')) corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
 
                     html += `
                     <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
@@ -1990,6 +2070,7 @@
                             <div class="flex flex-wrap items-center gap-2 mt-2">
                                 <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
                                 <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corStatus}">${tk.status}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded font-bold bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700 shadow-sm">⏱️ Parado há ${tk.horas_parado}h</span>
                             </div>
                         </div>
                         <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
@@ -1998,7 +2079,7 @@
                     </div>`;
                 });
             } else {
-                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket encontrado.</p>';
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket pendente encontrado.</p>';
             }
             html += '</div>';
 
