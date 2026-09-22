@@ -128,9 +128,16 @@
         body.is-admin #admin-sidebar { display: flex; }
         
         body.is-admin .admin-hamburger { display: block; }
+        
+        /* Regras do Desktop e botão Toggle */
         @media (min-width: 768px) { 
             body.is-admin .admin-hamburger { display: none; } 
             body.is-admin { padding-left: 260px; }
+            
+            /* Quando a sidebar estiver fechada no desktop */
+            body.is-admin.sidebar-closed { padding-left: 0; }
+            body.is-admin.sidebar-closed #admin-sidebar { transform: translateX(-100%); }
+            body.is-admin.sidebar-closed .admin-hamburger { display: block; }
         }
 
         .sidebar-link {
@@ -173,7 +180,10 @@
                     <span class="text-[9px] text-gexCyan font-black tracking-widest uppercase shadow-sm">Painel Gestão</span>
                 </div>
             </div>
-            <button onclick="fecharSidebarMobile()" class="md:hidden text-gray-500 hover:text-white p-1 bg-white/5 rounded-lg border border-white/10"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            <!-- Botão de Ocultar/Recolher Menu (Desktop/Mobile) -->
+            <button onclick="toggleSidebar()" class="text-gray-500 hover:text-white p-1.5 bg-white/5 rounded-lg border border-white/10 transition-colors ml-auto" title="Recolher Menu">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+            </button>
         </div>
 
         <!-- Navegação do Menu -->
@@ -287,17 +297,17 @@
         </div>
     </aside>
 
-    <!-- HEADER COM INFORMAÇÕES DE LOGIN (Mantido no fluxo normal) -->
+    <!-- HEADER COM INFORMAÇÕES DE LOGIN -->
     <header class="bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50 transition-colors shadow-sm">
         <div class="max-w-[1700px] mx-auto px-6 py-3 flex justify-between items-center">
             
             <div class="flex items-center gap-4">
-                <!-- Hamburger Menu Mobile (Admin Only) -->
-                <button onclick="document.getElementById('admin-sidebar').classList.toggle('-translate-x-full')" class="admin-hamburger hidden p-2 text-white bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors mr-1">
+                <!-- Hamburger Menu (Mobile ou Desktop Fechado) -->
+                <button onclick="toggleSidebar()" class="admin-hamburger hidden p-2 text-white bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors mr-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 </button>
 
-                <!-- Logo Header (Usado pelos agentes, admins tbm vêem mas usam o sidebar preferencialmente) -->
+                <!-- Logo Header -->
                 <div class="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" onclick="mudarAba('retencao'); ativarMenu(document.querySelector('.sidebar-link'));">
                     <img src="/logo.jpg" alt="Logo GEX" class="w-10 h-10 rounded-[12px] shadow-sm object-cover border border-white/10">
                     <div>
@@ -342,13 +352,11 @@
                 <button id="tab-btn-retencao" onclick="mudarAba('retencao')" class="tab-btn tab-btn-active">🏆 Retenção</button>
                 <button id="tab-btn-tickets" onclick="mudarAba('tickets')" class="tab-btn tab-btn-inactive">🎫 Tickets</button>
                 <button id="tab-btn-qualidade" onclick="mudarAba('qualidade')" class="tab-btn tab-btn-inactive">⭐ Qualidade</button>
-                
-                <!-- NOVO BOTÃO DA ABA CHATWOOT -->
                 <button id="tab-btn-chatwoot" onclick="mudarAba('chatwoot')" class="tab-btn tab-btn-inactive">💬 Chatwoot</button>
             </nav>
         </div>
-	
-<!-- ABA: RETENÇÃO -->
+
+        <!-- ABA: RETENÇÃO -->
         <div id="aba-retencao" class="block space-y-6">
             <section class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div class="glass-panel bg-lightCard border border-lightBorder rounded-xl p-4 flex flex-col justify-center">
@@ -682,7 +690,7 @@
             </div>
         </div>
 
-<!-- ABA: QUALIDADE (AGORA COM SUB-ABAS) -->
+        <!-- ABA: QUALIDADE (AGORA COM SUB-ABAS) -->
         <div id="aba-qualidade" class="hidden space-y-6">
             
             <!-- SUB-MENU DE QUALIDADE (VISÍVEL APENAS PARA AGENTES) -->
@@ -848,8 +856,8 @@
         <div id="aba-chatwoot" class="hidden space-y-6">
             
             <!-- SUB-MENU CHATWOOT (VISÍVEL APENAS PARA AGENTES) -->
-            <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-4 shadow-sm shrink-0">
-                <div class="flex items-center gap-2 admin-hidden">
+            <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-4 shadow-sm shrink-0 admin-hidden">
+                <div class="flex items-center gap-2">
                     <button id="btn-sub-cw-recorrencia" onclick="mudarSubAbaCw('recorrencia')" class="btn-setor btn-setor-ativo">📊 Cockpit do Atendimento</button>
                     <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
                     <button id="btn-sub-cw-tabulacao" onclick="mudarSubAbaCw('tabulacao')" class="btn-setor btn-setor-inativo">📦 Produtos Tabulados</button>
@@ -1070,7 +1078,7 @@
 
         </div>
 
-    </main> 
+    </main>
 
     <!-- MODAL SINALIZAÇÕES -->
     <div id="modal-sinalizacoes" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1142,6 +1150,22 @@
         </div>
     </div>
 
+    <!-- MODAL STATUS DE CASOS -->
+    <div id="modal-casos" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                <div>
+                    <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-casos-titulo">Auditoria de Casos</h3>
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Status atual dos tickets em aberto</p>
+                </div>
+                <button onclick="fecharModalCasos()" class="text-gray-500 hover:text-red-500 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-casos-conteudo"></div>
+        </div>
+    </div>
+
     <!-- MODAL PRODUTOS TABULADOS -->
     <div id="modal-produtos" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
@@ -1158,8 +1182,6 @@
         </div>
     </div>
 
-</main> 
-
     <script>
         let usuarioAtual = null;
 
@@ -1172,7 +1194,7 @@
                 usuarioAtual = data.user;
                 
                 document.getElementById('header-user-name').innerText = usuarioAtual.nome;
-                document.getElementById('header-user-role').innerText = usuarioAtual.role === 'admin' ? 'Coordenador / ADM' : 'Visão Analista';
+                document.getElementById('header-user-role').innerText = usuarioAtual.role === 'admin' ? 'Coordenador / Gestão' : 'Visão Analista';
                 
                 configurarPermissoes();
                 carregarTudo();
@@ -1214,16 +1236,27 @@
             }
         }
 
-        // Helper Visual Sidebar (Substitua a versão anterior por essa)
+        // Helper Visual Sidebar
         function ativarMenu(menuId) {
             document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active-link'));
             // Seleciona tanto o botão que tá dentro da pasta quanto o botão que tá na área HOT
             document.querySelectorAll(`a[data-menu-id="${menuId}"]`).forEach(l => l.classList.add('active-link'));
         }
 
+        // 🔥 Função Global para Abrir/Fechar Sidebar (Desktop e Mobile)
+        function toggleSidebar() {
+            if (window.innerWidth >= 768) {
+                document.body.classList.toggle('sidebar-closed');
+            } else {
+                document.getElementById('admin-sidebar').classList.toggle('-translate-x-full');
+            }
+        }
+
+        // Mantém essa apenas para quando clica em um link no celular (fechar automático)
         function fecharSidebarMobile() {
-            const sb = document.getElementById('admin-sidebar');
-            if(sb && window.innerWidth < 768) sb.classList.add('-translate-x-full');
+            if (window.innerWidth < 768) {
+                document.getElementById('admin-sidebar').classList.add('-translate-x-full');
+            }
         }
 
         // 🔥 INTELIGÊNCIA DO MENU: Abrir/Fechar Pastas (Acordeão Exclusivo)
@@ -1725,7 +1758,7 @@
                 let c100 = `<div class="inline-flex items-center justify-center w-20 py-1 bg-gradient-to-r from-[#2b1f00] to-[#2b1f00] text-white font-mono font-bold text-[14px] rounded-lg shadow-[inset_0_0_0_1px_#d4af37] mx-auto">100.0</div>`;
                 const fn = (n) => n === null ? `<span class="${is100?'text-white opacity-50':'texto-contraste-sm opacity-50'}">-</span>` : (is100 ? `<span class="font-mono font-bold text-white text-[14px]">${n.toFixed(1)}</span>` : (n===100 ? c100 : `<span class="font-mono font-bold ${n<70?'text-red-500':n<90?'text-yellow-500':'text-gexCyan'} text-[14px]">${n.toFixed(1)}</span>`));
 
-                let btnD = a.link && a.link !== '#' ? `<a href="${a.link}" target="_blank" class="px-4 py-1.5 rounded-full bg-gradient-to-r from-gexBlue to-gexCyan text-white text-[11px] font-black hover:scale-105 shadow-sm">📄 Drive</a>` : `<span class="text-gray-500 text-[10px] font-bold">Sem link</span>`;
+                let btnD = a.link && a.link !== '#' ? `<a href="${a.link}" target="_blank" class="px-4 py-1.5 rounded-full bg-gradient-to-r from-gexBlue to-gexCyan text-white text-[11px] font-black hover:scale-105 shadow-sm border border-gexCyan/30">📄 Drive</a>` : `<span class="text-gray-500 text-[10px] font-bold">Sem link</span>`;
                 return `
                 <tr class="ranking-row ${is100 ? 'row-gold font-bold linha-animada' : 'row-normal linha-animada'}">
                     <td class="py-4 px-3 pl-6 ${is100 ? 'text-white font-bold' : 'texto-contraste'} whitespace-nowrap">${a.nome}</td>
@@ -1768,8 +1801,8 @@
             const fnBtn = (arr, c, n) => {
                 if (!arr || !arr.length) return `<span class="text-gray-400 text-[10px] font-bold uppercase">Sem Reg.</span>`;
                 return arr.every(x => x.item.toLowerCase().includes('sem sinaliza')) 
-                    ? `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200 text-[11px] font-black hover:scale-105">✅ Feedback</button>` 
-                    : `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-red-100 text-red-600 border border-red-200 text-[11px] font-black hover:scale-105">🚨 Ver (${arr.length})</button>`;
+                    ? `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[11px] font-black hover:scale-105">✅ Feedback</button>` 
+                    : `<button onclick="abrirModalSin('${n.replace(/'/g, "\\'")}', ${c})" class="px-4 py-1.5 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 text-[11px] font-black hover:scale-105">🚨 Ver (${arr.length})</button>`;
             };
 
             tb.innerHTML = sData.map(a => `
@@ -1927,6 +1960,54 @@
                     <td class="bg-transparent"></td>
                 </tr>
             `;
+        }
+
+        function abrirModalCasos(nomeAgente) {
+            if (!dadosDistribuicao || !dadosDistribuicao.casos) return;
+            const agente = dadosDistribuicao.casos.find(a => a.nome === nomeAgente);
+            if (!agente) return;
+
+            document.getElementById('modal-casos-titulo').innerText = `Auditoria de Casos: ${agente.nome}`;
+
+            let html = '<div class="space-y-3">';
+            if (agente.detalhes && agente.detalhes.length > 0) {
+                // Ordenar por ordem de criticidade (Parado, Ignorado, Aguardando, Em Andamento)
+                let detalhesOrdenados = agente.detalhes.sort((a, b) => a.ordem - b.ordem);
+
+                detalhesOrdenados.forEach(tk => {
+                    const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
+                    
+                    let corStatus = 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+                    if(tk.status.includes('Em Andamento')) corStatus = 'bg-blue-500/10 text-blue-500 border border-blue-500/30';
+                    if(tk.status.includes('Aguardando')) corStatus = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
+                    if(tk.status.includes('Ignorado')) corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
+                    if(tk.status.includes('Parado')) corStatus = 'bg-purple-500/10 text-purple-500 border border-purple-500/30';
+
+                    html += `
+                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                            <p class="text-sm font-black text-gray-800 dark:text-white">${tk.cliente}</p>
+                            <div class="flex flex-wrap items-center gap-2 mt-2">
+                                <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
+                                <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corStatus}">${tk.status}</span>
+                            </div>
+                        </div>
+                        <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                            Abrir Conversa ↗️
+                        </a>
+                    </div>`;
+                });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket encontrado.</p>';
+            }
+            html += '</div>';
+
+            document.getElementById('modal-casos-conteudo').innerHTML = html;
+            document.getElementById('modal-casos').classList.remove('hidden');
+        }
+
+        function fecharModalCasos() {
+            document.getElementById('modal-casos').classList.add('hidden');
         }
 
         function renderTabelaDist() {
@@ -2731,7 +2812,7 @@
             try {
                 if(tb) tb.innerHTML = `<tr><td colspan="3" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados do servidor...</td></tr>`;
                 
-                const response = await fetch('/api/reembolsos-pagamerican');
+                const response = await fetch('/api/reembolsos-pagamerican' + parametrosUrl);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -3378,3 +3459,4 @@
         });
     </script>
 </body>
+</html>
