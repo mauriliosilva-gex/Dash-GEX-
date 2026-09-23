@@ -852,6 +852,7 @@ app.get('/api/distribuicao', async (req, res) => {
             LEFT JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.status = 0 
               AND c.account_id = 1
+              AND (i.name IS NULL OR (i.name != 'Atendimento | Brasil' AND i.name != '[GEX] SMS Support'))
             GROUP BY u.name, i.name
         `;
         const resultDist = await pool.query(qDist);
@@ -876,7 +877,7 @@ app.get('/api/distribuicao', async (req, res) => {
 
             let nome;
             if (!nomeAgente) {
-                if (siglaSetor === 'OUTROS') return; // Ignora as filas irrelevantes
+                if (siglaSetor === 'OUTROS') return; 
                 nome = `SEM ATRIBUIR - ${siglaSetor}`;
             } else {
                 nome = nomeAgente;
@@ -888,21 +889,16 @@ app.get('/api/distribuicao', async (req, res) => {
             distAgentes[nome].total += parseInt(r.qtd) || 0;
         });
 
-        // 2. Query Resumo Casos Agente - Lógica de SLA
+        // 2. Query Resumo Casos Agente - Matemática igualada ao Chatwoot
         const qCasos = `
             WITH OpenConversations AS (
-                SELECT id, display_id, assignee_id, contact_id, first_reply_created_at, last_activity_at, team_id, inbox_id
-                FROM conversations
-                WHERE status = 0 AND account_id = 1
-            ),
-            LastMessages AS (
-                SELECT DISTINCT ON (conversation_id) conversation_id, message_type
-                FROM messages
-                WHERE conversation_id IN (SELECT id FROM OpenConversations)
-                  AND message_type IN (0, 1)
-                  AND private = FALSE
-                  AND (content_attributes->>'deleted')::boolean IS NOT TRUE
-                ORDER BY conversation_id, created_at DESC
+                SELECT 
+                    c.id, c.display_id, c.assignee_id, c.contact_id, c.first_reply_created_at, c.last_activity_at, c.team_id, c.inbox_id, c.created_at
+                FROM conversations c
+                LEFT JOIN inboxes i ON i.id = c.inbox_id
+                WHERE c.status = 0 
+                  AND c.account_id = 1
+                  AND (i.name IS NULL OR (i.name != 'Atendimento | Brasil' AND i.name != '[GEX] SMS Support'))
             )
             SELECT 
                 u.name AS agente,
@@ -913,13 +909,12 @@ app.get('/api/distribuicao', async (req, res) => {
                 ct.name AS cliente,
                 oc.first_reply_created_at,
                 oc.last_activity_at,
-                lm.message_type AS last_msg_type
+                oc.created_at
             FROM OpenConversations oc
             LEFT JOIN users u ON u.id = oc.assignee_id
             LEFT JOIN teams t ON t.id = oc.team_id
             LEFT JOIN inboxes i ON i.id = oc.inbox_id
             LEFT JOIN contacts ct ON ct.id = oc.contact_id
-            LEFT JOIN LastMessages lm ON lm.conversation_id = oc.id
         `;
         const resultCasos = await pool.query(qCasos);
         const resCasosMap = {};
@@ -929,7 +924,6 @@ app.get('/api/distribuicao', async (req, res) => {
             let nomeAgente = (r.agente || '').toUpperCase();
             let equipeNome = (r.equipe_nome || r.inbox_nome || '').toUpperCase();
 
-            // Descobre a sigla do time baseada no Inbox ou Team da conversa
             let siglaSetor = 'OUTROS';
             if (equipeNome.includes('RETEN') || equipeNome.includes('RET')) siglaSetor = 'RET';
             else if (equipeNome.includes('SAC')) siglaSetor = 'SAC';
@@ -946,38 +940,36 @@ app.get('/api/distribuicao', async (req, res) => {
                 if(!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
             }
             
-            // Criando os novos baldes de SLA
             if (!resCasosMap[nome]) resCasosMap[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
             
-            const diffHoras = (agora - new Date(r.last_activity_at)) / (1000 * 60 * 60);
-            const isClientLast = (r.last_msg_type === 0);
+            const dataBaseParaSLA = r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at);
+            const diffHoras = (agora - dataBaseParaSLA) / (1000 * 60 * 60);
             
-            if (isClientLast) {
-                let statusLabel, ordem;
-                
-                if (diffHoras > 48) {
-                    resCasosMap[nome].fora_sla += 1;
-                    statusLabel = '🔴 Fora do SLA';
-                    ordem = 1;
-                } else if (diffHoras >= 24 && diffHoras <= 48) {
-                    resCasosMap[nome].aguardando += 1;
-                    statusLabel = '🟡 Aguardando';
-                    ordem = 2;
-                } else {
-                    resCasosMap[nome].retornos += 1;
-                    statusLabel = '🟢 Retornos';
-                    ordem = 3;
-                }
-                
-                resCasosMap[nome].total += 1;
-                resCasosMap[nome].detalhes.push({
-                    id: r.display_id || r.conv_id,
-                    cliente: r.cliente || 'Cliente sem nome',
-                    status: statusLabel,
-                    ordem: ordem,
-                    horas_parado: Math.round(diffHoras)
-                });
+            // REMOVIDA A TRAVA isClientLast! Agora TUDO que está aberto é contado e exposto.
+            let statusLabel, ordem;
+            
+            if (diffHoras > 48) {
+                resCasosMap[nome].fora_sla += 1;
+                statusLabel = '🔴 Fora do SLA';
+                ordem = 1;
+            } else if (diffHoras >= 24 && diffHoras <= 48) {
+                resCasosMap[nome].aguardando += 1;
+                statusLabel = '🟡 Aguardando';
+                ordem = 2;
+            } else {
+                resCasosMap[nome].retornos += 1;
+                statusLabel = '🟢 Retornos';
+                ordem = 3;
             }
+            
+            resCasosMap[nome].total += 1;
+            resCasosMap[nome].detalhes.push({
+                id: r.display_id || r.conv_id,
+                cliente: r.cliente || 'Cliente sem nome',
+                status: statusLabel,
+                ordem: ordem,
+                horas_parado: Math.round(diffHoras)
+            });
         });
 
         res.json({ 
@@ -1563,9 +1555,12 @@ app.get('/api/qualidade-tickets', async (req, res) => {
 });
 
 // ==========================================
-// 16. ROTA DE URGÊNCIA: REEMBOLSOS PAGAMERICAN (SEGMENTADO E BLINDADO)
+// 16. ROTA DE URGÊNCIA: REEMBOLSOS PAGAMERICAN (COM GOOGLE SHEETS)
 // ==========================================
 app.get('/api/reembolsos-pagamerican', async (req, res) => {
+    // 🔥 COLE SEU LINK DO GOOGLE AQUI DENTRO DAS ASPAS:
+    const URL_PLANILHA = "https://script.google.com/macros/s/SEU_LINK_REAL_AQUI/exechttps://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
+
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
     const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
     
@@ -1574,79 +1569,120 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
     }
     
     try {
-        // 🔥 AGORA ACEITA FILTRO DE PERÍODO (since/until). Sem filtro = mês atual.
-        let dataInicioSQL, dataFimSQL;
-        if (req.query.since && req.query.until) {
-            dataInicioSQL = unixParaYYYYMMDD(req.query.since);
-            dataFimSQL = unixParaYYYYMMDD(req.query.until);
-        } else {
-            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
-            dataInicioSQL = formatarDataSQL(dInicio);
-            dataFimSQL = formatarDataSQL(agora);
+        // 1. LER O COFRE DO GOOGLE SHEETS
+        let mapaDatas = {};
+        try {
+            const respPlanilha = await fetch(URL_PLANILHA);
+            const dadosPlanilha = await respPlanilha.json();
+            
+            // A planilha retorna linhas (Arrays). Coluna 0 é Ticket, Coluna 1 é a Data blindada.
+            if (Array.isArray(dadosPlanilha)) {
+                dadosPlanilha.forEach(linha => {
+                    const convId = parseInt(linha[0]);
+                    const dataAcordo = new Date(linha[1]);
+                    if(convId && !isNaN(dataAcordo)) {
+                        mapaDatas[convId] = dataAcordo; // Guarda no "cérebro" do servidor
+                    }
+                });
+            }
+        } catch (errPlanilha) {
+            console.log("Aviso: Falha ao ler a planilha, usando datas de fallback do banco.", errPlanilha.message);
         }
 
+        // 2. FILTRO DE DATAS DO PAINEL
+        let dInicio, dFim;
+        if (req.query.since && req.query.until) {
+            dInicio = new Date(parseInt(req.query.since) * 1000);
+            dFim = new Date(parseInt(req.query.until) * 1000);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dFim = agora;
+        }
+
+        // 3. LER O BANCO DO CHATWOOT (100% LEITURA, SEM FILTRAR DATA AQUI)
         const q = `
-        WITH CasosFiltrados AS (
-            SELECT 
-                c.id AS conv_id,
-                c.display_id,
-                COALESCE(u.name, 'SEM ATRIBUIR') AS agente_nome,
-                ct.name AS contato_nome,
-                ct.email AS contato_email,
-                c.created_at,
-                COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') AS tipo_retencao
-            FROM conversations c
-            LEFT JOIN users u ON u.id = c.assignee_id
-            LEFT JOIN contacts ct ON ct.id = c.contact_id
-            WHERE c.account_id = 1
-              AND (
-                  (c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo')
-                  OR
-                  (c.updated_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND c.updated_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo')
-              )
-              
-              -- 🔥 1. PLATAFORMA: Caça todas as variações possíveis de PagAmerican de uma vez só
-              AND (
-                  COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%']) OR
-                  COALESCE(ct.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%'])
-              )
-              
-              -- 🔥 2. OBRIGATÓRIO TER REEMBOLSO: A gaveta do Tipo de Retenção não pode estar vazia
-              AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
-              
-              -- 🔥 3. EXCEÇÃO: Bloqueia se for "Sem reembolso"
-              AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
-        )
         SELECT 
-            agente_nome,
-            COUNT(conv_id) AS total_reembolsos,
-            
-            COUNT(CASE WHEN tipo_retencao ILIKE '%10 a 30%' THEN 1 END) AS r_10_30,
-            COUNT(CASE WHEN tipo_retencao ILIKE '%40 a 50%' THEN 1 END) AS r_40_50,
-            COUNT(CASE WHEN tipo_retencao ILIKE '%60 a 90%' THEN 1 END) AS r_60_90,
-            COUNT(CASE WHEN tipo_retencao ILIKE '%100%' THEN 1 END) AS r_100,
-            COUNT(CASE WHEN tipo_retencao NOT ILIKE '%10 a 30%' AND tipo_retencao NOT ILIKE '%40 a 50%' AND tipo_retencao NOT ILIKE '%60 a 90%' AND tipo_retencao NOT ILIKE '%100%' THEN 1 END) AS r_outros,
-            
-            json_agg(
-                json_build_object(
-                    'id', display_id,
-                    'nome', COALESCE(contato_nome, 'Sem Nome'),
-                    'email', COALESCE(contato_email, 'Sem Email'),
-                    'data', created_at,
-                    'tipo', tipo_retencao
-                ) ORDER BY created_at DESC
-            ) AS detalhes
-        FROM CasosFiltrados
-        GROUP BY agente_nome
-        ORDER BY total_reembolsos DESC;
+            c.id AS conv_id,
+            c.display_id,
+            COALESCE(u.name, 'SEM ATRIBUIR') AS agente_nome,
+            ct.name AS contato_nome,
+            ct.email AS contato_email,
+            c.updated_at AS data_fallback,
+            COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') AS tipo_retencao,
+            COALESCE(
+                NULLIF(TRIM(c.custom_attributes->>'order_number'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'order_number'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'numero_do_pedido'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'numero_do_pedido'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'numero_pedido'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'numero_pedido'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'Número do Pedido'), ''), 
+                ''
+            ) AS pedido_limpo
+        FROM conversations c
+        LEFT JOIN users u ON u.id = c.assignee_id
+        LEFT JOIN contacts ct ON ct.id = c.contact_id
+        WHERE c.account_id = 1
+          AND (
+              COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%']) OR
+              COALESCE(ct.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%'])
+          )
+          AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
+          AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
+        const result = await pool.query(q);
+
+        // 4. CRUZAMENTO DE DADOS (NODE.JS FAZ O TRABALHO PESADO)
+        const resumoAgentes = {};
         
-        const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
-        res.json({ success: true, dados: result.rows });
+        result.rows.forEach(tk => {
+            // AQUI ESTÁ A MÁGICA: Se o ticket existir na Planilha, puxa a data congelada. Se não, usa a última do banco (fallback).
+            const dataReal = mapaDatas[tk.conv_id] || new Date(tk.data_fallback);
+            
+            // Verifica se a data real cai dentro do mês/período escolhido no Dash
+            if (dataReal >= dInicio && dataReal <= dFim) {
+                const agente = tk.agente_nome;
+                if (!resumoAgentes[agente]) {
+                    resumoAgentes[agente] = {
+                        agente_nome: agente,
+                        total_reembolsos: 0,
+                        r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0,
+                        detalhes: []
+                    };
+                }
+                
+                resumoAgentes[agente].total_reembolsos++;
+                
+                const tipo = tk.tipo_retencao.toLowerCase();
+                if (tipo.includes('10 a 30%')) resumoAgentes[agente].r_10_30++;
+                else if (tipo.includes('40 a 50%')) resumoAgentes[agente].r_40_50++;
+                else if (tipo.includes('60 a 90%')) resumoAgentes[agente].r_60_90++;
+                else if (tipo.includes('100%')) resumoAgentes[agente].r_100++;
+                else resumoAgentes[agente].r_outros++;
+                
+                resumoAgentes[agente].detalhes.push({
+                    id: tk.display_id,
+                    nome: tk.contato_nome || 'Sem Nome',
+                    email: tk.contato_email || 'Sem Email',
+                    data: dataReal, // Data 100% precisa
+                    tipo: tk.tipo_retencao,
+                    pedido: tk.pedido_limpo
+                });
+            }
+        });
+
+        // 5. ORGANIZAR E ENVIAR PARA O PAINEL
+        const arrayFinal = Object.values(resumoAgentes).map(ag => {
+            ag.detalhes.sort((a, b) => b.data - a.data); // Ordena detalhes do mais novo pro mais velho
+            return ag;
+        });
+        arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos); // Ordena o ranking de agentes
+
+        res.json({ success: true, dados: arrayFinal });
     } catch (error) { 
         console.error("Erro PagAmerican:", error);
-        res.status(500).json({ success: false, error: error.message }); 
+        res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
     }
 });
 
@@ -1672,66 +1708,63 @@ app.get('/api/time48', async (req, res) => {
         }
 
         const q = `
-        WITH Etiquetas AS (
-            SELECT id FROM tags WHERE name ILIKE 'time-48h' OR name ILIKE 'painel-do-pedido'
-        ),
-        TargetConversations AS (
-            SELECT c.id AS conv_id, c.display_id, c.contact_id, c.created_at, c.first_reply_created_at, c.assignee_id
+        WITH CasosFiltrados AS (
+            SELECT 
+                c.id AS conv_id,
+                c.display_id,
+                COALESCE(u.name, 'SEM ATRIBUIR') AS agente,
+                c.created_at
             FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
+            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
-              AND c.id IN (
-                  SELECT tg.taggable_id FROM taggings tg
-                  WHERE tg.taggable_type = 'Conversation' AND tg.tag_id IN (SELECT id FROM Etiquetas)
-              )
+              AND tg.name ILIKE '%time-48h%'
               AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
         ),
-        Mensagens AS (
+        StatsAgente AS (
             SELECT 
-                m.conversation_id, m.message_type, m.created_at,
-                LAG(m.created_at) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_time,
-                LAG(m.message_type) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_type
-            FROM messages m
-            WHERE m.conversation_id IN (SELECT conv_id FROM TargetConversations)
-              AND m.private = FALSE
-              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
-        ),
-        MetricasAgente AS (
-            SELECT 
-                tc.conv_id,
-                tc.display_id,
-                ct.name AS cliente,
-                COALESCE(u.name, 'SEM ATRIBUIR') AS agente,
-                EXTRACT(EPOCH FROM (tc.first_reply_created_at - tc.created_at))/60 AS tmc_minutos,
-                (SELECT COUNT(*) FROM Mensagens m2 WHERE m2.conversation_id = tc.conv_id AND m2.message_type = 1) AS qtd_msgs_agente,
-                -- 🔥 INTELIGÊNCIA: Se o cliente (0) mandou msg DEPOIS do agente (1), foi um retorno!
-                (SELECT COUNT(*) FROM Mensagens m5 WHERE m5.conversation_id = tc.conv_id AND m5.message_type = 0 AND m5.prev_msg_type = 1) AS interacoes_retorno,
-                (SELECT AVG(EXTRACT(EPOCH FROM (m4.created_at - m4.prev_msg_time))/60) 
-                 FROM Mensagens m4 
-                 WHERE m4.conversation_id = tc.conv_id AND m4.message_type = 1 AND m4.prev_msg_type = 0
-                ) AS tmr_minutos
-            FROM TargetConversations tc
-            LEFT JOIN users u ON u.id = tc.assignee_id
-            LEFT JOIN contacts ct ON ct.id = tc.contact_id
+                cf.agente,
+                COUNT(DISTINCT cf.conv_id) AS total_tickets,
+                COUNT(DISTINCT CASE WHEN m.message_type = 0 AND m.created_at > cf.created_at THEN cf.conv_id END) AS retornos,
+                COUNT(CASE WHEN m.message_type = 1 THEN m.id END) AS mensagens_enviadas,
+                
+                COALESCE(AVG(EXTRACT(EPOCH FROM (
+                    (SELECT MIN(m1.created_at) FROM messages m1 WHERE m1.conversation_id = cf.conv_id AND m1.message_type = 1 AND m1.private = FALSE) - cf.created_at
+                )::interval)) / 60, 0) AS tmc_minutos,
+                
+                COALESCE(AVG(
+                    (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
+                    FROM messages msg
+                    JOIN messages resp ON resp.conversation_id = msg.conversation_id 
+                                      AND resp.message_type = 1 
+                                      AND resp.private = FALSE 
+                                      AND resp.created_at > msg.created_at
+                    WHERE msg.conversation_id = cf.conv_id 
+                      AND msg.message_type = 0 
+                      AND msg.private = FALSE
+                      AND NOT EXISTS (
+                          SELECT 1 FROM messages m_mid 
+                          WHERE m_mid.conversation_id = msg.conversation_id 
+                            AND m_mid.created_at > msg.created_at 
+                            AND m_mid.created_at < resp.created_at
+                      )
+                    )
+                ) / 60, 0) AS tmr_minutos
+            FROM CasosFiltrados cf
+            LEFT JOIN messages m ON m.conversation_id = cf.conv_id AND m.private = FALSE
+            GROUP BY cf.agente
         )
         SELECT 
             agente,
-            COUNT(conv_id) AS tickets,
-            -- Se teve 1 ou mais interações de retorno, marca este ticket como "Retornado"
-            COALESCE(SUM(CASE WHEN interacoes_retorno > 0 THEN 1 ELSE 0 END), 0) AS retornos,
-            COALESCE(SUM(qtd_msgs_agente), 0) AS mensagens,
-            COALESCE(AVG(tmc_minutos), 0) AS tmc_medio_minutos,
-            COALESCE(AVG(tmr_minutos), 0) AS tmr_medio_minutos,
-            json_agg(json_build_object(
-                'id', display_id,
-                'cliente', COALESCE(cliente, 'Cliente sem nome'),
-                'retornos', interacoes_retorno,
-                'tmc', ROUND(COALESCE(tmc_minutos, 0))
-            ) ORDER BY interacoes_retorno DESC NULLS LAST) AS detalhes
-        FROM MetricasAgente
-        WHERE agente ILIKE '%- 48H%'
-        GROUP BY agente
-        ORDER BY tickets DESC;
+            total_tickets AS tickets,
+            retornos,
+            mensagens_enviadas AS mensagens,
+            tmc_minutos AS tmc_medio_minutos,
+            tmr_minutos AS tmr_medio_minutos
+        FROM StatsAgente
+        ORDER BY total_tickets DESC;
         `;
         const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
         res.json({ success: true, dados: result.rows });
@@ -1741,7 +1774,133 @@ app.get('/api/time48', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3003;
+// ==========================================
+// 16.1 ROTA DE URGÊNCIA: REEMBOLSOS BUYGOODS (COM GOOGLE SHEETS)
+// ==========================================
+app.get('/api/reembolsos-buygoods', async (req, res) => {
+    // 🔥 COLE O MESMO LINK DO GOOGLE AQUI:
+    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
+
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    
+    if (!adms.includes(emailUser)) {
+        return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    }
+    
+    try {
+        // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
+        let mapaDatas = {};
+        try {
+            const respPlanilha = await fetch(URL_PLANILHA);
+            const dadosPlanilha = await respPlanilha.json();
+            
+            if (Array.isArray(dadosPlanilha)) {
+                dadosPlanilha.forEach(linha => {
+                    const convId = parseInt(linha[0]);
+                    const dataAcordo = new Date(linha[1]);
+                    if(convId && !isNaN(dataAcordo)) {
+                        mapaDatas[convId] = dataAcordo;
+                    }
+                });
+            }
+        } catch (errPlanilha) {
+            console.log("Aviso: Falha ao ler a planilha para BuyGoods.", errPlanilha.message);
+        }
+
+        let dInicio, dFim;
+        if (req.query.since && req.query.until) {
+            dInicio = new Date(parseInt(req.query.since) * 1000);
+            dFim = new Date(parseInt(req.query.until) * 1000);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dFim = agora;
+        }
+
+        // 3. LER O BANCO DO CHATWOOT (FILTRO BUYGOODS)
+        const q = `
+        SELECT 
+            c.id AS conv_id,
+            c.display_id,
+            COALESCE(u.name, 'SEM ATRIBUIR') AS agente_nome,
+            ct.name AS contato_nome,
+            ct.email AS contato_email,
+            c.updated_at AS data_fallback,
+            COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') AS tipo_retencao,
+            COALESCE(
+                NULLIF(TRIM(c.custom_attributes->>'order_number'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'order_number'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'numero_do_pedido'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'numero_do_pedido'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'numero_pedido'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'numero_pedido'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'Número do Pedido'), ''), 
+                ''
+            ) AS pedido_limpo
+        FROM conversations c
+        LEFT JOIN users u ON u.id = c.assignee_id
+        LEFT JOIN contacts ct ON ct.id = c.contact_id
+        WHERE c.account_id = 1
+          AND (
+              -- 🔥 VARIAÇÕES DO BUYGOODS AQUI
+              COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%buygoods%', '%buygods%']) OR
+              COALESCE(ct.custom_attributes::text, '') ILIKE ANY(ARRAY['%buygoods%', '%buygods%'])
+          )
+          AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
+          AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
+        `;
+        const result = await pool.query(q);
+
+        // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
+        const resumoAgentes = {};
+        
+        result.rows.forEach(tk => {
+            const dataReal = mapaDatas[tk.conv_id] || new Date(tk.data_fallback);
+            
+            if (dataReal >= dInicio && dataReal <= dFim) {
+                const agente = tk.agente_nome;
+                if (!resumoAgentes[agente]) {
+                    resumoAgentes[agente] = {
+                        agente_nome: agente,
+                        total_reembolsos: 0,
+                        r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0,
+                        detalhes: []
+                    };
+                }
+                
+                resumoAgentes[agente].total_reembolsos++;
+                
+                const tipo = tk.tipo_retencao.toLowerCase();
+                if (tipo.includes('10 a 30%')) resumoAgentes[agente].r_10_30++;
+                else if (tipo.includes('40 a 50%')) resumoAgentes[agente].r_40_50++;
+                else if (tipo.includes('60 a 90%')) resumoAgentes[agente].r_60_90++;
+                else if (tipo.includes('100%')) resumoAgentes[agente].r_100++;
+                else resumoAgentes[agente].r_outros++;
+                
+                resumoAgentes[agente].detalhes.push({
+                    id: tk.display_id,
+                    nome: tk.contato_nome || 'Sem Nome',
+                    email: tk.contato_email || 'Sem Email',
+                    data: dataReal,
+                    tipo: tk.tipo_retencao,
+                    pedido: tk.pedido_limpo
+                });
+            }
+        });
+
+        const arrayFinal = Object.values(resumoAgentes).map(ag => {
+            ag.detalhes.sort((a, b) => b.data - a.data);
+            return ag;
+        });
+        arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
+
+        res.json({ success: true, dados: arrayFinal });
+    } catch (error) { 
+        console.error("Erro BuyGoods:", error);
+        res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
+    }
+});
 
 // ==========================================
 // 18. 🩻 RAIO-X DO SNOOZE (diagnóstico do log de auditoria) — SOMENTE ADMIN
@@ -2056,7 +2215,5 @@ app.get('/api/resumo-recorrencia', async (req, res) => {
     } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
 
-
-app.listen(PORT, () => {
-    console.log(`✅ Servidor rodando na porta ${PORT}`);
-});
+const PORT = process.env.PORT || 3003;
+app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
