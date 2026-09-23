@@ -229,8 +229,8 @@
                         <a data-menu-id="cw-mencoes" onclick="registrarClique('cw-mencoes'); mudarAba('chatwoot'); mudarSubAbaCw('mencoes'); ativarMenu('cw-mencoes'); fecharSidebarMobile();" class="sidebar-link">
                             <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg> Radar de Menções
                         </a>
-                        <a data-menu-id="cw-pagamerican" onclick="registrarClique('cw-pagamerican'); mudarAba('chatwoot'); mudarSubAbaCw('pagamerican'); ativarMenu('cw-pagamerican'); fecharSidebarMobile();" class="sidebar-link">
-                            <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg> Reembolsos PagAm
+                        <a data-menu-id="cw-reembolsos" onclick="registrarClique('cw-reembolsos'); mudarAba('chatwoot'); mudarSubAbaCw('reembolsos'); ativarMenu('cw-reembolsos'); fecharSidebarMobile();" class="sidebar-link">
+                            <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg> Reembolsos
                         </a>
                         <a data-menu-id="cw-time48" onclick="registrarClique('cw-time48'); mudarAba('chatwoot'); mudarSubAbaCw('time48'); ativarMenu('cw-time48'); fecharSidebarMobile();" class="sidebar-link">
                             <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Time 48 Horas
@@ -862,7 +862,7 @@
                     <button id="btn-sub-cw-tabulacao" onclick="mudarSubAbaCw('tabulacao')" class="btn-setor btn-setor-inativo">📦 Produtos Tabulados</button>
                     <button id="btn-sub-cw-mencoes" onclick="mudarSubAbaCw('mencoes')" class="btn-setor btn-setor-inativo">🔎 Radar de Menções (Fila)</button>
                     <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
-                    <button id="btn-sub-cw-pagamerican" onclick="mudarSubAbaCw('pagamerican')" class="btn-setor btn-setor-inativo">💳 PagAmerican (Urgente)</button>
+                    <button id="btn-sub-cw-reembolsos" onclick="mudarSubAbaCw('reembolsos')" class="btn-setor btn-setor-inativo">🔄 Reembolsos</button>
                     <button id="btn-sub-cw-time48" onclick="mudarSubAbaCw('time48')" class="btn-setor btn-setor-inativo">⏳ Time 48h</button>
                 </div>
                 <button onclick="carregarRecorrencia(); carregarProdutosMetricas(); carregarMencoesAbertos(); carregarPagAmerican('');" class="bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 ml-auto">🔄 Atualizar Tudo</button>
@@ -968,26 +968,46 @@
                 </div>
             </div>
 
-            <!-- TELA 4: PAGAMERICAN (SEGMENTADA) -->
-            <div id="tela-cw-pagamerican" class="hidden space-y-6">
+            <!-- TELA 4: REEMBOLSOS (COM SUB-ABAS DE PLATAFORMAS) -->
+            <div id="tela-cw-reembolsos" class="hidden space-y-6">
                 <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[650px] bg-white/50 dark:bg-black/20">
-                    <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-4 shrink-0 bg-gray-50/50 dark:bg-transparent">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-col xl:flex-row justify-between xl:items-center gap-4 shrink-0 bg-gray-50/50 dark:bg-transparent">
                         <div>
-                            <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">💳 Reembolsos PagAmerican</h3>
+                            <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">💳 Reembolsos por Plataforma</h3>
                             <p class="text-[10px] font-bold text-gray-500 mt-1">Classificados por Tipo de Retenção</p>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-xl border border-gray-300 dark:border-white/10 h-8 relative min-w-[240px]">
-                                <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                <input type="text" id="calendario-pagamerican" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wider">
-                                <button id="btn-aplicar-pagam" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Buscar</button>
+                        
+                        <div class="flex flex-wrap items-center gap-4">
+                                <!-- Abas das Plataformas -->
+                                <div class="flex items-center gap-2 border-r border-gray-300 dark:border-gray-700 pr-4">
+                                    <button class="btn-setor btn-setor-inativo opacity-50 cursor-not-allowed" title="Em breve">Braip</button>
+                                    <button class="btn-setor btn-setor-inativo opacity-50 cursor-not-allowed" title="Em breve">Kiwify</button>
+                                    
+                                    <!-- Botão PagAmerican (Inicia Ativo) -->
+                                    <button id="btn-aba-pagamerican" class="btn-setor btn-setor-ativo" onclick="mudarAbaPlataforma('pagamerican')">
+                                        PagAmerican
+                                    </button>
+                                    
+                                    <!-- Botão BuyGoods (Inicia Inativo) -->
+                                    <button id="btn-aba-buygoods" class="btn-setor btn-setor-inativo" onclick="mudarAbaPlataforma('buygoods')">
+                                        BuyGoods
+                                    </button>
+                                </div>
                             </div>
-                            <button id="btn-exportar-pagamerican" onclick="exportarExcelPagAmerican()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-2">
-                                📥 Baixar Excel
-                            </button>
+
+                            <!-- Calendário e Exportação -->
+                            <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-xl border border-gray-300 dark:border-white/10 h-8 relative min-w-[240px]">
+                                    <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                    <input type="text" id="calendario-pagamerican" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wider">
+                                    <button id="btn-aplicar-pagam" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Buscar</button>
+                                </div>
+                                <button id="btn-exportar-pagamerican" onclick="exportarExcelPagAmerican()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-2">
+                                    📥 Baixar Excel
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
+                    <div class="p-0 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
                             <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
@@ -1394,7 +1414,7 @@
         }
 
         function mudarSubAbaCw(aba) {
-            ['recorrencia', 'tabulacao', 'mencoes', 'pagamerican', 'time48'].forEach(id => {
+            ['recorrencia', 'tabulacao', 'mencoes', 'reembolsos', 'time48'].forEach(id => {
                 const tela = document.getElementById(`tela-cw-${id}`);
                 const btn = document.getElementById(`btn-sub-cw-${id}`);
                 
@@ -1418,6 +1438,10 @@
             if (btnAtivo) {
                 btnAtivo.classList.remove('btn-setor-inativo');
                 btnAtivo.classList.add('btn-setor-ativo');
+            }
+
+            if (aba === 'reembolsos' && dadosPagAmerican.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') {
+                carregarPagAmerican('');
             }
         }
 
@@ -1964,86 +1988,6 @@
             `;
         }
 
-        function renderTabelaDist() {
-            const th = document.getElementById('thead-dist-dinamico'), tb = document.getElementById('tabela-dist-body'), tf = document.getElementById('tabela-dist-foot'); 
-            if (!th || !tb || !tf || !dadosDistribuicao) return;
-            
-            let lista = filtroDistSetor === 'TODOS' 
-                ? dadosDistribuicao.distribuicao 
-                : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
-
-            let headH = `<th class="py-3 px-3 pl-4 bg-transparent">Agente</th>`; 
-            dadosDistribuicao.caixas.forEach(c => headH+=`<th class="py-3 px-3 text-center max-w-[120px] truncate bg-transparent" title="${c}">${c}</th>`); 
-            headH+=`<th class="py-3 px-3 text-center font-black text-gexCyan bg-transparent">Total</th>`; 
-            th.innerHTML = headH;
-            
-            if(lista.length === 0){ 
-                tb.innerHTML=`<tr><td colspan="${dadosDistribuicao.caixas.length + 2}" class="py-6 text-center text-gray-500 font-bold">Nenhum dado neste setor.</td></tr>`; 
-                tf.innerHTML='';
-                return;
-            }
-
-            let totaisCaixas = {}; dadosDistribuicao.caixas.forEach(c => totaisCaixas[c] = 0); let totGeral = 0;
-
-            tb.innerHTML = lista.map(a => {
-                let r = `<td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>`;
-                dadosDistribuicao.caixas.forEach(c => { 
-                    const v = a[c]||0; totaisCaixas[c] += v;
-                    r+=`<td class="py-3 px-3 text-center font-mono ${v>0?'text-gray-800 dark:text-gray-200 font-bold':'text-gray-400 dark:text-gray-600 opacity-30'}">${v}</td>`; 
-                });
-                totGeral += a.total;
-                r += `<td class="py-3 px-3 text-center font-mono font-black text-[15px] text-gexCyan">${a.total}</td>`; 
-                return `<tr class="ranking-row row-normal linha-animada">${r}</tr>`;
-            }).join('');
-
-            let footR = `<tr><td class="py-4 px-3 pl-4 font-black text-gray-800 dark:text-white uppercase tracking-widest text-xs bg-transparent">Total Filtrado</td>`;
-            dadosDistribuicao.caixas.forEach(c => { footR += `<td class="py-4 px-3 text-center font-mono font-black text-gray-800 dark:text-gray-200 text-[15px] bg-transparent">${totaisCaixas[c]}</td>`; });
-            footR += `<td class="py-4 px-3 text-center font-mono font-black text-gexCyan text-lg bg-transparent">${totGeral}</td></tr>`;
-            tf.innerHTML = footR;
-        }
-
-        function exportarStatusCasos() {
-            if (!dadosDistribuicao || !dadosDistribuicao.casos) return alert('Sem dados para exportar.');
-            let l = filtroCasosSetor === 'TODOS' 
-                ? dadosDistribuicao.casos 
-                : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroCasosSetor}`));
-            if (l.length === 0) return alert('Sem dados para exportar.');
-            const cols = [
-                { header: 'Agente', key: 'nome', width: 32 },
-                { header: 'Retornos (<24h)', key: 'retornos', width: 16 },
-                { header: 'Aguardando (24-48h)', key: 'aguardando', width: 22 },
-                { header: 'Fora do SLA (>48h)', key: 'fora_sla', width: 20 },
-                { header: 'Total Pendente', key: 'total', width: 15 }
-            ];
-            const linhas = l.map(a => ({ 
-                nome: a.nome, 
-                retornos: a.retornos || 0, 
-                aguardando: a.aguardando || 0, 
-                fora_sla: a.fora_sla || 0, 
-                total: a.total || 0 
-            }));
-            baixarExcelGEX('Status_de_Casos_SLA', cols, linhas);
-        }
-
-        function exportarDistribuicao() {
-            if (!dadosDistribuicao || !dadosDistribuicao.distribuicao) return alert('Sem dados para exportar.');
-            let l = filtroDistSetor === 'TODOS' 
-                ? dadosDistribuicao.distribuicao 
-                : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
-            if (l.length === 0) return alert('Sem dados para exportar.');
-            const caixas = dadosDistribuicao.caixas || [];
-            const cols = [{ header: 'Agente', key: 'nome', width: 32 }];
-            caixas.forEach((c, i) => cols.push({ header: c, key: `c${i}`, width: 16 }));
-            cols.push({ header: 'Total', key: 'total', width: 10 });
-            const linhas = l.map(a => {
-                const row = { nome: a.nome };
-                caixas.forEach((c, i) => row[`c${i}`] = a[c] || 0);
-                row.total = a.total || 0;
-                return row;
-            });
-            baixarExcelGEX('Distribuicao_Times', cols, linhas);
-        }
-
         function abrirModalCasos(nomeAgente) {
             if (!dadosDistribuicao || !dadosDistribuicao.casos) return;
             const agente = dadosDistribuicao.casos.find(a => a.nome === nomeAgente);
@@ -2289,19 +2233,89 @@
             baixarExcelGEX('Tickets_Geral', cols, linhas);
         }
 
-        function exportarStatusCasos() {
-            if (!dadosDistribuicao || !dadosDistribuicao.casos) return alert('Sem dados para exportar.');
-            let l = filtroCasosSetor === 'TODOS' ? dadosDistribuicao.casos : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroCasosSetor}`));
-            if (l.length === 0) return alert('Sem dados para exportar.');
-            const cols = [{ header: 'Agente', key: 'nome', width: 32 },
-                { header: 'Ignorado', key: 'ignorado', width: 12 },
-                { header: 'Aguardando', key: 'aguardando', width: 12 },
-                { header: 'Parado (>48h)', key: 'parado', width: 14 },
-                { header: 'Em Andamento', key: 'andamento', width: 14 },
-                { header: 'Total', key: 'total', width: 10 }];
-            const linhas = l.map(a => ({ nome: a.nome, ignorado: a.ignorado||0, aguardando: a.aguardando||0, parado: a.parado||0, andamento: a.andamento||0, total: a.total||0 }));
-            baixarExcelGEX('Status_de_Casos', cols, linhas);
+        async function exportarStatusCasos() {
+        if (!dadosDistribuicao || !dadosDistribuicao.casos || dadosDistribuicao.casos.length === 0) {
+            return alert('Sem dados para exportar.');
         }
+
+        const btn = document.querySelector('button[onclick="exportarStatusCasos()"]');
+        const originalText = btn ? btn.innerHTML : '📥 Excel';
+        if (btn) btn.innerHTML = '⏳ Gerando...';
+
+        try {
+            // Inicializa o arquivo Excel
+            const workbook = new ExcelJS.Workbook();
+            
+            // Define as abas exatamente como na sua imagem
+            const abasConfig = [
+                { id: 'TODOS', nomeAba: 'Dados' },
+                { id: 'RET', nomeAba: 'RET' },
+                { id: 'SAC', nomeAba: 'SAC' },
+                { id: 'BKO', nomeAba: 'BKO' },
+                { id: 'SMS', nomeAba: 'SMS' },
+                { id: '48H', nomeAba: '48H' }
+            ];
+
+            // Define as colunas (atualizadas)
+            const colunasDef = [
+                { header: 'AGENTE', key: 'nome', width: 35 },
+                { header: 'RETORNOS', key: 'retornos', width: 15 },
+                { header: 'AGUARDANDO', key: 'aguardando', width: 15 },
+                { header: 'FORA DO SLA', key: 'fora_sla', width: 18 },
+                { header: 'TOTAL', key: 'total', width: 15 }
+            ];
+
+            // Cria uma aba para cada setor da configuração
+            abasConfig.forEach(setor => {
+                // Filtra os dados (se for TODOS, pega a lista inteira)
+                let lista = setor.id === 'TODOS' 
+                    ? dadosDistribuicao.casos 
+                    : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${setor.id}`));
+
+                // Cria a aba e congela a primeira linha (cabeçalho)
+                const sheet = workbook.addWorksheet(setor.nomeAba, {views: [{state: 'frozen', ySplit: 1}]});
+                sheet.columns = colunasDef;
+
+                // Pinta o cabeçalho de Azul GEX com letra branca e negrito
+                sheet.getRow(1).eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                });
+
+                // Insere os dados usando o fallback inteligente
+                lista.forEach(a => {
+                    let row = sheet.addRow({
+                        nome: a.nome,
+                        retornos: parseInt(a.retornos || a.ignorado || 0),
+                        aguardando: parseInt(a.aguardando || 0),
+                        fora_sla: parseInt(a.fora_sla || a.parado || 0),
+                        total: parseInt(a.total || 0)
+                    });
+                    
+                    // Centraliza os números e alinha o nome à esquerda
+                    row.alignment = { vertical: 'middle', horizontal: 'center' };
+                    row.getCell('nome').alignment = { vertical: 'middle', horizontal: 'left' };
+                });
+            });
+
+            // Gera o arquivo e força o download
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Status_de_Casos_Completo_${new Date().toISOString().split('T')[0]}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+        } catch(e) {
+            console.error(e);
+            alert('Erro ao gerar o arquivo Excel com multi-abas.');
+        }
+
+        if (btn) btn.innerHTML = originalText;
+    }
 
         function exportarDistribuicao() {
             if (!dadosDistribuicao || !dadosDistribuicao.distribuicao) return alert('Sem dados para exportar.');
@@ -2886,12 +2900,12 @@
         let dadosPagAmerican = [];
         let calPagAmerican = null;
 
-        async function carregarPagAmerican() {
+        async function carregarPagAmerican(parametrosUrl = '') {
             if(usuarioAtual && usuarioAtual.role !== 'admin') return;
             
             const tb = document.getElementById('tabela-pagamerican-body');
             try {
-                if(tb) tb.innerHTML = `<tr><td colspan="3" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados do servidor...</td></tr>`;
+                if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados do servidor...</td></tr>`;
                 
                 const response = await fetch('/api/reembolsos-pagamerican' + parametrosUrl);
                 const data = await response.json();
@@ -2900,11 +2914,11 @@
                     dadosPagAmerican = data.dados || [];
                     renderTabelaPagAmerican();
                 } else {
-                    if(tb) tb.innerHTML = `<tr><td colspan="3" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro no Banco de Dados: ${data.error}</td></tr>`;
+                    if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro no Banco de Dados: ${data.error}</td></tr>`;
                 }
             } catch (error) { 
                 console.error(error); 
-                if(tb) tb.innerHTML = `<tr><td colspan="3" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
+                if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
             }
         }
 
@@ -2961,6 +2975,11 @@
                     if(tk.tipo.includes('60 a 90%')) corTipo = 'bg-orange-500/10 text-orange-500 border border-orange-500/30';
                     if(tk.tipo.includes('100%')) corTipo = 'bg-red-500/10 text-red-500 border border-red-500/30';
                     
+                    // 🔥 Lógica que cria a caixinha do pedido se a informação existir no backend
+                    let htmlPedido = (tk.pedido && tk.pedido.trim() !== '') 
+                        ? `<span class="text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/30 px-2 py-0.5 rounded font-bold shadow-sm">📦 Pedido: ${tk.pedido}</span>` 
+                        : '';
+
                     html += `
                     <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
@@ -2970,6 +2989,7 @@
                                 <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
                                 <span class="text-[10px] bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded font-bold">${dataHora}</span>
                                 <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corTipo}">${tk.tipo}</span>
+                                ${htmlPedido}
                             </div>
                         </div>
                         <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
@@ -2977,6 +2997,8 @@
                         </a>
                     </div>`;
                 });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum detalhe encontrado.</p>';
             }
             html += '</div>';
 
@@ -3032,6 +3054,7 @@
                 sheetAuditoria.columns = [
                     { header: 'ANALISTA RESPONSÁVEL', key: 'agente', width: 35 },
                     { header: 'TICKET ID', key: 'ticket_id', width: 15 },
+                    { header: 'NÚMERO DO PEDIDO', key: 'pedido', width: 22 },
                     { header: 'DATA E HORA', key: 'data', width: 22 },
                     { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
                     { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
@@ -3052,6 +3075,7 @@
                             let row = sheetAuditoria.addRow({
                                 agente: d.agente_nome,
                                 ticket_id: tk.id,
+                                pedido: tk.pedido || '',
                                 data: dataFormatada,
                                 tipo: tk.tipo,
                                 cliente: tk.nome || 'Sem Nome',
@@ -3132,6 +3156,261 @@
             });
             renderTabelaMonitoriaTk();
         }
+
+        // =========================================================================
+// CONTROLE DE ABAS E INTEGRAÇÃO BUYGOODS (Cole no final do arquivo)
+// =========================================================================
+
+let plataformaAtual = 'pagamerican';
+let dadosBuyGoods = [];
+
+// 1. Função que alterna entre as abas
+function mudarAbaPlataforma(plataforma) {
+    plataformaAtual = plataforma;
+    
+    const btnPag = document.getElementById('btn-aba-pagamerican');
+    const btnBuy = document.getElementById('btn-aba-buygoods');
+    const btnExportar = document.getElementById('btn-exportar-pagamerican'); // O seu botão de exportar
+
+    if (plataforma === 'pagamerican') {
+        // Estilo visual
+        if(btnPag) btnPag.className = "btn-setor btn-setor-ativo";
+        if(btnBuy) btnBuy.className = "btn-setor btn-setor-inativo cursor-pointer opacity-50 hover:opacity-100";
+        
+        // Altera a função do botão de exportar para a PagAmerican
+        if(btnExportar) btnExportar.onclick = exportarExcelPagAmerican; 
+        
+        // Carrega os dados
+        carregarPagAmerican(); 
+    } 
+    else if (plataforma === 'buygoods') {
+        // Estilo visual
+        if(btnBuy) btnBuy.className = "btn-setor btn-setor-ativo";
+        if(btnPag) btnPag.className = "btn-setor btn-setor-inativo cursor-pointer opacity-50 hover:opacity-100";
+        
+        // Altera a função do botão de exportar para a BuyGoods
+        if(btnExportar) btnExportar.onclick = exportarExcelBuyGoods;
+        
+        // Carrega os dados
+        carregarBuyGoods(); 
+    }
+}
+
+// 2. Busca os dados da BuyGoods no Node.js
+async function carregarBuyGoods(parametrosUrl = '') {
+    if(usuarioAtual && usuarioAtual.role !== 'admin') return;
+    
+    // Reutilizamos a MESMA tabela da PagAmerican no HTML para não precisar recriar nada
+    const tb = document.getElementById('tabela-pagamerican-body'); 
+    try {
+        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados da BuyGoods...</td></tr>`;
+        
+        const response = await fetch('/api/reembolsos-buygoods' + parametrosUrl);
+        const data = await response.json();
+        
+        if (data.success) {
+            dadosBuyGoods = data.dados || [];
+            renderTabelaBuyGoods();
+        } else {
+            if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
+        }
+    } catch (error) { 
+        console.error(error); 
+        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
+    }
+}
+
+// 3. Desenha a tabela com os dados da BuyGoods
+function renderTabelaBuyGoods() {
+    const tb = document.getElementById('tabela-pagamerican-body');
+    if(!tb) return;
+
+    if (dadosBuyGoods.length === 0) {
+        tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da BuyGoods encontrado neste período.</td></tr>`;
+        return;
+    }
+
+    window.mapaBuyGoods = {}; 
+
+    tb.innerHTML = dadosBuyGoods.map((d, i) => {
+        window.mapaBuyGoods[i] = d; 
+        
+        const f = v => v > 0 ? `<span class="font-bold text-gray-800 dark:text-white">${v}</span>` : `<span class="text-gray-400 opacity-50">-</span>`;
+        const f100 = v => v > 0 ? `<span class="font-bold text-red-500">${v}</span>` : `<span class="text-gray-400 opacity-50">-</span>`;
+
+        return `
+        <tr class="ranking-row row-normal linha-animada">
+            <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">👤 ${d.agente_nome}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_10_30)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_40_50)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_60_90)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f100(d.r_100)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_outros)}</td>
+            <td class="py-4 px-3 text-center font-mono text-[16px] text-gexCyan font-black">${d.total_reembolsos}</td>
+            <td class="py-4 px-3 text-center pr-4">
+                <button onclick="abrirModalBuyGoods(${i})" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap border border-white/5">
+                    👁️ Ver Detalhes
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// 4. Abre o Modal com as Conversas da BuyGoods (Reutiliza o seu modal HTML)
+function abrirModalBuyGoods(index) {
+    const item = window.mapaBuyGoods[index];
+    if (!item) return;
+
+    document.getElementById('modal-pagam-titulo').innerText = `Reembolsos BuyGoods: ${item.agente_nome}`;
+    
+    let html = '<div class="space-y-3">';
+    if (item.detalhes && item.detalhes.length > 0) {
+        item.detalhes.forEach(tk => {
+            const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`; 
+            const dataHora = new Date(tk.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit' });
+            
+            let corTipo = 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+            if(tk.tipo.includes('10 a 30%')) corTipo = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
+            if(tk.tipo.includes('40 a 50%')) corTipo = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
+            if(tk.tipo.includes('60 a 90%')) corTipo = 'bg-orange-500/10 text-orange-500 border border-orange-500/30';
+            if(tk.tipo.includes('100%')) corTipo = 'bg-red-500/10 text-red-500 border border-red-500/30';
+            
+            let htmlPedido = (tk.pedido && tk.pedido.trim() !== '') 
+                ? `<span class="text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/30 px-2 py-0.5 rounded font-bold shadow-sm">📦 Pedido: ${tk.pedido}</span>` 
+                : '';
+
+            html += `
+            <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                <div>
+                    <p class="text-sm font-black text-gray-800 dark:text-white">${tk.nome}</p>
+                    <p class="text-xs font-bold text-gray-500 mt-1">📧 ${tk.email}</p>
+                    <div class="flex flex-wrap items-center gap-2 mt-2">
+                        <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
+                        <span class="text-[10px] bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded font-bold">${dataHora}</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corTipo}">${tk.tipo}</span>
+                        ${htmlPedido}
+                    </div>
+                </div>
+                <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                    Abrir Conversa ↗️
+                </a>
+            </div>`;
+        });
+    } else {
+        html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum detalhe encontrado.</p>';
+    }
+    html += '</div>';
+
+    document.getElementById('modal-pagam-conteudo').innerHTML = html;
+    document.getElementById('modal-pagamerican').classList.remove('hidden');
+}
+
+// 5. Função de Exportar Excel da BuyGoods
+async function exportarExcelBuyGoods() {
+    if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+    if (!dadosBuyGoods || dadosBuyGoods.length === 0) return alert("Sem dados para exportar.");
+    
+    const btn = document.getElementById('btn-exportar-pagamerican');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Gerando...';
+    
+    try {
+        const workbook = new ExcelJS.Workbook();
+        
+        // 1ª Aba do Excel (Resumo)
+        const sheet = workbook.addWorksheet('Resumo_BuyGoods', {views: [{state: 'frozen', ySplit: 1}]});
+        sheet.columns = [
+            { header: 'ANALISTA (TICKET)', key: 'agente', width: 35 },
+            { header: '10 A 30%', key: 'r10', width: 15 },
+            { header: '40 A 50%', key: 'r40', width: 15 },
+            { header: '60 A 90%', key: 'r60', width: 15 },
+            { header: 'PERDA (100%)', key: 'r100', width: 18 },
+            { header: 'OUTROS', key: 'routros', width: 15 },
+            { header: 'TOTAL DE REEMBOLSOS', key: 'total', width: 25 }
+        ];
+
+        sheet.getRow(1).eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+
+        dadosBuyGoods.forEach(d => {
+            let row = sheet.addRow({
+                agente: d.agente_nome,
+                r10: parseInt(d.r_10_30) || 0,
+                r40: parseInt(d.r_40_50) || 0,
+                r60: parseInt(d.r_60_90) || 0,
+                r100: parseInt(d.r_100) || 0,
+                routros: parseInt(d.r_outros) || 0,
+                total: parseInt(d.total_reembolsos) || 0
+            });
+            row.alignment = { vertical: 'middle', horizontal: 'center' };
+            row.getCell('agente').alignment = { vertical: 'middle', horizontal: 'left' };
+        });
+
+        // 2ª Aba do Excel (Auditoria)
+        const sheetAuditoria = workbook.addWorksheet('Auditoria de Tickets', {views: [{state: 'frozen', ySplit: 1}]});
+        sheetAuditoria.columns = [
+            { header: 'ANALISTA RESPONSÁVEL', key: 'agente', width: 35 },
+            { header: 'TICKET ID', key: 'ticket_id', width: 15 },
+            { header: 'NÚMERO DO PEDIDO', key: 'pedido', width: 22 },
+            { header: 'DATA E HORA', key: 'data', width: 22 },
+            { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
+            { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
+            { header: 'E-MAIL', key: 'email', width: 35 },
+            { header: 'LINK DO CHATWOOT', key: 'link', width: 60 }
+        ];
+
+        sheetAuditoria.getRow(1).eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+
+        dadosBuyGoods.forEach(d => {
+            if(d.detalhes && d.detalhes.length > 0) {
+                d.detalhes.forEach(tk => {
+                    const dataFormatada = new Date(tk.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+                    let row = sheetAuditoria.addRow({
+                        agente: d.agente_nome,
+                        ticket_id: tk.id,
+                        pedido: tk.pedido || '',
+                        data: dataFormatada,
+                        tipo: tk.tipo,
+                        cliente: tk.nome || 'Sem Nome',
+                        email: tk.email || 'Sem Info',
+                        link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                    });
+                    row.alignment = { vertical: 'middle', horizontal: 'center' };
+                    row.getCell('agente').alignment = { horizontal: 'left' };
+                    row.getCell('cliente').alignment = { horizontal: 'left' };
+                    row.getCell('link').alignment = { horizontal: 'left' };
+                    
+                    if(tk.tipo && tk.tipo.includes('100%')) {
+                        row.getCell('tipo').font = { color: { argb: 'FFCC0000' }, bold: true };
+                    }
+                });
+            }
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Nome do arquivo salvo no computador altera para BuyGoods
+        a.download = `BuyGoods_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}.xlsx`; 
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
+    } catch(e) { 
+        console.error(e); 
+        alert('Erro ao gerar o arquivo Excel.'); 
+    }
+    
+    btn.innerHTML = originalText;
+}
 
         function renderTabelaMonitoriaTk() {
             const tb = document.getElementById('tabela-monitoriatk-body'); if (!tb) return;
@@ -3527,7 +3806,14 @@
             calTkGeral      = criarCalendario('calendario-tickets-geral', 'btn-aplicar-geral', carregarTicketsGeral, true);
             calTkProd       = criarCalendario('calendario-produtividade', 'btn-aplicar-prod',  carregarProdutividade, true);
             calMonitoriaTk  = criarCalendario('calendario-monitoria-tk',  'btn-aplicar-montk', carregarMonitoriaTk,  true);
-            calPagAmerican  = criarCalendario('calendario-pagamerican',   'btn-aplicar-pagam', carregarPagAmerican,  true);
+            // O calendário agora verifica qual aba está ativa antes de buscar os dados
+            calPagAmerican = criarCalendario('calendario-pagamerican', 'btn-aplicar-pagam', (parametrosUrl) => {
+                if (plataformaAtual === 'pagamerican') {
+                    carregarPagAmerican(parametrosUrl);
+                } else {
+                    carregarBuyGoods(parametrosUrl);
+                }
+            }, true);
             calTime48       = criarCalendario('calendario-time48',        'btn-aplicar-time48', carregarTime48,      true);
 
             document.getElementById('filtro-mes-qualidade')?.addEventListener('change', (e) => carregarQualidade(e.target.value));
