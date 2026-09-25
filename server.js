@@ -852,7 +852,7 @@ app.get('/api/distribuicao', async (req, res) => {
             LEFT JOIN inboxes i ON i.id = c.inbox_id
             WHERE c.status = 0 
               AND c.account_id = 1
-              AND (i.name IS NULL OR (i.name != 'Atendimento | Brasil' AND i.name != '[GEX] SMS Support'))
+              AND (i.name IS NULL OR i.name != 'Atendimento | Brasil')
             GROUP BY u.name, i.name
         `;
         const resultDist = await pool.query(qDist);
@@ -898,7 +898,7 @@ app.get('/api/distribuicao', async (req, res) => {
                 LEFT JOIN inboxes i ON i.id = c.inbox_id
                 WHERE c.status = 0 
                   AND c.account_id = 1
-                  AND (i.name IS NULL OR (i.name != 'Atendimento | Brasil' AND i.name != '[GEX] SMS Support'))
+                  AND (i.name IS NULL OR i.name != 'Atendimento | Brasil')
             )
             SELECT 
                 u.name AS agente,
@@ -922,7 +922,7 @@ app.get('/api/distribuicao', async (req, res) => {
         
         resultCasos.rows.forEach(r => {
             let nomeAgente = (r.agente || '').toUpperCase();
-            let equipeNome = (r.equipe_nome || r.inbox_nome || '').toUpperCase();
+            let equipeNome = ((r.equipe_nome || '') + ' ' + (r.inbox_nome || '')).toUpperCase();
 
             let siglaSetor = 'OUTROS';
             if (equipeNome.includes('RETEN') || equipeNome.includes('RET')) siglaSetor = 'RET';
@@ -1619,7 +1619,8 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
                 NULLIF(TRIM(ct.custom_attributes->>'numero_pedido'), ''),
                 NULLIF(TRIM(c.custom_attributes->>'Número do Pedido'), ''), 
                 ''
-            ) AS pedido_limpo
+            ) AS pedido_limpo,
+            COALESCE(NULLIF(TRIM(c.custom_attributes->>'produtos'),''), NULLIF(TRIM(c.custom_attributes->>'produto'),''), NULLIF(TRIM(c.custom_attributes->>'Produto'),''), NULLIF(TRIM(ct.custom_attributes->>'produtos'),''), NULLIF(TRIM(ct.custom_attributes->>'produto'),''), NULLIF(TRIM(ct.custom_attributes->>'Produto'),''), '') AS produto_nome
         FROM conversations c
         LEFT JOIN users u ON u.id = c.assignee_id
         LEFT JOIN contacts ct ON ct.id = c.contact_id
@@ -1667,7 +1668,8 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
                     email: tk.contato_email || 'Sem Email',
                     data: dataReal, // Data 100% precisa
                     tipo: tk.tipo_retencao,
-                    pedido: tk.pedido_limpo
+                    pedido: tk.pedido_limpo,
+                    produto: tk.produto_nome || 'Não informado'
                 });
             }
         });
@@ -1837,7 +1839,8 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
                 NULLIF(TRIM(ct.custom_attributes->>'numero_pedido'), ''),
                 NULLIF(TRIM(c.custom_attributes->>'Número do Pedido'), ''), 
                 ''
-            ) AS pedido_limpo
+            ) AS pedido_limpo,
+            COALESCE(NULLIF(TRIM(c.custom_attributes->>'produtos'),''), NULLIF(TRIM(c.custom_attributes->>'produto'),''), NULLIF(TRIM(c.custom_attributes->>'Produto'),''), NULLIF(TRIM(ct.custom_attributes->>'produtos'),''), NULLIF(TRIM(ct.custom_attributes->>'produto'),''), NULLIF(TRIM(ct.custom_attributes->>'Produto'),''), '') AS produto_nome
         FROM conversations c
         LEFT JOIN users u ON u.id = c.assignee_id
         LEFT JOIN contacts ct ON ct.id = c.contact_id
@@ -1884,7 +1887,8 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
                     email: tk.contato_email || 'Sem Email',
                     data: dataReal,
                     tipo: tk.tipo_retencao,
-                    pedido: tk.pedido_limpo
+                    pedido: tk.pedido_limpo,
+                    produto: tk.produto_nome || 'Não informado'
                 });
             }
         });
@@ -1898,6 +1902,133 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         res.json({ success: true, dados: arrayFinal });
     } catch (error) { 
         console.error("Erro BuyGoods:", error);
+        res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
+    }
+});
+
+app.get('/api/reembolsos-cartpanda', async (req, res) => {
+    // 🔥 COLE O MESMO LINK DO GOOGLE AQUI:
+    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
+
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    
+    if (!adms.includes(emailUser)) {
+        return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    }
+    
+    try {
+        // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
+        let mapaDatas = {};
+        try {
+            const respPlanilha = await fetch(URL_PLANILHA);
+            const dadosPlanilha = await respPlanilha.json();
+            
+            if (Array.isArray(dadosPlanilha)) {
+                dadosPlanilha.forEach(linha => {
+                    const convId = parseInt(linha[0]);
+                    const dataAcordo = new Date(linha[1]);
+                    if(convId && !isNaN(dataAcordo)) {
+                        mapaDatas[convId] = dataAcordo;
+                    }
+                });
+            }
+        } catch (errPlanilha) {
+            console.log("Aviso: Falha ao ler a planilha para CartPanda.", errPlanilha.message);
+        }
+
+        let dInicio, dFim;
+        if (req.query.since && req.query.until) {
+            dInicio = new Date(parseInt(req.query.since) * 1000);
+            dFim = new Date(parseInt(req.query.until) * 1000);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dFim = agora;
+        }
+
+        // 3. LER O BANCO DO CHATWOOT (FILTRO CARTPANDA)
+        const q = `
+        SELECT 
+            c.id AS conv_id,
+            c.display_id,
+            COALESCE(u.name, 'SEM ATRIBUIR') AS agente_nome,
+            ct.name AS contato_nome,
+            ct.email AS contato_email,
+            c.updated_at AS data_fallback,
+            COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') AS tipo_retencao,
+            COALESCE(
+                NULLIF(TRIM(c.custom_attributes->>'order_number'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'order_number'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'numero_do_pedido'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'numero_do_pedido'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'numero_pedido'), ''), 
+                NULLIF(TRIM(ct.custom_attributes->>'numero_pedido'), ''),
+                NULLIF(TRIM(c.custom_attributes->>'Número do Pedido'), ''), 
+                ''
+            ) AS pedido_limpo,
+            COALESCE(NULLIF(TRIM(c.custom_attributes->>'produtos'),''), NULLIF(TRIM(c.custom_attributes->>'produto'),''), NULLIF(TRIM(c.custom_attributes->>'Produto'),''), NULLIF(TRIM(ct.custom_attributes->>'produtos'),''), NULLIF(TRIM(ct.custom_attributes->>'produto'),''), NULLIF(TRIM(ct.custom_attributes->>'Produto'),''), '') AS produto_nome
+        FROM conversations c
+        LEFT JOIN users u ON u.id = c.assignee_id
+        LEFT JOIN contacts ct ON ct.id = c.contact_id
+        WHERE c.account_id = 1
+          AND (
+              -- 🔥 VARIAÇÕES DO CARTPANDA AQUI
+              COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%cartpanda%', '%cart panda%', '%cart_panda%', '%cart-panda%']) OR
+              COALESCE(ct.custom_attributes::text, '') ILIKE ANY(ARRAY['%cartpanda%', '%cart panda%', '%cart_panda%', '%cart-panda%'])
+          )
+          AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
+          AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
+        `;
+        const result = await pool.query(q);
+
+        // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
+        const resumoAgentes = {};
+        
+        result.rows.forEach(tk => {
+            const dataReal = mapaDatas[tk.conv_id] || new Date(tk.data_fallback);
+            
+            if (dataReal >= dInicio && dataReal <= dFim) {
+                const agente = tk.agente_nome;
+                if (!resumoAgentes[agente]) {
+                    resumoAgentes[agente] = {
+                        agente_nome: agente,
+                        total_reembolsos: 0,
+                        r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0,
+                        detalhes: []
+                    };
+                }
+                
+                resumoAgentes[agente].total_reembolsos++;
+                
+                const tipo = tk.tipo_retencao.toLowerCase();
+                if (tipo.includes('10 a 30%')) resumoAgentes[agente].r_10_30++;
+                else if (tipo.includes('40 a 50%')) resumoAgentes[agente].r_40_50++;
+                else if (tipo.includes('60 a 90%')) resumoAgentes[agente].r_60_90++;
+                else if (tipo.includes('100%')) resumoAgentes[agente].r_100++;
+                else resumoAgentes[agente].r_outros++;
+                
+                resumoAgentes[agente].detalhes.push({
+                    id: tk.display_id,
+                    nome: tk.contato_nome || 'Sem Nome',
+                    email: tk.contato_email || 'Sem Email',
+                    data: dataReal,
+                    tipo: tk.tipo_retencao,
+                    pedido: tk.pedido_limpo,
+                    produto: tk.produto_nome || 'Não informado'
+                });
+            }
+        });
+
+        const arrayFinal = Object.values(resumoAgentes).map(ag => {
+            ag.detalhes.sort((a, b) => b.data - a.data);
+            return ag;
+        });
+        arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
+
+        res.json({ success: true, dados: arrayFinal });
+    } catch (error) { 
+        console.error("Erro CartPanda:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
     }
 });
@@ -2216,4 +2347,40 @@ app.get('/api/resumo-recorrencia', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3003;
+
+// ==========================================
+// 📅 TICKETS DIÁRIO (matriz agente x data) — base p/ exports com datas — ADMIN
+// ==========================================
+app.get('/api/tickets-diario', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    if (!adms.includes(emailUser)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        let ini, fim;
+        if (req.query.since && req.query.until) {
+            ini = unixParaYYYYMMDD(req.query.since); fim = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1));
+            fim = formatarDataSQL(agora);
+        }
+        const result = await pool.query(queryTickets, [ini, fim]);
+        const dias = [];
+        let d = new Date(ini + 'T12:00:00Z'); const dEnd = new Date(fim + 'T12:00:00Z');
+        while (d <= dEnd) { dias.push(d.toISOString().split('T')[0]); d.setUTCDate(d.getUTCDate() + 1); }
+        const mapa = {};
+        result.rows.forEach(r => {
+            const nome = r.agente || 'SEM ATRIBUIR';
+            const diaStr = r.dia instanceof Date ? r.dia.toISOString().split('T')[0] : String(r.dia).split('T')[0];
+            if (!mapa[nome]) mapa[nome] = { nome, porDia: {}, total: 0 };
+            const v = parseInt(r.tickets) || 0;
+            mapa[nome].porDia[diaStr] = (mapa[nome].porDia[diaStr] || 0) + v;
+            mapa[nome].total += v;
+        });
+        const agentes = Object.values(mapa).sort((a, b) => b.total - a.total);
+        res.json({ success: true, ini, fim, dias, agentes });
+    } catch (error) { console.error('[tickets-diario]', error.message); res.status(500).json({ success: false, error: error.message }); }
+});
+
+
 app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
