@@ -189,8 +189,17 @@ let cacheMemoria = {};
 const MAX_CACHE_KEYS = 200; // Trava de segurança para impedir estouro de RAM
 
 const cacheMiddleware = (req, res, next) => {
-    const chaveUrl = req.originalUrl; 
     const agora = Date.now();
+    // 🔄 Refresh manual (líder clicou Atualizar/Sincronizar/Recarregar): fura o cache e busca dados frescos.
+    // O tempo de 15–30m continua como fallback passivo (agentes / navegação normal).
+    let bypass = false, chaveUrl = req.originalUrl;
+    try {
+        const u = new URL(req.originalUrl, 'http://x');
+        bypass = u.searchParams.get('fresh') === '1';
+        u.searchParams.delete('fresh');
+        const qs = u.searchParams.toString();
+        chaveUrl = u.pathname + (qs ? '?' + qs : '');
+    } catch (e) { chaveUrl = req.originalUrl; }
 
     // 🛡️ PROTEÇÃO DoS: Se o cache inchar de forma anormal, limpa a memória
     if (Object.keys(cacheMemoria).length > MAX_CACHE_KEYS) {
@@ -204,7 +213,7 @@ const cacheMiddleware = (req, res, next) => {
         tempoCacheMinutos = 15;
     }
 
-    if (cacheMemoria[chaveUrl] && (agora - cacheMemoria[chaveUrl].tempo < tempoCacheMinutos * 60 * 1000)) {
+    if (!bypass && cacheMemoria[chaveUrl] && (agora - cacheMemoria[chaveUrl].tempo < tempoCacheMinutos * 60 * 1000)) {
         console.log(`⚡ Retornando do Cache (${tempoCacheMinutos}m): ${chaveUrl}`);
         return res.json(cacheMemoria[chaveUrl].data);
     }
@@ -841,10 +850,7 @@ app.get('/api/tickets-geral', async (req, res) => {
 // ==========================================
 app.get('/api/distribuicao', async (req, res) => {
     try {
-        // Limpa acentos e deixa maiúsculo (ex: "time de retenção" vira "TIME DE RETENCAO")
-        const limparTexto = (txt) => (txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-
-        // 1. Query de Distribuição (Lendo a tabela de Teams e Inboxes)
+        // 1. Query de Distribuição de Tickets por Inbox
         const qDist = `
             SELECT 
                 u.name AS agente,
@@ -866,47 +872,59 @@ app.get('/api/distribuicao', async (req, res) => {
         const caixasSet = new Set();
         
         resultDist.rows.forEach(r => {
-            let nomeAgente = (r.agente || '').toUpperCase().trim();
-            // Prioriza o nome da equipe. Se não tiver, usa a caixa de entrada.
-            let nomeFila = r.equipe_nome || r.caixa || '(Sem Time)';
-            let filaUpper = limparTexto(nomeFila);
+            let nomeAgente = (r.agente || '').toUpperCase();
+            let cx = r.caixa || '(Sem Time)';
+            let cxUpper = ((r.equipe_nome || '') + ' ' + cx).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
             
-            caixasSet.add(nomeFila);
+            caixasSet.add(cx);
             
-            // Descobre qual é o setor baseado no nome da fila
+            // Descobre a sigla do time baseada na caixa/inbox
             let siglaSetor = 'OUTROS';
-            if (filaUpper.includes('RETEN') || filaUpper.includes('RET')) siglaSetor = 'RET';
-            else if (filaUpper.includes('SAC')) siglaSetor = 'SAC';
-            else if (filaUpper.includes('BACK') || filaUpper.includes('BKO')) siglaSetor = 'BKO';
-            else if (filaUpper.includes('SMS')) siglaSetor = 'SMS';
-            else if (filaUpper.includes('48')) siglaSetor = '48H';
+            if (cxUpper.includes('RETEN') || cxUpper.includes('RET')) siglaSetor = 'RET';
+            else if (cxUpper.includes('SAC')) siglaSetor = 'SAC';
+            else if (cxUpper.includes('BACK') || cxUpper.includes('BKO')) siglaSetor = 'BKO';
+            else if (cxUpper.includes('SMS')) siglaSetor = 'SMS';
+            else if (cxUpper.includes('48')) siglaSetor = '48H';
 
             let nome;
             if (!nomeAgente) {
-                // Se não tem agente, vai pro balde "SEM ATRIBUIR"
                 if (siglaSetor === 'OUTROS') return; 
-                nome = 'SEM ATRIBUIR - ' + siglaSetor;
+                nome = `SEM ATRIBUIR - ${siglaSetor}`;
             } else {
-                // 🔥 AUTO-CORREÇÃO DE AGENTES: Se o agente não tiver a sigla no nome, a gente herda da fila automaticamente!
-                if(nomeAgente.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) {
-                    nome = nomeAgente;
-                } else {
-                    if (siglaSetor === 'OUTROS') return;
-                    nome = nomeAgente + ' - ' + siglaSetor;
-                }
+                // Time do agente vem SÓ do nome no Chatwoot (nunca herda da fila)
+                const mSig = nomeAgente.match(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b/);
+                if (!mSig) return;
+                const sig = mSig[1];
+                nome = nomeAgente.replace(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b.*$/, '').trim() + ' - ' + sig;
             }
             
             if (!distAgentes[nome]) distAgentes[nome] = { nome, total: 0 };
-            distAgentes[nome][nomeFila] = parseInt(r.qtd) || 0;
+            distAgentes[nome][cx] = parseInt(r.qtd) || 0;
             distAgentes[nome].total += parseInt(r.qtd) || 0;
         });
 
-        // 2. Query Resumo Casos Agente e SLA
+        // 2. Query Resumo Casos Agente - Matemática igualada ao Chatwoot
         const qCasos = `
-            WITH OpenConversations AS (
+            WITH Conv48 AS (
+                SELECT DISTINCT tg.taggable_id AS conv_id
+                FROM taggings tg
+                JOIN tags t2 ON t2.id = tg.tag_id
+                WHERE tg.taggable_type = 'Conversation' AND t2.name ILIKE '%time-48h%'
+            ),
+            OpenConversations AS (
                 SELECT 
-                    c.id, c.display_id, c.assignee_id, c.contact_id, c.first_reply_created_at, c.last_activity_at, c.team_id, c.inbox_id, c.created_at
+                    c.id, c.display_id, c.assignee_id, c.contact_id, c.first_reply_created_at, c.last_activity_at, c.team_id, c.inbox_id, c.created_at,
+                    CASE
+                        WHEN c.id IN (SELECT conv_id FROM Conv48) THEN '48H'
+                        WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
+                        WHEN t.name ILIKE '%reten%' THEN 'RET'
+                        WHEN t.name ILIKE '%sac%' THEN 'SAC'
+                        WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
+                        WHEN t.name ILIKE '%sms%' THEN 'SMS'
+                        ELSE 'OUTROS'
+                    END AS setor
                 FROM conversations c
+                LEFT JOIN teams t ON t.id = c.team_id
                 LEFT JOIN inboxes i ON i.id = c.inbox_id
                 WHERE c.status = 0 
                   AND c.account_id = 1
@@ -914,8 +932,7 @@ app.get('/api/distribuicao', async (req, res) => {
             )
             SELECT 
                 u.name AS agente,
-                t.name AS equipe_nome,
-                i.name AS inbox_nome,
+                oc.setor AS setor,
                 oc.id AS conv_id,
                 oc.display_id,
                 ct.name AS cliente,
@@ -924,8 +941,6 @@ app.get('/api/distribuicao', async (req, res) => {
                 oc.created_at
             FROM OpenConversations oc
             LEFT JOIN users u ON u.id = oc.assignee_id
-            LEFT JOIN teams t ON t.id = oc.team_id
-            LEFT JOIN inboxes i ON i.id = oc.inbox_id
             LEFT JOIN contacts ct ON ct.id = oc.contact_id
         `;
         const resultCasos = await pool.query(qCasos);
@@ -933,29 +948,19 @@ app.get('/api/distribuicao', async (req, res) => {
         const agora = new Date();
         
         resultCasos.rows.forEach(r => {
-            let nomeAgente = (r.agente || '').toUpperCase().trim();
-            let nomeFila = r.equipe_nome || r.inbox_nome || '';
-            let filaUpper = limparTexto(nomeFila);
-
-            let siglaSetor = 'OUTROS';
-            if (filaUpper.includes('RETEN') || filaUpper.includes('RET')) siglaSetor = 'RET';
-            else if (filaUpper.includes('SAC')) siglaSetor = 'SAC';
-            else if (filaUpper.includes('BACK') || filaUpper.includes('BKO')) siglaSetor = 'BKO';
-            else if (filaUpper.includes('SMS')) siglaSetor = 'SMS';
-            else if (filaUpper.includes('48')) siglaSetor = '48H';
+            let nomeAgente = (r.agente || '').toUpperCase();
+            let siglaSetor = r.setor || 'OUTROS';
 
             let nome;
             if (!nomeAgente) {
                 if (siglaSetor === 'OUTROS') return;
-                nome = 'SEM ATRIBUIR - ' + siglaSetor;
+                nome = `SEM ATRIBUIR - ${siglaSetor}`;
             } else {
-                // 🔥 AUTO-CORREÇÃO DE AGENTES NO SLA
-                if(nomeAgente.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) {
-                    nome = nomeAgente;
-                } else {
-                    if (siglaSetor === 'OUTROS') return;
-                    nome = nomeAgente + ' - ' + siglaSetor;
-                }
+                // Time do agente vem SÓ do nome no Chatwoot (nunca herda da fila)
+                const mSig = nomeAgente.match(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b/);
+                if (!mSig) return;
+                const sig = mSig[1];
+                nome = nomeAgente.replace(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b.*$/, '').trim() + ' - ' + sig;
             }
             
             if (!resCasosMap[nome]) resCasosMap[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
@@ -963,6 +968,7 @@ app.get('/api/distribuicao', async (req, res) => {
             const dataBaseParaSLA = r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at);
             const diffHoras = (agora - dataBaseParaSLA) / (1000 * 60 * 60);
             
+            // REMOVIDA A TRAVA isClientLast! Agora TUDO que está aberto é contado e exposto.
             let statusLabel, ordem;
             
             if (diffHoras > 48) {
@@ -995,6 +1001,46 @@ app.get('/api/distribuicao', async (req, res) => {
             caixas: Array.from(caixasSet).sort(),
             casos: Object.values(resCasosMap).sort((a,b) => b.total - a.total)
         });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ==========================================
+// DIAGNÓSTICO: setor dos casos SEM ATRIBUIR (temporário)
+// Abrir em: localhost:3003/api/diag-setores
+// ==========================================
+app.get('/api/diag-setores', async (req, res) => {
+    try {
+        const q = `
+            WITH Conv48 AS (
+                SELECT DISTINCT tg.taggable_id AS conv_id
+                FROM taggings tg JOIN tags t2 ON t2.id = tg.tag_id
+                WHERE tg.taggable_type = 'Conversation' AND t2.name ILIKE '%time-48h%'
+            )
+            SELECT
+                COALESCE(t.name, '(SEM TIME)') AS time_nome,
+                COALESCE(i.name, '(sem inbox)') AS inbox_nome,
+                CASE
+                    WHEN c.id IN (SELECT conv_id FROM Conv48) THEN '48H'
+                    WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
+                    WHEN t.name ILIKE '%reten%' THEN 'RET'
+                    WHEN t.name ILIKE '%sac%' THEN 'SAC'
+                    WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
+                    WHEN t.name ILIKE '%sms%' THEN 'SMS'
+                    ELSE 'OUTROS'
+                END AS setor,
+                COUNT(*)::int AS qtd
+            FROM conversations c
+            LEFT JOIN teams t ON t.id = c.team_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            WHERE c.status = 0 AND c.account_id = 1 AND c.assignee_id IS NULL
+              AND (i.name IS NULL OR i.name != 'Atendimento | Brasil')
+            GROUP BY t.name, i.name, setor
+            ORDER BY setor, qtd DESC
+        `;
+        const r = await pool.query(q);
+        const resumo = {};
+        r.rows.forEach(x => { resumo[x.setor] = (resumo[x.setor]||0) + x.qtd; });
+        res.json({ success: true, total_sem_atribuir: r.rows.reduce((a,x)=>a+x.qtd,0), resumo_por_setor: resumo, detalhe: r.rows });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
