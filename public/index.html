@@ -329,7 +329,10 @@
                 
                 <div class="w-px h-6 bg-gray-800 mx-1"></div>
                 
-                <button class="bg-gradient-to-r from-gexCyan to-gexBlue hover:opacity-90 text-white text-[11px] font-bold px-4 py-2 rounded-lg shadow-lg border border-gexCyan/30 transition-all flex items-center gap-2" onclick="carregarTudo()">
+                <button id="btn-atualizar-aba" class="btn-refresh bg-black/30 hover:bg-black/50 border border-gexCyan/40 text-gexCyan text-[11px] font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-2" onclick="atualizarAbaAtual()">
+                    🔄 Atualizar
+                </button>
+                <button class="btn-refresh bg-gradient-to-r from-gexCyan to-gexBlue hover:opacity-90 text-white text-[11px] font-bold px-4 py-2 rounded-lg shadow-lg border border-gexCyan/30 transition-all flex items-center gap-2" onclick="carregarTudo()">
                     Sincronizar
                 </button>
                 <button id="theme-toggle" class="p-2 rounded-lg bg-black/30 hover:bg-black/50 border border-white/5 transition-colors ml-2">
@@ -576,7 +579,7 @@
                                 <button onclick="exportarStatusCasos()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
-                        <button onclick="carregarDistribuicao()" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
+                        <button onclick="carregarDistribuicao()" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
                     </div>
                     <div class="flex-1 min-h-0 overflow-hidden p-6 space-y-6">
                         <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-full bg-white/50 dark:bg-black/20">
@@ -619,7 +622,7 @@
                                 <button onclick="exportarDistribuicao()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
-                        <button onclick="carregarDistribuicao()" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
+                        <button onclick="carregarDistribuicao()" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
                     </div>
                     <div class="flex-1 min-h-0 overflow-hidden p-6 space-y-6">
                         <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-full bg-white/50 dark:bg-black/20">
@@ -865,7 +868,7 @@
                     <button id="btn-sub-cw-reembolsos" onclick="mudarSubAbaCw('reembolsos')" class="btn-setor btn-setor-inativo">🔄 Reembolsos</button>
                     <button id="btn-sub-cw-time48" onclick="mudarSubAbaCw('time48')" class="btn-setor btn-setor-inativo">⏳ Time 48h</button>
                 </div>
-                <button onclick="carregarRecorrencia(); carregarProdutosMetricas(); carregarMencoesAbertos(); carregarPagAmerican('');" class="bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 ml-auto">🔄 Atualizar Tudo</button>
+                <button onclick="carregarRecorrencia(); carregarProdutosMetricas(); carregarMencoesAbertos(); carregarPagAmerican('');" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 ml-auto">🔄 Atualizar Tudo</button>
             </div>
 
             <!-- TELA 1: RECORRÊNCIA -->
@@ -991,6 +994,11 @@
                                     <!-- Botão BuyGoods (Inicia Inativo) -->
                                     <button id="btn-aba-buygoods" class="btn-setor btn-setor-inativo" onclick="mudarAbaPlataforma('buygoods')">
                                         BuyGoods
+                                    </button>
+
+                                    <!-- Botão CartPanda (Inicia Inativo) -->
+                                    <button id="btn-aba-cartpanda" class="btn-setor btn-setor-inativo" onclick="mudarAbaPlataforma('cartpanda')">
+                                        CartPanda
                                     </button>
                                 </div>
                             </div>
@@ -1248,6 +1256,7 @@
             // 🔒 Baixar Excel: só ADMIN (esconde todos os botões de exportar)
             if (!usuarioAtual || usuarioAtual.role !== 'admin') {
                 document.querySelectorAll('button[onclick^="exportar"]').forEach(b => b.style.display = 'none');
+                document.querySelectorAll('.btn-refresh').forEach(b => b.style.display = 'none');
             } else {
                 document.body.classList.add('is-admin'); // Admin: Ativa Sidebar
                 const firstLink = document.querySelector('.sidebar-link');
@@ -1522,7 +1531,41 @@
                 carregarMonitoriaTk('');
                 carregarPagAmerican(''); 
                 carregarTime48('');
+                carregarDistribuicao();
+                carregarProdutividade('');
+                carregarBuyGoods('');
+                carregarCartPanda('');
             }
+        }
+
+        // 🔄 Atualiza SOMENTE a aba/visão aberta agora (dados ao vivo). Admin-only.
+        function atualizarAbaAtual() {
+            if (!usuarioAtual || usuarioAtual.role !== 'admin') return;
+            const mapa = [
+                ['tela-tk-atual',        () => carregarTickets('')],
+                ['tela-tk-semanal',      () => carregarTicketsSemanal(window._perVisaoMensal || '', diasFiltroSemanal || 7)],
+                ['tela-tk-geral',        () => carregarTicketsGeral(window._perTkGeral || '')],
+                ['tela-tk-casos',        () => carregarDistribuicao()],
+                ['tela-tk-distribuicao', () => carregarDistribuicao()],
+                ['tela-tk-prod',         () => carregarProdutividade('')],
+                ['tela-qual-monitoria',  () => carregarQualidade('')],
+                ['tela-qual-sinalizacoes', () => carregarSinalizacoes('')],
+                ['tela-qual-monitoriatk',  () => carregarMonitoriaTk('')],
+                ['tela-cw-recorrencia',  () => carregarRecorrencia()],
+                ['tela-cw-tabulacao',    () => carregarProdutosMetricas()],
+                ['tela-cw-mencoes',      () => carregarMencoesAbertos()],
+                ['tela-cw-reembolsos',   () => { carregarPagAmerican(''); carregarBuyGoods(''); carregarCartPanda(''); }],
+                ['tela-cw-time48',       () => carregarTime48('')],
+            ];
+            let fez = false;
+            mapa.forEach(([id, fn]) => {
+                const el = document.getElementById(id);
+                if (el && el.offsetParent !== null) { try { fn(); fez = true; } catch(e){ console.error(e); } }
+            });
+            const btnRet = document.getElementById('tab-btn-retencao');
+            if (btnRet && btnRet.classList.contains('tab-btn-active')) { carregarDadosReais(''); fez = true; }
+            const b = document.getElementById('btn-atualizar-aba');
+            if (b) { const o = b.dataset.label || b.innerHTML; b.dataset.label = o; b.innerHTML = '✅ Atualizado'; setTimeout(() => b.innerHTML = o, 1500); }
         }
 
         let mesesSelecionadosRet = [], mesesDisponiveisRet = [], detalheRet = {}, multiMesRet = false, mesRecenteRet = '', modoComparativoRet = false, comparativoAtivoRet = false, mesAtualFullRet = '';
@@ -1892,7 +1935,7 @@
                 cnt.appendChild(btn); if(idx===0) btn.click();
             });
         }
-        async function carregarTicketsSemanal(p='', d=7) { try { diasFiltroSemanal=d; const res=await fetch('/api/tickets'+p); const dat=await res.json(); if(dat.success){ dadosTkSemanal=dat.agentes; renderTabelaTicketsSemanal(); } } catch(e){} }
+        async function carregarTicketsSemanal(p='', d=7) { window._perVisaoMensal = p; try { diasFiltroSemanal=d; const res=await fetch('/api/tickets'+p); const dat=await res.json(); if(dat.success){ dadosTkSemanal=dat.agentes; renderTabelaTicketsSemanal(); } } catch(e){} }
         function filtrarTkSemanal(s) { filtroTkSemanalSetor=s; ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-sem-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTicketsSemanal(); }
         function renderTabelaTicketsSemanal() {
             const tb=document.getElementById('tabela-tickets-semanal-body'); if(!tb) return;
@@ -1902,6 +1945,7 @@
         }
 
         async function carregarTicketsGeral(p='') { 
+            window._perTkGeral = p;
             try{ const res=await fetch('/api/tickets-geral'+p); const d=await res.json(); if(d.success){ dadosTkGeral=d.agentes; renderTabelaTkGeral(); } }catch(e){} 
         }
         function filtrarTkGeral(s) { filtroTkGeralSetor=s; ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTkGeral(); }
@@ -2204,34 +2248,170 @@
             baixarExcelGEX('Tickets_Atual', cols, linhas);
         }
 
-        function exportarVisaoMensal() {
-            let l = filtroTkSemanalSetor === 'TODOS' ? dadosTkSemanal : dadosTkSemanal.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
-            if (!l || l.length === 0) return alert('Sem dados para exportar.');
-            const cols = [{ header: 'Analista', key: 'nome', width: 32 },
-                { header: 'Seg', key: 'seg', width: 8 }, { header: 'Ter', key: 'ter', width: 8 },
-                { header: 'Qua', key: 'qua', width: 8 }, { header: 'Qui', key: 'qui', width: 8 },
-                { header: 'Sex', key: 'sex', width: 8 }, { header: 'Sáb', key: 'sab', width: 8 },
-                { header: 'Dom', key: 'dom', width: 8 }, { header: 'Total', key: 'total', width: 10 },
-                { header: 'Média/Dia', key: 'media', width: 12 }];
-            const linhas = l.map(a => ({ nome: a.nome, seg: a.seg||0, ter: a.ter||0, qua: a.qua||0, qui: a.qui||0, sex: a.sex||0, sab: a.sab||0, dom: a.dom||0, total: a.total||0, media: ((a.total||0)/(diasFiltroSemanal||7)).toFixed(1) }));
-            baixarExcelGEX('Visao_Mensal', cols, linhas);
+        // ===== Helpers de export moderno (dashboard) =====
+        function chunkSemanasMes(dias) {
+            const semanas = [];
+            (dias || []).forEach(ds => {
+                const dia = parseInt(ds.split('-')[2], 10);
+                const idx = Math.min(Math.floor((dia - 1) / 7), 4);
+                if (!semanas[idx]) semanas[idx] = { nome: `Semana ${idx + 1}`, datas: [] };
+                semanas[idx].datas.push(ds);
+            });
+            return semanas.filter(Boolean);
+        }
+        function rotuloData(ds) {
+            const p = ds.split('-');
+            const dt = new Date(ds + 'T12:00:00Z');
+            const wd = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dt.getUTCDay()];
+            return `${wd}\n${p[2]}/${p[1]}`;
+        }
+        function estiloTitulo(cell, bg, fc) {
+            cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+            cell.font = { name:'Calibri', bold:true, size:15, color:{argb:fc} };
+            cell.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+        }
+        function estiloHeaderCel(cell, bg, fc, size) {
+            cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+            cell.font = { name:'Calibri', bold:true, size:(size||11), color:{argb:fc} };
+            cell.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+        }
+        function aplicarBordas(ws, r1, c1, r2, c2) {
+            const b = { style:'thin', color:{argb:'FFD9E2EC'} };
+            for (let r=r1; r<=r2; r++) for (let c=c1; c<=c2; c++) {
+                ws.getCell(r,c).border = { top:b, left:b, bottom:b, right:b };
+            }
+        }
+        async function baixarWB(wb, nome) {
+            const buffer = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = nome; a.click();
+            window.URL.revokeObjectURL(url);
         }
 
-        function exportarTicketsGeral() {
-            let l = filtroTkGeralSetor === 'TODOS' ? dadosTkGeral : dadosTkGeral.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkGeralSetor}`));
-            if (!l || l.length === 0) return alert('Sem dados para exportar.');
-            const nSem = (l[0].semanas || []).length;
-            const cols = [{ header: 'Analista', key: 'nome', width: 32 }];
-            for (let i = 0; i < nSem; i++) cols.push({ header: `Semana ${i + 1}`, key: `s${i}`, width: 11 });
-            cols.push({ header: 'Total', key: 'total', width: 10 }, { header: 'Meta %', key: 'meta', width: 10 });
-            const linhas = l.map(a => {
-                const row = { nome: a.nome };
-                for (let i = 0; i < nSem; i++) row[`s${i}`] = (a.semanas && a.semanas[i]) || 0;
-                row.total = a.total || 0; row.meta = (a.meta || 0) + '%';
-                return row;
-            });
-            baixarExcelGEX('Tickets_Geral', cols, linhas);
+        // ===== VISÃO MENSAL (Fechamento): 1 aba de resumo + 1 aba por semana, com datas =====
+        async function exportarVisaoMensal() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            try {
+                const resp = await fetch('/api/tickets-diario'); // sem período = mês atual (baixa tudo)
+                const data = await resp.json();
+                if (!data.success) return alert('Erro: ' + (data.error || ''));
+                let agentes = data.agentes || [];
+                if (filtroTkSemanalSetor !== 'TODOS') agentes = agentes.filter(a => (a.nome||'').toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
+                if (agentes.length === 0) return alert('Sem dados para exportar.');
+                const semanas = chunkSemanasMes(data.dias);
+                const NAVY='FF0A2540', BRANCO='FFFFFFFF', BANDA='FFF4F7FB', GRAND='FFFFF2CC', TOTSEM='FFE8F0FE';
+                const tints=['FF1B52AF','FF0EA5E9','FF2563EB','FF0891B2','FF4F46E5'];
+                const periodo = `${data.dias[0].split('-').reverse().join('/')} a ${data.dias[data.dias.length-1].split('-').reverse().join('/')}`;
+                const wb = new ExcelJS.Workbook();
+
+                // ---- Aba Resumo Mensal ----
+                const wsR = wb.addWorksheet('Resumo Mensal', { views:[{state:'frozen', xSplit:1, ySplit:4}] });
+                const nColsR = 1 + semanas.length + 2;
+                wsR.getColumn(1).width = 30;
+                for (let i=0;i<semanas.length;i++) wsR.getColumn(2+i).width = 14;
+                wsR.getColumn(2+semanas.length).width = 13; wsR.getColumn(3+semanas.length).width = 12;
+                wsR.mergeCells(1,1,1,nColsR); const tR=wsR.getCell(1,1); tR.value='DASH GEX  ·  FECHAMENTO MENSAL — Resumo por Semana'; estiloTitulo(tR,NAVY,BRANCO); wsR.getRow(1).height=30;
+                wsR.mergeCells(2,1,2,nColsR); const sR=wsR.getCell(2,1); sR.value=`Período: ${periodo}   ·   Filtro: ${filtroTkSemanalSetor}   ·   Gerado em ${new Date().toLocaleDateString('pt-BR')}`; sR.font={italic:true,size:10,color:{argb:'FF64748B'}}; sR.alignment={indent:1}; wsR.getRow(2).height=18;
+                wsR.mergeCells(3,1,4,1); estiloHeaderCel(wsR.getCell(3,1), NAVY, BRANCO); wsR.getCell(3,1).value='Analista';
+                let cR=2;
+                semanas.forEach((s,si)=>{ wsR.mergeCells(3,cR,4,cR); const d1=s.datas[0].split('-'),d2=s.datas[s.datas.length-1].split('-'); const h=wsR.getCell(3,cR); h.value=`${s.nome}\n${d1[2]}/${d1[1]}–${d2[2]}/${d2[1]}`; estiloHeaderCel(h,tints[si%tints.length],BRANCO,10); cR++; });
+                wsR.mergeCells(3,cR,4,cR); const hT=wsR.getCell(3,cR); hT.value='TOTAL'; estiloHeaderCel(hT,'FFB45309',BRANCO); cR++;
+                wsR.mergeCells(3,cR,4,cR); const hM=wsR.getCell(3,cR); hM.value='Média/Dia'; estiloHeaderCel(hM,'FF334155',BRANCO);
+                let rr=5;
+                agentes.forEach((a,ai)=>{
+                    const band=ai%2===1; let cc=1;
+                    const cn=wsR.getCell(rr,cc); cn.value=a.nome; cn.font={bold:true,size:11,color:{argb:'FF1E293B'}}; cn.alignment={indent:1,vertical:'middle'}; if(band)cn.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++;
+                    let tot=0, nDias=0;
+                    semanas.forEach(s=>{ let ts=0; s.datas.forEach(ds=>{ const v=(a.porDia&&a.porDia[ds])||0; ts+=v; if(v>0)nDias++; }); tot+=ts; const c=wsR.getCell(rr,cc); c.value=ts; c.alignment={horizontal:'center'}; c.font={bold:true,size:10,color:{argb:'FF1B52AF'}}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:TOTSEM}}; cc++; });
+                    const cg=wsR.getCell(rr,cc); cg.value=tot; cg.alignment={horizontal:'center'}; cg.font={bold:true,size:12,color:{argb:'FF7C2D12'}}; cg.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRAND}}; cc++;
+                    const cm=wsR.getCell(rr,cc); cm.value=nDias?+(tot/nDias).toFixed(1):0; cm.alignment={horizontal:'center'}; cm.font={bold:true,size:11,color:{argb:'FF0891B2'}}; if(band)cm.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}};
+                    wsR.getRow(rr).height=20; rr++;
+                });
+                aplicarBordas(wsR,3,1,rr-1,nColsR);
+
+                // ---- 1 aba por semana ----
+                semanas.forEach((s,si)=>{
+                    const ws=wb.addWorksheet(s.nome,{views:[{state:'frozen',xSplit:1,ySplit:4}]});
+                    const nCols=1+s.datas.length+1;
+                    ws.getColumn(1).width=30; s.datas.forEach((_,i)=>ws.getColumn(2+i).width=10); ws.getColumn(2+s.datas.length).width=12;
+                    const d1=s.datas[0].split('-'),d2=s.datas[s.datas.length-1].split('-');
+                    ws.mergeCells(1,1,1,nCols); const t=ws.getCell(1,1); t.value=`DASH GEX  ·  ${s.nome.toUpperCase()}  (${d1[2]}/${d1[1]} – ${d2[2]}/${d2[1]})`; estiloTitulo(t,tints[si%tints.length],BRANCO); ws.getRow(1).height=28;
+                    ws.mergeCells(2,1,2,nCols); const sb=ws.getCell(2,1); sb.value=`Tickets por dia   ·   Filtro: ${filtroTkSemanalSetor}`; sb.font={italic:true,size:10,color:{argb:'FF64748B'}}; sb.alignment={indent:1};
+                    ws.mergeCells(3,1,4,1); estiloHeaderCel(ws.getCell(3,1),NAVY,BRANCO); ws.getCell(3,1).value='Analista';
+                    let c=2; s.datas.forEach(ds=>{ ws.mergeCells(3,c,4,c); const h=ws.getCell(3,c); h.value=rotuloData(ds); estiloHeaderCel(h,tints[si%tints.length],BRANCO,10); c++; });
+                    ws.mergeCells(3,c,4,c); const ht=ws.getCell(3,c); ht.value='Total'; estiloHeaderCel(ht,'FFB45309',BRANCO);
+                    let r=5;
+                    agentes.forEach((a,ai)=>{
+                        const band=ai%2===1; let cc=1;
+                        const cn=ws.getCell(r,cc); cn.value=a.nome; cn.font={bold:true,size:11,color:{argb:'FF1E293B'}}; cn.alignment={indent:1,vertical:'middle'}; if(band)cn.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++;
+                        let tot=0;
+                        s.datas.forEach(ds=>{ const v=(a.porDia&&a.porDia[ds])||0; tot+=v; const cel=ws.getCell(r,cc); cel.value=v||null; cel.alignment={horizontal:'center'}; cel.font={size:10,color:{argb:v?'FF334155':'FFCBD5E1'}}; if(band)cel.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++; });
+                        const cg=ws.getCell(r,cc); cg.value=tot; cg.alignment={horizontal:'center'}; cg.font={bold:true,size:11,color:{argb:'FF7C2D12'}}; cg.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRAND}};
+                        ws.getRow(r).height=20; r++;
+                    });
+                    aplicarBordas(ws,3,1,r-1,nCols);
+                });
+
+                await baixarWB(wb, `Visao_Mensal_Fechamento_${new Date().toISOString().split('T')[0]}.xlsx`);
+            } catch(e){ console.error(e); alert('Erro ao gerar o Excel.'); }
         }
+
+        // ===== TICKETS GERAL: dias com datas agrupados por semana (colunas lado a lado) =====
+        async function exportarTicketsGeral() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            try {
+                const resp = await fetch('/api/tickets-diario' + (window._perTkGeral || ''));
+                const data = await resp.json();
+                if (!data.success) return alert('Erro: ' + (data.error || ''));
+                let agentes = data.agentes || [];
+                if (filtroTkGeralSetor !== 'TODOS') agentes = agentes.filter(a => (a.nome||'').toUpperCase().includes(`- ${filtroTkGeralSetor}`));
+                if (agentes.length === 0) return alert('Sem dados para exportar.');
+                const semanas = chunkSemanasMes(data.dias);
+                const NAVY='FF0A2540', BRANCO='FFFFFFFF', BANDA='FFF4F7FB', TOTSEM='FFE8F0FE', GRAND='FFFFF2CC';
+                const tints=['FF1B52AF','FF0EA5E9','FF2563EB','FF0891B2','FF4F46E5'];
+                const wb=new ExcelJS.Workbook();
+                const ws=wb.addWorksheet('Tickets por Dia',{views:[{state:'frozen',xSplit:1,ySplit:4}]});
+
+                let totalCols=1; semanas.forEach(s=>{ totalCols += s.datas.length + 1; }); totalCols += 2;
+                ws.getColumn(1).width=30; let cw=2;
+                semanas.forEach(s=>{ s.datas.forEach(()=>{ ws.getColumn(cw).width=9; cw++; }); ws.getColumn(cw).width=11; cw++; });
+                ws.getColumn(cw).width=13; ws.getColumn(cw+1).width=11;
+
+                ws.mergeCells(1,1,1,totalCols); const t=ws.getCell(1,1); t.value='DASH GEX  ·  TICKETS POR DIA (Mensagens Enviadas)'; estiloTitulo(t,NAVY,BRANCO); ws.getRow(1).height=30;
+                ws.mergeCells(2,1,2,totalCols); const sub=ws.getCell(2,1); const periodo=`${data.dias[0].split('-').reverse().join('/')} a ${data.dias[data.dias.length-1].split('-').reverse().join('/')}`; sub.value=`Período: ${periodo}   ·   Filtro: ${filtroTkGeralSetor}   ·   Gerado em ${new Date().toLocaleDateString('pt-BR')}`; sub.font={italic:true,size:10,color:{argb:'FF64748B'}}; sub.alignment={indent:1}; ws.getRow(2).height=18;
+
+                ws.mergeCells(3,1,4,1); estiloHeaderCel(ws.getCell(3,1),NAVY,BRANCO); ws.getCell(3,1).value='Analista';
+                let col=2;
+                semanas.forEach((s,si)=>{
+                    const tint=tints[si%tints.length]; const span=s.datas.length+1;
+                    ws.mergeCells(3,col,3,col+span-1); const d1=s.datas[0].split('-'),d2=s.datas[s.datas.length-1].split('-'); const gh=ws.getCell(3,col); gh.value=`${s.nome}   (${d1[2]}/${d1[1]} – ${d2[2]}/${d2[1]})`; estiloHeaderCel(gh,tint,BRANCO);
+                    s.datas.forEach(ds=>{ const c=ws.getCell(4,col); c.value=rotuloData(ds); estiloHeaderCel(c,tint,BRANCO,9); col++; });
+                    const ct=ws.getCell(4,col); ct.value='Total'; estiloHeaderCel(ct,'FF334155',BRANCO,9); col++;
+                });
+                ws.mergeCells(3,col,4,col); const cg=ws.getCell(3,col); cg.value='TOTAL'; estiloHeaderCel(cg,'FFB45309',BRANCO); col++;
+                ws.mergeCells(3,col,4,col); const cm=ws.getCell(3,col); cm.value='Meta %'; estiloHeaderCel(cm,'FF334155',BRANCO);
+
+                let r=5;
+                agentes.forEach((a,ai)=>{
+                    const band=ai%2===1; let cc=1;
+                    const cn=ws.getCell(r,cc); cn.value=a.nome; cn.font={bold:true,size:11,color:{argb:'FF1E293B'}}; cn.alignment={indent:1,vertical:'middle'}; if(band)cn.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++;
+                    let totalGeral=0;
+                    semanas.forEach(s=>{
+                        let totSem=0;
+                        s.datas.forEach(ds=>{ const v=(a.porDia&&a.porDia[ds])||0; totSem+=v; const c=ws.getCell(r,cc); c.value=v||null; c.alignment={horizontal:'center'}; c.font={size:10,color:{argb:v?'FF334155':'FFCBD5E1'}}; if(band)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++; });
+                        totalGeral+=totSem; const ct=ws.getCell(r,cc); ct.value=totSem; ct.alignment={horizontal:'center'}; ct.font={bold:true,size:10,color:{argb:'FF1B52AF'}}; ct.fill={type:'pattern',pattern:'solid',fgColor:{argb:TOTSEM}}; cc++;
+                    });
+                    const cG=ws.getCell(r,cc); cG.value=totalGeral; cG.alignment={horizontal:'center'}; cG.font={bold:true,size:12,color:{argb:'FF7C2D12'}}; cG.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRAND}}; cc++;
+                    const meta=Math.min(Math.round((totalGeral/400)*100),100); const cMe=ws.getCell(r,cc); cMe.value=meta/100; cMe.numFmt='0%'; cMe.alignment={horizontal:'center'}; const corMeta=meta>=90?'FF16A34A':meta>=70?'FFCA8A04':'FFDC2626'; cMe.font={bold:true,size:11,color:{argb:corMeta}}; if(band)cMe.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}};
+                    ws.getRow(r).height=20; r++;
+                });
+                aplicarBordas(ws,3,1,r-1,totalCols);
+
+                await baixarWB(wb, `Tickets_Geral_Diario_${new Date().toISOString().split('T')[0]}.xlsx`);
+            } catch(e){ console.error(e); alert('Erro ao gerar o Excel.'); }
+        }
+
 
         async function exportarStatusCasos() {
         if (!dadosDistribuicao || !dadosDistribuicao.casos || dadosDistribuicao.casos.length === 0) {
@@ -2284,18 +2464,32 @@
                 });
 
                 // Insere os dados usando o fallback inteligente
-                lista.forEach(a => {
-                    let row = sheet.addRow({
-                        nome: a.nome,
-                        retornos: parseInt(a.retornos || a.ignorado || 0),
-                        aguardando: parseInt(a.aguardando || 0),
-                        fora_sla: parseInt(a.fora_sla || a.parado || 0),
-                        total: parseInt(a.total || 0)
-                    });
-                    
-                    // Centraliza os números e alinha o nome à esquerda
+                lista.forEach((a, ai) => {
+                    const ret = parseInt(a.retornos || a.ignorado || 0);
+                    const agu = parseInt(a.aguardando || 0);
+                    const fsla = parseInt(a.fora_sla || a.parado || 0);
+                    let row = sheet.addRow({ nome: a.nome, retornos: ret, aguardando: agu, fora_sla: fsla, total: parseInt(a.total || 0) });
                     row.alignment = { vertical: 'middle', horizontal: 'center' };
-                    row.getCell('nome').alignment = { vertical: 'middle', horizontal: 'left' };
+                    const cN = row.getCell('nome');
+                    cN.alignment = { vertical: 'middle', horizontal: 'left' };
+                    cN.font = { bold: true, color: { argb: 'FF1E293B' } };
+                    if (ai % 2 === 1) cN.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF4F7FB'} };
+                    // 🟢 Retornos
+                    const cR = row.getCell('retornos');
+                    cR.fill = { type:'pattern', pattern:'solid', fgColor:{argb: ret>0 ? 'FFDCFCE7' : 'FFF8FAFC'} };
+                    cR.font = { bold: ret>0, color:{argb: ret>0 ? 'FF15803D' : 'FFCBD5E1'} };
+                    // 🟡 Aguardando
+                    const cA = row.getCell('aguardando');
+                    cA.fill = { type:'pattern', pattern:'solid', fgColor:{argb: agu>0 ? 'FFFEF9C3' : 'FFF8FAFC'} };
+                    cA.font = { bold: agu>0, color:{argb: agu>0 ? 'FFA16207' : 'FFCBD5E1'} };
+                    // 🔴 Fora do SLA
+                    const cF = row.getCell('fora_sla');
+                    cF.fill = { type:'pattern', pattern:'solid', fgColor:{argb: fsla>0 ? 'FFFEE2E2' : 'FFF8FAFC'} };
+                    cF.font = { bold: fsla>0, color:{argb: fsla>0 ? 'FFB91C1C' : 'FFCBD5E1'} };
+                    // Total
+                    const cT = row.getCell('total');
+                    cT.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFF2CC'} };
+                    cT.font = { bold:true, color:{argb:'FF7C2D12'} };
                 });
             });
 
@@ -2989,7 +3183,7 @@
                                 <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
                                 <span class="text-[10px] bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded font-bold">${dataHora}</span>
                                 <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corTipo}">${tk.tipo}</span>
-                                ${htmlPedido}
+                                ${htmlPedido}${tk.produto && tk.produto !== 'Não informado' ? `<span class="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded font-bold shadow-sm">🏷️ ${tk.produto}</span>` : ''}
                             </div>
                         </div>
                         <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
@@ -3054,7 +3248,7 @@
                 sheetAuditoria.columns = [
                     { header: 'ANALISTA RESPONSÁVEL', key: 'agente', width: 35 },
                     { header: 'TICKET ID', key: 'ticket_id', width: 15 },
-                    { header: 'NÚMERO DO PEDIDO', key: 'pedido', width: 22 },
+                    { header: 'NÚMERO DO PEDIDO', key: 'pedido', width: 22 }, { header: 'PRODUTO', key: 'produto', width: 25 },
                     { header: 'DATA E HORA', key: 'data', width: 22 },
                     { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
                     { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
@@ -3075,7 +3269,7 @@
                             let row = sheetAuditoria.addRow({
                                 agente: d.agente_nome,
                                 ticket_id: tk.id,
-                                pedido: tk.pedido || '',
+                                pedido: tk.pedido || '', produto: tk.produto || 'Não informado',
                                 data: dataFormatada,
                                 tipo: tk.tipo,
                                 cliente: tk.nome || 'Sem Nome',
@@ -3163,36 +3357,32 @@
 
 let plataformaAtual = 'pagamerican';
 let dadosBuyGoods = [];
+let dadosCartPanda = [];
 
 // 1. Função que alterna entre as abas
 function mudarAbaPlataforma(plataforma) {
     plataformaAtual = plataforma;
-    
+
     const btnPag = document.getElementById('btn-aba-pagamerican');
     const btnBuy = document.getElementById('btn-aba-buygoods');
-    const btnExportar = document.getElementById('btn-exportar-pagamerican'); // O seu botão de exportar
+    const btnCart = document.getElementById('btn-aba-cartpanda');
+    const btnExportar = document.getElementById('btn-exportar-pagamerican');
+
+    const ATIVO = "btn-setor btn-setor-ativo";
+    const INATIVO = "btn-setor btn-setor-inativo cursor-pointer opacity-50 hover:opacity-100";
+    if(btnPag) btnPag.className = plataforma === 'pagamerican' ? ATIVO : INATIVO;
+    if(btnBuy) btnBuy.className = plataforma === 'buygoods' ? ATIVO : INATIVO;
+    if(btnCart) btnCart.className = plataforma === 'cartpanda' ? ATIVO : INATIVO;
 
     if (plataforma === 'pagamerican') {
-        // Estilo visual
-        if(btnPag) btnPag.className = "btn-setor btn-setor-ativo";
-        if(btnBuy) btnBuy.className = "btn-setor btn-setor-inativo cursor-pointer opacity-50 hover:opacity-100";
-        
-        // Altera a função do botão de exportar para a PagAmerican
-        if(btnExportar) btnExportar.onclick = exportarExcelPagAmerican; 
-        
-        // Carrega os dados
-        carregarPagAmerican(); 
-    } 
-    else if (plataforma === 'buygoods') {
-        // Estilo visual
-        if(btnBuy) btnBuy.className = "btn-setor btn-setor-ativo";
-        if(btnPag) btnPag.className = "btn-setor btn-setor-inativo cursor-pointer opacity-50 hover:opacity-100";
-        
-        // Altera a função do botão de exportar para a BuyGoods
+        if(btnExportar) btnExportar.onclick = exportarExcelPagAmerican;
+        carregarPagAmerican();
+    } else if (plataforma === 'buygoods') {
         if(btnExportar) btnExportar.onclick = exportarExcelBuyGoods;
-        
-        // Carrega os dados
-        carregarBuyGoods(); 
+        carregarBuyGoods();
+    } else if (plataforma === 'cartpanda') {
+        if(btnExportar) btnExportar.onclick = exportarExcelCartPanda;
+        carregarCartPanda();
     }
 }
 
@@ -3288,7 +3478,7 @@ function abrirModalBuyGoods(index) {
                         <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
                         <span class="text-[10px] bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded font-bold">${dataHora}</span>
                         <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corTipo}">${tk.tipo}</span>
-                        ${htmlPedido}
+                        ${htmlPedido}${tk.produto && tk.produto !== 'Não informado' ? `<span class="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded font-bold shadow-sm">🏷️ ${tk.produto}</span>` : ''}
                     </div>
                 </div>
                 <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
@@ -3354,7 +3544,7 @@ async function exportarExcelBuyGoods() {
         sheetAuditoria.columns = [
             { header: 'ANALISTA RESPONSÁVEL', key: 'agente', width: 35 },
             { header: 'TICKET ID', key: 'ticket_id', width: 15 },
-            { header: 'NÚMERO DO PEDIDO', key: 'pedido', width: 22 },
+            { header: 'NÚMERO DO PEDIDO', key: 'pedido', width: 22 }, { header: 'PRODUTO', key: 'produto', width: 25 },
             { header: 'DATA E HORA', key: 'data', width: 22 },
             { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
             { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
@@ -3375,7 +3565,7 @@ async function exportarExcelBuyGoods() {
                     let row = sheetAuditoria.addRow({
                         agente: d.agente_nome,
                         ticket_id: tk.id,
-                        pedido: tk.pedido || '',
+                        pedido: tk.pedido || '', produto: tk.produto || 'Não informado',
                         data: dataFormatada,
                         tipo: tk.tipo,
                         cliente: tk.nome || 'Sem Nome',
@@ -3401,6 +3591,222 @@ async function exportarExcelBuyGoods() {
         a.href = url;
         // Nome do arquivo salvo no computador altera para BuyGoods
         a.download = `BuyGoods_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}.xlsx`; 
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
+    } catch(e) { 
+        console.error(e); 
+        alert('Erro ao gerar o arquivo Excel.'); 
+    }
+    
+    btn.innerHTML = originalText;
+}
+
+// 2. Busca os dados da CartPanda no Node.js
+async function carregarCartPanda(parametrosUrl = '') {
+    if(usuarioAtual && usuarioAtual.role !== 'admin') return;
+    
+    // Reutilizamos a MESMA tabela da PagAmerican no HTML para não precisar recriar nada
+    const tb = document.getElementById('tabela-pagamerican-body'); 
+    try {
+        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados da CartPanda...</td></tr>`;
+        
+        const response = await fetch('/api/reembolsos-cartpanda' + parametrosUrl);
+        const data = await response.json();
+        
+        if (data.success) {
+            dadosCartPanda = data.dados || [];
+            renderTabelaCartPanda();
+        } else {
+            if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
+        }
+    } catch (error) { 
+        console.error(error); 
+        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
+    }
+}
+
+// 3. Desenha a tabela com os dados da CartPanda
+function renderTabelaCartPanda() {
+    const tb = document.getElementById('tabela-pagamerican-body');
+    if(!tb) return;
+
+    if (dadosCartPanda.length === 0) {
+        tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da CartPanda encontrado neste período.</td></tr>`;
+        return;
+    }
+
+    window.mapaCartPanda = {}; 
+
+    tb.innerHTML = dadosCartPanda.map((d, i) => {
+        window.mapaCartPanda[i] = d; 
+        
+        const f = v => v > 0 ? `<span class="font-bold text-gray-800 dark:text-white">${v}</span>` : `<span class="text-gray-400 opacity-50">-</span>`;
+        const f100 = v => v > 0 ? `<span class="font-bold text-red-500">${v}</span>` : `<span class="text-gray-400 opacity-50">-</span>`;
+
+        return `
+        <tr class="ranking-row row-normal linha-animada">
+            <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">👤 ${d.agente_nome}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_10_30)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_40_50)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_60_90)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f100(d.r_100)}</td>
+            <td class="py-4 px-2 text-center font-mono text-[14px]">${f(d.r_outros)}</td>
+            <td class="py-4 px-3 text-center font-mono text-[16px] text-gexCyan font-black">${d.total_reembolsos}</td>
+            <td class="py-4 px-3 text-center pr-4">
+                <button onclick="abrirModalCartPanda(${i})" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap border border-white/5">
+                    👁️ Ver Detalhes
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// 4. Abre o Modal com as Conversas da CartPanda (Reutiliza o seu modal HTML)
+function abrirModalCartPanda(index) {
+    const item = window.mapaCartPanda[index];
+    if (!item) return;
+
+    document.getElementById('modal-pagam-titulo').innerText = `Reembolsos CartPanda: ${item.agente_nome}`;
+    
+    let html = '<div class="space-y-3">';
+    if (item.detalhes && item.detalhes.length > 0) {
+        item.detalhes.forEach(tk => {
+            const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`; 
+            const dataHora = new Date(tk.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit' });
+            
+            let corTipo = 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+            if(tk.tipo.includes('10 a 30%')) corTipo = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
+            if(tk.tipo.includes('40 a 50%')) corTipo = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
+            if(tk.tipo.includes('60 a 90%')) corTipo = 'bg-orange-500/10 text-orange-500 border border-orange-500/30';
+            if(tk.tipo.includes('100%')) corTipo = 'bg-red-500/10 text-red-500 border border-red-500/30';
+            
+            let htmlPedido = (tk.pedido && tk.pedido.trim() !== '') 
+                ? `<span class="text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/30 px-2 py-0.5 rounded font-bold shadow-sm">📦 Pedido: ${tk.pedido}</span>` 
+                : '';
+
+            html += `
+            <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                <div>
+                    <p class="text-sm font-black text-gray-800 dark:text-white">${tk.nome}</p>
+                    <p class="text-xs font-bold text-gray-500 mt-1">📧 ${tk.email}</p>
+                    <div class="flex flex-wrap items-center gap-2 mt-2">
+                        <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
+                        <span class="text-[10px] bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded font-bold">${dataHora}</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded font-bold ${corTipo}">${tk.tipo}</span>
+                        ${htmlPedido}${tk.produto && tk.produto !== 'Não informado' ? `<span class="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded font-bold shadow-sm">🏷️ ${tk.produto}</span>` : ''}
+                    </div>
+                </div>
+                <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                    Abrir Conversa ↗️
+                </a>
+            </div>`;
+        });
+    } else {
+        html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum detalhe encontrado.</p>';
+    }
+    html += '</div>';
+
+    document.getElementById('modal-pagam-conteudo').innerHTML = html;
+    document.getElementById('modal-pagamerican').classList.remove('hidden');
+}
+
+// 5. Função de Exportar Excel da CartPanda
+async function exportarExcelCartPanda() {
+    if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+    if (!dadosCartPanda || dadosCartPanda.length === 0) return alert("Sem dados para exportar.");
+    
+    const btn = document.getElementById('btn-exportar-pagamerican');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Gerando...';
+    
+    try {
+        const workbook = new ExcelJS.Workbook();
+        
+        // 1ª Aba do Excel (Resumo)
+        const sheet = workbook.addWorksheet('Resumo_CartPanda', {views: [{state: 'frozen', ySplit: 1}]});
+        sheet.columns = [
+            { header: 'ANALISTA (TICKET)', key: 'agente', width: 35 },
+            { header: '10 A 30%', key: 'r10', width: 15 },
+            { header: '40 A 50%', key: 'r40', width: 15 },
+            { header: '60 A 90%', key: 'r60', width: 15 },
+            { header: 'PERDA (100%)', key: 'r100', width: 18 },
+            { header: 'OUTROS', key: 'routros', width: 15 },
+            { header: 'TOTAL DE REEMBOLSOS', key: 'total', width: 25 }
+        ];
+
+        sheet.getRow(1).eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+
+        dadosCartPanda.forEach(d => {
+            let row = sheet.addRow({
+                agente: d.agente_nome,
+                r10: parseInt(d.r_10_30) || 0,
+                r40: parseInt(d.r_40_50) || 0,
+                r60: parseInt(d.r_60_90) || 0,
+                r100: parseInt(d.r_100) || 0,
+                routros: parseInt(d.r_outros) || 0,
+                total: parseInt(d.total_reembolsos) || 0
+            });
+            row.alignment = { vertical: 'middle', horizontal: 'center' };
+            row.getCell('agente').alignment = { vertical: 'middle', horizontal: 'left' };
+        });
+
+        // 2ª Aba do Excel (Auditoria)
+        const sheetAuditoria = workbook.addWorksheet('Auditoria de Tickets', {views: [{state: 'frozen', ySplit: 1}]});
+        sheetAuditoria.columns = [
+            { header: 'ANALISTA RESPONSÁVEL', key: 'agente', width: 35 },
+            { header: 'TICKET ID', key: 'ticket_id', width: 15 },
+            { header: 'NÚMERO DO PEDIDO', key: 'pedido', width: 22 }, { header: 'PRODUTO', key: 'produto', width: 25 },
+            { header: 'DATA E HORA', key: 'data', width: 22 },
+            { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
+            { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
+            { header: 'E-MAIL', key: 'email', width: 35 },
+            { header: 'LINK DO CHATWOOT', key: 'link', width: 60 }
+        ];
+
+        sheetAuditoria.getRow(1).eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } }; 
+            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+
+        dadosCartPanda.forEach(d => {
+            if(d.detalhes && d.detalhes.length > 0) {
+                d.detalhes.forEach(tk => {
+                    const dataFormatada = new Date(tk.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+                    let row = sheetAuditoria.addRow({
+                        agente: d.agente_nome,
+                        ticket_id: tk.id,
+                        pedido: tk.pedido || '', produto: tk.produto || 'Não informado',
+                        data: dataFormatada,
+                        tipo: tk.tipo,
+                        cliente: tk.nome || 'Sem Nome',
+                        email: tk.email || 'Sem Info',
+                        link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                    });
+                    row.alignment = { vertical: 'middle', horizontal: 'center' };
+                    row.getCell('agente').alignment = { horizontal: 'left' };
+                    row.getCell('cliente').alignment = { horizontal: 'left' };
+                    row.getCell('link').alignment = { horizontal: 'left' };
+                    
+                    if(tk.tipo && tk.tipo.includes('100%')) {
+                        row.getCell('tipo').font = { color: { argb: 'FFCC0000' }, bold: true };
+                    }
+                });
+            }
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Nome do arquivo salvo no computador altera para CartPanda
+        a.download = `CartPanda_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}.xlsx`; 
         a.click();
         window.URL.revokeObjectURL(url);
         
@@ -3808,11 +4214,9 @@ async function exportarExcelBuyGoods() {
             calMonitoriaTk  = criarCalendario('calendario-monitoria-tk',  'btn-aplicar-montk', carregarMonitoriaTk,  true);
             // O calendário agora verifica qual aba está ativa antes de buscar os dados
             calPagAmerican = criarCalendario('calendario-pagamerican', 'btn-aplicar-pagam', (parametrosUrl) => {
-                if (plataformaAtual === 'pagamerican') {
-                    carregarPagAmerican(parametrosUrl);
-                } else {
-                    carregarBuyGoods(parametrosUrl);
-                }
+                if (plataformaAtual === 'pagamerican') carregarPagAmerican(parametrosUrl);
+                else if (plataformaAtual === 'buygoods') carregarBuyGoods(parametrosUrl);
+                else carregarCartPanda(parametrosUrl);
             }, true);
             calTime48       = criarCalendario('calendario-time48',        'btn-aplicar-time48', carregarTime48,      true);
 
