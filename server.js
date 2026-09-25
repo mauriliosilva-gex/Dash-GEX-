@@ -841,19 +841,24 @@ app.get('/api/tickets-geral', async (req, res) => {
 // ==========================================
 app.get('/api/distribuicao', async (req, res) => {
     try {
-        // 1. Query de Distribuição de Tickets por Inbox
+        // Limpa acentos e deixa maiúsculo (ex: "time de retenção" vira "TIME DE RETENCAO")
+        const limparTexto = (txt) => (txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+
+        // 1. Query de Distribuição (Lendo a tabela de Teams e Inboxes)
         const qDist = `
             SELECT 
                 u.name AS agente,
+                t.name AS equipe_nome,
                 i.name AS caixa,
                 COUNT(c.id) AS qtd
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
             LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN teams t ON t.id = c.team_id
             WHERE c.status = 0 
               AND c.account_id = 1
               AND (i.name IS NULL OR i.name != 'Atendimento | Brasil')
-            GROUP BY u.name, i.name
+            GROUP BY u.name, t.name, i.name
         `;
         const resultDist = await pool.query(qDist);
         
@@ -861,35 +866,42 @@ app.get('/api/distribuicao', async (req, res) => {
         const caixasSet = new Set();
         
         resultDist.rows.forEach(r => {
-            let nomeAgente = (r.agente || '').toUpperCase();
-            let cx = r.caixa || '(Sem Time)';
-            let cxUpper = cx.toUpperCase();
+            let nomeAgente = (r.agente || '').toUpperCase().trim();
+            // Prioriza o nome da equipe. Se não tiver, usa a caixa de entrada.
+            let nomeFila = r.equipe_nome || r.caixa || '(Sem Time)';
+            let filaUpper = limparTexto(nomeFila);
             
-            caixasSet.add(cx);
+            caixasSet.add(nomeFila);
             
-            // Descobre a sigla do time baseada na caixa/inbox
+            // Descobre qual é o setor baseado no nome da fila
             let siglaSetor = 'OUTROS';
-            if (cxUpper.includes('RETEN') || cxUpper.includes('RET')) siglaSetor = 'RET';
-            else if (cxUpper.includes('SAC')) siglaSetor = 'SAC';
-            else if (cxUpper.includes('BACK') || cxUpper.includes('BKO')) siglaSetor = 'BKO';
-            else if (cxUpper.includes('SMS')) siglaSetor = 'SMS';
-            else if (cxUpper.includes('48')) siglaSetor = '48H';
+            if (filaUpper.includes('RETEN') || filaUpper.includes('RET')) siglaSetor = 'RET';
+            else if (filaUpper.includes('SAC')) siglaSetor = 'SAC';
+            else if (filaUpper.includes('BACK') || filaUpper.includes('BKO')) siglaSetor = 'BKO';
+            else if (filaUpper.includes('SMS')) siglaSetor = 'SMS';
+            else if (filaUpper.includes('48')) siglaSetor = '48H';
 
             let nome;
             if (!nomeAgente) {
+                // Se não tem agente, vai pro balde "SEM ATRIBUIR"
                 if (siglaSetor === 'OUTROS') return; 
-                nome = `SEM ATRIBUIR - ${siglaSetor}`;
+                nome = 'SEM ATRIBUIR - ' + siglaSetor;
             } else {
-                nome = nomeAgente;
-                if(!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
+                // 🔥 AUTO-CORREÇÃO DE AGENTES: Se o agente não tiver a sigla no nome, a gente herda da fila automaticamente!
+                if(nomeAgente.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) {
+                    nome = nomeAgente;
+                } else {
+                    if (siglaSetor === 'OUTROS') return;
+                    nome = nomeAgente + ' - ' + siglaSetor;
+                }
             }
             
             if (!distAgentes[nome]) distAgentes[nome] = { nome, total: 0 };
-            distAgentes[nome][cx] = parseInt(r.qtd) || 0;
+            distAgentes[nome][nomeFila] = parseInt(r.qtd) || 0;
             distAgentes[nome].total += parseInt(r.qtd) || 0;
         });
 
-        // 2. Query Resumo Casos Agente - Matemática igualada ao Chatwoot
+        // 2. Query Resumo Casos Agente e SLA
         const qCasos = `
             WITH OpenConversations AS (
                 SELECT 
@@ -921,23 +933,29 @@ app.get('/api/distribuicao', async (req, res) => {
         const agora = new Date();
         
         resultCasos.rows.forEach(r => {
-            let nomeAgente = (r.agente || '').toUpperCase();
-            let equipeNome = ((r.equipe_nome || '') + ' ' + (r.inbox_nome || '')).toUpperCase();
+            let nomeAgente = (r.agente || '').toUpperCase().trim();
+            let nomeFila = r.equipe_nome || r.inbox_nome || '';
+            let filaUpper = limparTexto(nomeFila);
 
             let siglaSetor = 'OUTROS';
-            if (equipeNome.includes('RETEN') || equipeNome.includes('RET')) siglaSetor = 'RET';
-            else if (equipeNome.includes('SAC')) siglaSetor = 'SAC';
-            else if (equipeNome.includes('BACK') || equipeNome.includes('BKO')) siglaSetor = 'BKO';
-            else if (equipeNome.includes('SMS')) siglaSetor = 'SMS';
-            else if (equipeNome.includes('48')) siglaSetor = '48H';
+            if (filaUpper.includes('RETEN') || filaUpper.includes('RET')) siglaSetor = 'RET';
+            else if (filaUpper.includes('SAC')) siglaSetor = 'SAC';
+            else if (filaUpper.includes('BACK') || filaUpper.includes('BKO')) siglaSetor = 'BKO';
+            else if (filaUpper.includes('SMS')) siglaSetor = 'SMS';
+            else if (filaUpper.includes('48')) siglaSetor = '48H';
 
             let nome;
             if (!nomeAgente) {
                 if (siglaSetor === 'OUTROS') return;
-                nome = `SEM ATRIBUIR - ${siglaSetor}`;
+                nome = 'SEM ATRIBUIR - ' + siglaSetor;
             } else {
-                nome = nomeAgente;
-                if(!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
+                // 🔥 AUTO-CORREÇÃO DE AGENTES NO SLA
+                if(nomeAgente.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) {
+                    nome = nomeAgente;
+                } else {
+                    if (siglaSetor === 'OUTROS') return;
+                    nome = nomeAgente + ' - ' + siglaSetor;
+                }
             }
             
             if (!resCasosMap[nome]) resCasosMap[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
@@ -945,7 +963,6 @@ app.get('/api/distribuicao', async (req, res) => {
             const dataBaseParaSLA = r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at);
             const diffHoras = (agora - dataBaseParaSLA) / (1000 * 60 * 60);
             
-            // REMOVIDA A TRAVA isClientLast! Agora TUDO que está aberto é contado e exposto.
             let statusLabel, ordem;
             
             if (diffHoras > 48) {
