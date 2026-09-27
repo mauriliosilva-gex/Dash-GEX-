@@ -3274,7 +3274,8 @@
                     { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
                     { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
                     { header: 'E-MAIL', key: 'email', width: 35 },
-                    { header: 'LINK DO CHATWOOT', key: 'link', width: 60 }
+                    { header: 'LINK DO CHATWOOT', key: 'link', width: 60 },
+                    { header: 'FONTE (LOG/CONVERSA)', key: 'fonte', width: 22 }
                 ];
 
                 sheetAuditoria.getRow(1).eachCell(cell => {
@@ -3295,7 +3296,8 @@
                                 tipo: tk.tipo,
                                 cliente: tk.nome || 'Sem Nome',
                                 email: tk.email || 'Sem Info',
-                                link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                                link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`,
+                                fonte: tk.fonte || 'Conversa'
                             });
                             row.alignment = { vertical: 'middle', horizontal: 'center' };
                             row.getCell('agente').alignment = { horizontal: 'left' };
@@ -3570,7 +3572,8 @@ async function exportarExcelBuyGoods() {
             { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
             { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
             { header: 'E-MAIL', key: 'email', width: 35 },
-            { header: 'LINK DO CHATWOOT', key: 'link', width: 60 }
+            { header: 'LINK DO CHATWOOT', key: 'link', width: 60 },
+                    { header: 'FONTE (LOG/CONVERSA)', key: 'fonte', width: 22 }
         ];
 
         sheetAuditoria.getRow(1).eachCell(cell => {
@@ -3591,7 +3594,8 @@ async function exportarExcelBuyGoods() {
                         tipo: tk.tipo,
                         cliente: tk.nome || 'Sem Nome',
                         email: tk.email || 'Sem Info',
-                        link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                        link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`,
+                        fonte: tk.fonte || 'Conversa'
                     });
                     row.alignment = { vertical: 'middle', horizontal: 'center' };
                     row.getCell('agente').alignment = { horizontal: 'left' };
@@ -3786,7 +3790,8 @@ async function exportarExcelCartPanda() {
             { header: 'TIPO DE RETENÇÃO', key: 'tipo', width: 30 },
             { header: 'NOME DO CLIENTE', key: 'cliente', width: 35 },
             { header: 'E-MAIL', key: 'email', width: 35 },
-            { header: 'LINK DO CHATWOOT', key: 'link', width: 60 }
+            { header: 'LINK DO CHATWOOT', key: 'link', width: 60 },
+                    { header: 'FONTE (LOG/CONVERSA)', key: 'fonte', width: 22 }
         ];
 
         sheetAuditoria.getRow(1).eachCell(cell => {
@@ -3807,7 +3812,8 @@ async function exportarExcelCartPanda() {
                         tipo: tk.tipo,
                         cliente: tk.nome || 'Sem Nome',
                         email: tk.email || 'Sem Info',
-                        link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                        link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`,
+                        fonte: tk.fonte || 'Conversa'
                     });
                     row.alignment = { vertical: 'middle', horizontal: 'center' };
                     row.getCell('agente').alignment = { horizontal: 'left' };
