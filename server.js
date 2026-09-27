@@ -1626,7 +1626,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
 // ==========================================
 app.get('/api/reembolsos-pagamerican', async (req, res) => {
     // 🔥 COLE SEU LINK DO GOOGLE AQUI DENTRO DAS ASPAS:
-    const URL_PLANILHA = "https://script.google.com/macros/s/SEU_LINK_REAL_AQUI/exechttps://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
+    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
 
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
     const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
@@ -1637,24 +1637,17 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
     
     try {
         // 1. LER O COFRE DO GOOGLE SHEETS
-        let mapaDatas = {};
+        // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
+        let logMap = {};
         try {
-            const respPlanilha = await fetch(URL_PLANILHA);
-            const dadosPlanilha = await respPlanilha.json();
-            
-            // A planilha retorna linhas (Arrays). Coluna 0 é Ticket, Coluna 1 é a Data blindada.
-            if (Array.isArray(dadosPlanilha)) {
-                dadosPlanilha.forEach(linha => {
-                    const convId = parseInt(linha[0]);
-                    const dataAcordo = new Date(linha[1]);
-                    if(convId && !isNaN(dataAcordo)) {
-                        mapaDatas[convId] = dataAcordo; // Guarda no "cérebro" do servidor
-                    }
-                });
-            }
-        } catch (errPlanilha) {
-            console.log("Aviso: Falha ao ler a planilha, usando datas de fallback do banco.", errPlanilha.message);
-        }
+            const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
+            if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                const tk = String(l.ticket || l[0] || '').trim();
+                if (!tk || logMap[tk]) return;
+                const dl = new Date(l.data_hora || l[1]);
+                logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+            });
+        } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
 
         // 2. FILTRO DE DATAS DO PAINEL
         let dInicio, dFim;
@@ -1705,38 +1698,30 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         const resumoAgentes = {};
         
         result.rows.forEach(tk => {
-            // AQUI ESTÁ A MÁGICA: Se o ticket existir na Planilha, puxa a data congelada. Se não, usa a última do banco (fallback).
-            const dataReal = mapaDatas[tk.conv_id] || new Date(tk.data_fallback);
-            
-            // Verifica se a data real cai dentro do mês/período escolhido no Dash
+            const L = logMap[String(tk.display_id)];
+            const noLog = !!(L && L.data);
+            const fonte = noLog ? 'Log' : 'Conversa';
+            const dataReal    = noLog ? L.data      : new Date(tk.data_fallback);
+            const tipoReal    = (noLog && L.tipo)    ? L.tipo    : tk.tipo_retencao;
+            const pedidoReal  = (noLog && L.pedido)  ? L.pedido  : tk.pedido_limpo;
+            const produtoReal = (noLog && L.produto) ? L.produto : (tk.produto_nome || 'Não informado');
+            const clienteReal = (noLog && L.cliente) ? L.cliente : (tk.contato_nome || 'Sem Nome');
+            const emailReal   = (noLog && L.email)   ? L.email   : (tk.contato_email || 'Sem Email');
+
             if (dataReal >= dInicio && dataReal <= dFim) {
                 const agente = tk.agente_nome;
-                if (!resumoAgentes[agente]) {
-                    resumoAgentes[agente] = {
-                        agente_nome: agente,
-                        total_reembolsos: 0,
-                        r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0,
-                        detalhes: []
-                    };
-                }
-                
+                if (!resumoAgentes[agente]) resumoAgentes[agente] = { agente_nome: agente, total_reembolsos: 0, r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0, detalhes: [] };
                 resumoAgentes[agente].total_reembolsos++;
-                
-                const tipo = tk.tipo_retencao.toLowerCase();
+                const tipo = String(tipoReal).toLowerCase();
                 if (tipo.includes('10 a 30%')) resumoAgentes[agente].r_10_30++;
                 else if (tipo.includes('40 a 50%')) resumoAgentes[agente].r_40_50++;
                 else if (tipo.includes('60 a 90%')) resumoAgentes[agente].r_60_90++;
                 else if (tipo.includes('100%')) resumoAgentes[agente].r_100++;
                 else resumoAgentes[agente].r_outros++;
-                
                 resumoAgentes[agente].detalhes.push({
-                    id: tk.display_id,
-                    nome: tk.contato_nome || 'Sem Nome',
-                    email: tk.contato_email || 'Sem Email',
-                    data: dataReal, // Data 100% precisa
-                    tipo: tk.tipo_retencao,
-                    pedido: tk.pedido_limpo,
-                    produto: tk.produto_nome || 'Não informado'
+                    id: tk.display_id, nome: clienteReal, email: emailReal,
+                    data: dataReal, tipo: tipoReal, pedido: pedidoReal, produto: produtoReal,
+                    fonte: fonte
                 });
             }
         });
@@ -1859,23 +1844,17 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
     
     try {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
-        let mapaDatas = {};
+        // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
+        let logMap = {};
         try {
-            const respPlanilha = await fetch(URL_PLANILHA);
-            const dadosPlanilha = await respPlanilha.json();
-            
-            if (Array.isArray(dadosPlanilha)) {
-                dadosPlanilha.forEach(linha => {
-                    const convId = parseInt(linha[0]);
-                    const dataAcordo = new Date(linha[1]);
-                    if(convId && !isNaN(dataAcordo)) {
-                        mapaDatas[convId] = dataAcordo;
-                    }
-                });
-            }
-        } catch (errPlanilha) {
-            console.log("Aviso: Falha ao ler a planilha para BuyGoods.", errPlanilha.message);
-        }
+            const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
+            if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                const tk = String(l.ticket || l[0] || '').trim();
+                if (!tk || logMap[tk]) return;
+                const dl = new Date(l.data_hora || l[1]);
+                logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+            });
+        } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -1926,36 +1905,30 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         const resumoAgentes = {};
         
         result.rows.forEach(tk => {
-            const dataReal = mapaDatas[tk.conv_id] || new Date(tk.data_fallback);
-            
+            const L = logMap[String(tk.display_id)];
+            const noLog = !!(L && L.data);
+            const fonte = noLog ? 'Log' : 'Conversa';
+            const dataReal    = noLog ? L.data      : new Date(tk.data_fallback);
+            const tipoReal    = (noLog && L.tipo)    ? L.tipo    : tk.tipo_retencao;
+            const pedidoReal  = (noLog && L.pedido)  ? L.pedido  : tk.pedido_limpo;
+            const produtoReal = (noLog && L.produto) ? L.produto : (tk.produto_nome || 'Não informado');
+            const clienteReal = (noLog && L.cliente) ? L.cliente : (tk.contato_nome || 'Sem Nome');
+            const emailReal   = (noLog && L.email)   ? L.email   : (tk.contato_email || 'Sem Email');
+
             if (dataReal >= dInicio && dataReal <= dFim) {
                 const agente = tk.agente_nome;
-                if (!resumoAgentes[agente]) {
-                    resumoAgentes[agente] = {
-                        agente_nome: agente,
-                        total_reembolsos: 0,
-                        r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0,
-                        detalhes: []
-                    };
-                }
-                
+                if (!resumoAgentes[agente]) resumoAgentes[agente] = { agente_nome: agente, total_reembolsos: 0, r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0, detalhes: [] };
                 resumoAgentes[agente].total_reembolsos++;
-                
-                const tipo = tk.tipo_retencao.toLowerCase();
+                const tipo = String(tipoReal).toLowerCase();
                 if (tipo.includes('10 a 30%')) resumoAgentes[agente].r_10_30++;
                 else if (tipo.includes('40 a 50%')) resumoAgentes[agente].r_40_50++;
                 else if (tipo.includes('60 a 90%')) resumoAgentes[agente].r_60_90++;
                 else if (tipo.includes('100%')) resumoAgentes[agente].r_100++;
                 else resumoAgentes[agente].r_outros++;
-                
                 resumoAgentes[agente].detalhes.push({
-                    id: tk.display_id,
-                    nome: tk.contato_nome || 'Sem Nome',
-                    email: tk.contato_email || 'Sem Email',
-                    data: dataReal,
-                    tipo: tk.tipo_retencao,
-                    pedido: tk.pedido_limpo,
-                    produto: tk.produto_nome || 'Não informado'
+                    id: tk.display_id, nome: clienteReal, email: emailReal,
+                    data: dataReal, tipo: tipoReal, pedido: pedidoReal, produto: produtoReal,
+                    fonte: fonte
                 });
             }
         });
@@ -1986,23 +1959,17 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
     
     try {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
-        let mapaDatas = {};
+        // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
+        let logMap = {};
         try {
-            const respPlanilha = await fetch(URL_PLANILHA);
-            const dadosPlanilha = await respPlanilha.json();
-            
-            if (Array.isArray(dadosPlanilha)) {
-                dadosPlanilha.forEach(linha => {
-                    const convId = parseInt(linha[0]);
-                    const dataAcordo = new Date(linha[1]);
-                    if(convId && !isNaN(dataAcordo)) {
-                        mapaDatas[convId] = dataAcordo;
-                    }
-                });
-            }
-        } catch (errPlanilha) {
-            console.log("Aviso: Falha ao ler a planilha para CartPanda.", errPlanilha.message);
-        }
+            const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
+            if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                const tk = String(l.ticket || l[0] || '').trim();
+                if (!tk || logMap[tk]) return;
+                const dl = new Date(l.data_hora || l[1]);
+                logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+            });
+        } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -2053,36 +2020,30 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         const resumoAgentes = {};
         
         result.rows.forEach(tk => {
-            const dataReal = mapaDatas[tk.conv_id] || new Date(tk.data_fallback);
-            
+            const L = logMap[String(tk.display_id)];
+            const noLog = !!(L && L.data);
+            const fonte = noLog ? 'Log' : 'Conversa';
+            const dataReal    = noLog ? L.data      : new Date(tk.data_fallback);
+            const tipoReal    = (noLog && L.tipo)    ? L.tipo    : tk.tipo_retencao;
+            const pedidoReal  = (noLog && L.pedido)  ? L.pedido  : tk.pedido_limpo;
+            const produtoReal = (noLog && L.produto) ? L.produto : (tk.produto_nome || 'Não informado');
+            const clienteReal = (noLog && L.cliente) ? L.cliente : (tk.contato_nome || 'Sem Nome');
+            const emailReal   = (noLog && L.email)   ? L.email   : (tk.contato_email || 'Sem Email');
+
             if (dataReal >= dInicio && dataReal <= dFim) {
                 const agente = tk.agente_nome;
-                if (!resumoAgentes[agente]) {
-                    resumoAgentes[agente] = {
-                        agente_nome: agente,
-                        total_reembolsos: 0,
-                        r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0,
-                        detalhes: []
-                    };
-                }
-                
+                if (!resumoAgentes[agente]) resumoAgentes[agente] = { agente_nome: agente, total_reembolsos: 0, r_10_30: 0, r_40_50: 0, r_60_90: 0, r_100: 0, r_outros: 0, detalhes: [] };
                 resumoAgentes[agente].total_reembolsos++;
-                
-                const tipo = tk.tipo_retencao.toLowerCase();
+                const tipo = String(tipoReal).toLowerCase();
                 if (tipo.includes('10 a 30%')) resumoAgentes[agente].r_10_30++;
                 else if (tipo.includes('40 a 50%')) resumoAgentes[agente].r_40_50++;
                 else if (tipo.includes('60 a 90%')) resumoAgentes[agente].r_60_90++;
                 else if (tipo.includes('100%')) resumoAgentes[agente].r_100++;
                 else resumoAgentes[agente].r_outros++;
-                
                 resumoAgentes[agente].detalhes.push({
-                    id: tk.display_id,
-                    nome: tk.contato_nome || 'Sem Nome',
-                    email: tk.contato_email || 'Sem Email',
-                    data: dataReal,
-                    tipo: tk.tipo_retencao,
-                    pedido: tk.pedido_limpo,
-                    produto: tk.produto_nome || 'Não informado'
+                    id: tk.display_id, nome: clienteReal, email: emailReal,
+                    data: dataReal, tipo: tipoReal, pedido: pedidoReal, produto: produtoReal,
+                    fonte: fonte
                 });
             }
         });
