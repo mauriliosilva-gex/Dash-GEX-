@@ -1643,7 +1643,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
             const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
             if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
                 const tk = String(l.ticket || l[0] || '').trim();
-                if (!tk || logMap[tk]) return;
+                if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
                 const dl = new Date(l.data_hora || l[1]);
                 logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
             });
@@ -1850,7 +1850,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
             const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
             if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
                 const tk = String(l.ticket || l[0] || '').trim();
-                if (!tk || logMap[tk]) return;
+                if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
                 const dl = new Date(l.data_hora || l[1]);
                 logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
             });
@@ -1965,7 +1965,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
             const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
             if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
                 const tk = String(l.ticket || l[0] || '').trim();
-                if (!tk || logMap[tk]) return;
+                if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
                 const dl = new Date(l.data_hora || l[1]);
                 logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
             });
