@@ -891,7 +891,9 @@ app.get('/api/distribuicao', async (req, res) => {
                 if (siglaSetor === 'OUTROS') return; 
                 nome = `SEM ATRIBUIR - ${siglaSetor}`;
             } else {
-                // Time do agente vem SÓ do nome no Chatwoot (nunca herda da fila)
+                // Time SÓ pelo nome do agente no Chatwoot. Entram apenas RET/SAC/BKO/SMS/48H;
+                // LD, PRD, BR e quem não tem sigla são ignorados.
+                // Pega "- RET", "RET" (sem traço) e "- RET" colado no nome.
                 const mSig = nomeAgente.match(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b/);
                 if (!mSig) return;
                 const sig = mSig[1];
@@ -956,7 +958,9 @@ app.get('/api/distribuicao', async (req, res) => {
                 if (siglaSetor === 'OUTROS') return;
                 nome = `SEM ATRIBUIR - ${siglaSetor}`;
             } else {
-                // Time do agente vem SÓ do nome no Chatwoot (nunca herda da fila)
+                // Time SÓ pelo nome do agente no Chatwoot. Entram apenas RET/SAC/BKO/SMS/48H;
+                // LD, PRD, BR e quem não tem sigla são ignorados.
+                // Pega "- RET", "RET" (sem traço) e "- RET" colado no nome.
                 const mSig = nomeAgente.match(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b/);
                 if (!mSig) return;
                 const sig = mSig[1];
