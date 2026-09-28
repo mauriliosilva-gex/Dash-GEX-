@@ -1626,7 +1626,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
 // ==========================================
 app.get('/api/reembolsos-pagamerican', async (req, res) => {
     // 🔥 COLE SEU LINK DO GOOGLE AQUI DENTRO DAS ASPAS:
-    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
+    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbxLqWTExvo0824oEpWUJYbDIzVdK4q9S3eeElIo0n8eliTCYueQjOJIB0AOCPuDnl1LSw/exec";
 
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
     const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
@@ -1835,7 +1835,7 @@ app.get('/api/time48', async (req, res) => {
 // ==========================================
 app.get('/api/reembolsos-buygoods', async (req, res) => {
     // 🔥 COLE O MESMO LINK DO GOOGLE AQUI:
-    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
+    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbxLqWTExvo0824oEpWUJYbDIzVdK4q9S3eeElIo0n8eliTCYueQjOJIB0AOCPuDnl1LSw/exec";
 
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
     const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
@@ -1952,7 +1952,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
 
 app.get('/api/reembolsos-cartpanda', async (req, res) => {
     // 🔥 COLE O MESMO LINK DO GOOGLE AQUI:
-    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbyc1_B9YzAWVyZtpqyn7y3BwqR-52XXdv__ImQ44Ee-qE-xagoOdTEFdak0rBm6tsHSUQ/exec";
+    const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbxLqWTExvo0824oEpWUJYbDIzVdK4q9S3eeElIo0n8eliTCYueQjOJIB0AOCPuDnl1LSw/exec";
 
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
     const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
