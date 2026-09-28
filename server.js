@@ -1640,7 +1640,9 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         let logMap = {};
         try {
-            const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
+            const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+            const _t = (await _r.text()).trim();
+            const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
             if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
                 const tk = String(l.ticket || l[0] || '').trim();
                 if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
@@ -1847,7 +1849,9 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         let logMap = {};
         try {
-            const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
+            const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+            const _t = (await _r.text()).trim();
+            const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
             if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
                 const tk = String(l.ticket || l[0] || '').trim();
                 if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
@@ -1962,7 +1966,9 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         let logMap = {};
         try {
-            const dadosPlanilha = await (await fetch(URL_PLANILHA)).json();
+            const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+            const _t = (await _r.text()).trim();
+            const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
             if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
                 const tk = String(l.ticket || l[0] || '').trim();
                 if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
