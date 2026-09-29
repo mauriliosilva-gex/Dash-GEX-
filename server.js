@@ -2417,4 +2417,296 @@ app.get('/api/tickets-diario', async (req, res) => {
 });
 
 
+// ==========================================
+// 20. ADIAR CASOS (SNOOZE) — ADMIN
+// Lê os casos EM ABERTO cuja ÚLTIMA mensagem pública foi do AGENTE (cliente
+// ainda não respondeu) e adia via API REST do Chatwoot. Suporta filtro por
+// time, por agente (lista) e por faixa de SLA, e adiamento por 1h / 1 dia /
+// até a próxima resposta / personalizado. NÃO toca no banco do Chatwoot.
+// ==========================================
+const CHATWOOT_URL = (process.env.CHATWOOT_URL || 'https://chat.institutoexperience.com').replace(/\/+$/, '');
+const CHATWOOT_ACCOUNT_ID = process.env.CHATWOOT_ACCOUNT_ID || '1';
+const CHATWOOT_API_TOKEN = process.env.CHATWOOT_API_TOKEN || '';
+
+function ehAdminReq(req) {
+    const email = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    return adms.includes(email);
+}
+
+const SQL_CASOS_ADIAR = `
+    WITH Conv48 AS (
+        SELECT DISTINCT tg.taggable_id AS conv_id
+        FROM taggings tg
+        JOIN tags t2 ON t2.id = tg.tag_id
+        WHERE tg.taggable_type = 'Conversation' AND t2.name ILIKE '%time-48h%'
+    ),
+    OpenConversations AS (
+        SELECT
+            c.id, c.display_id, c.assignee_id, c.contact_id, c.last_activity_at, c.created_at,
+            CASE
+                WHEN c.id IN (SELECT conv_id FROM Conv48) THEN '48H'
+                WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
+                WHEN t.name ILIKE '%reten%' THEN 'RET'
+                WHEN t.name ILIKE '%sac%' THEN 'SAC'
+                WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
+                WHEN t.name ILIKE '%sms%' THEN 'SMS'
+                ELSE 'OUTROS'
+            END AS setor
+        FROM conversations c
+        LEFT JOIN teams t ON t.id = c.team_id
+        LEFT JOIN inboxes i ON i.id = c.inbox_id
+        WHERE c.status = 0
+          AND c.account_id = 1
+          AND (i.name IS NULL OR i.name != 'Atendimento | Brasil')
+    )
+    SELECT
+        u.name AS agente, oc.setor AS setor, oc.id AS conv_id, oc.display_id,
+        ct.name AS cliente, oc.last_activity_at, oc.created_at,
+        lm.created_at AS last_msg_at, lm.message_type AS last_msg_type, lm.content AS last_msg_content
+    FROM OpenConversations oc
+    LEFT JOIN users u ON u.id = oc.assignee_id
+    LEFT JOIN contacts ct ON ct.id = oc.contact_id
+    JOIN LATERAL (
+        SELECT m.message_type, m.created_at, m.content
+        FROM messages m
+        WHERE m.conversation_id = oc.id
+          AND m.account_id = 1
+          AND m.message_type <> 2
+          AND m.private = FALSE
+          AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+        ORDER BY m.created_at DESC
+        LIMIT 1
+    ) lm ON TRUE
+    WHERE lm.message_type <> 0
+`;
+
+function limparPreviewMsg(txt) {
+    if (!txt) return '(sem texto — anexo ou mensagem automática)';
+    let s = String(txt).replace(/\s+/g, ' ').trim();
+    return s.length > 160 ? s.slice(0, 160) + '…' : s;
+}
+
+function agruparCasosAdiar(rows) {
+    const mapa = {};
+    const agora = new Date();
+    rows.forEach(r => {
+        let nomeAgente = (r.agente || '').toUpperCase();
+        let siglaSetor = r.setor || 'OUTROS';
+        let nome;
+        if (!nomeAgente) {
+            if (siglaSetor === 'OUTROS') return;
+            nome = `SEM ATRIBUIR - ${siglaSetor}`;
+        } else {
+            const mSig = nomeAgente.match(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b/);
+            if (!mSig) return;
+            nome = nomeAgente.replace(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b.*$/, '').trim() + ' - ' + mSig[1];
+        }
+        if (!mapa[nome]) mapa[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
+        const base = r.last_msg_at ? new Date(r.last_msg_at) : (r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at));
+        const diffHoras = (agora - base) / (1000 * 60 * 60);
+        let statusLabel, ordem;
+        if (diffHoras > 48) { mapa[nome].fora_sla += 1; statusLabel = '\u{1F534} +48h'; ordem = 1; }
+        else if (diffHoras >= 24) { mapa[nome].aguardando += 1; statusLabel = '\u{1F7E1} 24-48h'; ordem = 2; }
+        else { mapa[nome].retornos += 1; statusLabel = '\u{1F7E2} < 24h'; ordem = 3; }
+        mapa[nome].total += 1;
+        mapa[nome].detalhes.push({
+            id: r.display_id || r.conv_id, display_id: r.display_id,
+            cliente: r.cliente || 'Cliente sem nome', status: statusLabel, ordem,
+            horas_parado: Math.round(diffHoras),
+            ultima_msg_por: (r.last_msg_type === 3 ? 'Agente (automático)' : 'Agente'),
+            ultima_msg_preview: limparPreviewMsg(r.last_msg_content)
+        });
+    });
+    return Object.values(mapa).sort((a, b) => b.total - a.total);
+}
+
+function detalhePassaFaixa(horas, faixa) {
+    if (faixa === 'MENOS24') return horas < 24;
+    if (faixa === '24A48') return horas >= 24 && horas <= 48;
+    if (faixa === 'MAIS48') return horas > 48;
+    return true;
+}
+
+function calcularSnoozedUntil(modo, valor, unidade) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (modo === '1h') return nowSec + 3600;
+    if (modo === '1d') return nowSec + 86400;
+    if (modo === 'custom') {
+        const n = parseInt(valor, 10);
+        if (!n || n <= 0) return null;
+        return nowSec + (unidade === 'dias' ? n * 86400 : n * 3600);
+    }
+    return null; // 'proxima' ou desconhecido = até a próxima resposta
+}
+
+// 🔒 ADIAR CASOS — acesso exclusivo por e-mail (configurável via EMAILS_ADIAR)
+function ehDonoAdiar(req) {
+    const email = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const permitidos = (process.env.EMAILS_ADIAR || 'maurilio.silva@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    return permitidos.includes(email);
+}
+
+app.get('/api/casos-para-adiar', async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ success: false, error: 'Acesso restrito.' });
+    try {
+        const r = await pool.query(SQL_CASOS_ADIAR);
+        const casos = agruparCasosAdiar(r.rows);
+        const resumo = { RET: 0, SAC: 0, BKO: 0, SMS: 0, '48H': 0 };
+        let totalGeral = 0;
+        casos.forEach(a => {
+            totalGeral += a.total;
+            ['RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(s => { if (a.nome.toUpperCase().includes(`- ${s}`)) resumo[s] += a.total; });
+        });
+        res.json({ success: true, casos, resumo_setor: resumo, total_geral: totalGeral, token_ok: !!CHATWOOT_API_TOKEN });
+    } catch (e) { console.error('[casos-para-adiar]', e.message); res.status(500).json({ success: false, error: e.message }); }
+});
+
+async function snoozeConversa(displayId, snoozedUntil) {
+    const url = `${CHATWOOT_URL}/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/conversations/${displayId}/toggle_status`;
+    const body = { status: 'snoozed' };
+    if (snoozedUntil) body.snoozed_until = snoozedUntil;
+    const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'api_access_token': CHATWOOT_API_TOKEN },
+        body: JSON.stringify(body)
+    });
+    if (!resp.ok) {
+        let txt = ''; try { txt = await resp.text(); } catch (e) {}
+        throw new Error(`HTTP ${resp.status} ${String(txt).slice(0, 120)}`);
+    }
+    return true;
+}
+
+app.post('/api/adiar-casos', express.json(), async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ success: false, error: 'Acesso restrito.' });
+    try {
+        if (!CHATWOOT_API_TOKEN) return res.status(400).json({ success: false, error: 'CHATWOOT_API_TOKEN nao configurado no .env do servidor.' });
+        const b = req.body || {};
+        const agentesSel = Array.isArray(b.agentes) ? b.agentes.map(x => String(x).toUpperCase()) : [];
+        const setor = (b.setor ? String(b.setor) : 'TODOS').toUpperCase();
+        const faixa = (b.faixa ? String(b.faixa) : 'TODAS').toUpperCase();
+        const snoozedUntil = calcularSnoozedUntil(b.modo, b.valor, b.unidade);
+
+        const r = await pool.query(SQL_CASOS_ADIAR);
+        let casos = agruparCasosAdiar(r.rows);
+        if (agentesSel.length > 0) casos = casos.filter(a => agentesSel.includes(a.nome.toUpperCase()));
+        else if (setor !== 'TODOS') casos = casos.filter(a => a.nome.toUpperCase().includes(`- ${setor}`));
+
+        const ids = [];
+        casos.forEach(a => (a.detalhes || []).forEach(d => {
+            if (d.display_id && detalhePassaFaixa(d.horas_parado, faixa)) ids.push(d.display_id);
+        }));
+        const idsUnicos = [...new Set(ids)];
+
+        const CONC = 6;
+        let ok = 0; const erros = [];
+        for (let i = 0; i < idsUnicos.length; i += CONC) {
+            const slice = idsUnicos.slice(i, i + CONC);
+            await Promise.all(slice.map(async id => {
+                try { await snoozeConversa(id, snoozedUntil); ok++; }
+                catch (e) { erros.push({ id, erro: e.message }); }
+            }));
+            await new Promise(rs => setTimeout(rs, 150));
+        }
+        res.json({ success: true, total: idsUnicos.length, ok, falhas: erros.length, erros: erros.slice(0, 50), snoozed_until: snoozedUntil });
+    } catch (e) { console.error('[adiar-casos]', e.message); res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ==========================================
+// 21. RELATÓRIO Q3 — PAINEL EXECUTIVO DE QUALIDADE (ADMIN, SOMENTE LEITURA)
+// Lê a aba RELATORIO_Q3_2026 (as 7 seções já montadas) e devolve a matriz
+// crua para o painel vivo montar as janelas. NÃO escreve em nada.
+// A rota de produtos cruza os tickets sinalizados (BASE_SINALIZACOES) com o
+// produto de cada conversa no Chatwoot (custom_attributes), 100% leitura.
+// ==========================================
+function ehAdminQ3(req) {
+    const email = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    return adms.includes(email);
+}
+function sheetsQ3ReadOnly() {
+    let privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').replace(/"/g, '').trim();
+    const auth = new google.auth.GoogleAuth({
+        credentials: { client_email: (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '').trim(), private_key: privateKey },
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    return google.sheets({ version: 'v4', auth });
+}
+
+// 21.1 — Matriz do relatório Q3 (as seções prontas da planilha)
+app.get('/api/q3', async (req, res) => {
+    if (!ehAdminQ3(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const sheets = sheetsQ3ReadOnly();
+        const sheetId = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
+        // valores CRUS (UNFORMATTED) — evita o bug de % já multiplicada e médias vindo como texto
+        const resp = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'RELATORIO_Q3_2026'!A1:J220`, valueRenderOption: 'UNFORMATTED_VALUE' });
+        const valores = resp.data.values || [];
+        // mapa analista -> time (melhor esforço, a partir da BASE DE MÉDIA)
+        const times = {};
+        try {
+            const rt = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'BASE DE MÉDIA- SETEMBRO'!B5:C1000` });
+            const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+            const timeDaCel = c => { const s = String(c || '').toUpperCase(); if (s.includes('SMS')) return 'SMS'; if (s.includes('BKO')) return 'BKO'; if (s.includes('48')) return '48H'; if (s.includes('SAC')) return 'SAC'; if (s.includes('RET')) return 'RET'; return 'OUTROS'; };
+            (rt.data.values || []).forEach(r => { const n = norm(r[0]); const c = r[1]; if (n && c) times[n] = timeDaCel(c); });
+        } catch (e) { console.log('[q3] times indisponivel:', e.message); }
+        res.json({ success: true, valores, times });
+    } catch (e) { console.error('[q3]', e.message); res.status(500).json({ success: false, error: e.message }); }
+});
+
+// 21.2 — Produtos mais reclamados: tickets sinalizados (QA) x produto no Chatwoot
+app.get('/api/q3-produtos', async (req, res) => {
+    if (!ehAdminQ3(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const sheets = sheetsQ3ReadOnly();
+        const sheetId = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
+        const resp = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'BASE_SINALIZACOES'!A1:L60000` });
+        const rows = resp.data.values || [];
+        // Cabeçalho: Semana | Analista | Monitoria | Ticket | Item sinalizado | Peso | Tipo | Data | Quantidade | Obs | Feedback | Mês
+        const IDX_TICKET = 3, IDX_ITEM = 4;
+        const sinPorTicket = {};   // display_id -> { sinalizacoes, itens:Set }
+        for (let i = 3; i < rows.length; i++) {
+            const r = rows[i] || [];
+            const tkRaw = String(r[IDX_TICKET] || '').trim();
+            const m = tkRaw.match(/\d{3,}/);
+            if (!m) continue;
+            const did = parseInt(m[0], 10);
+            if (!sinPorTicket[did]) sinPorTicket[did] = { sinalizacoes: 0, itens: new Set() };
+            sinPorTicket[did].sinalizacoes += 1;
+            const item = String(r[IDX_ITEM] || '').trim();
+            if (item) sinPorTicket[did].itens.add(item);
+        }
+        const ids = Object.keys(sinPorTicket).map(Number);
+        if (!ids.length) return res.json({ success: true, produtos: [], tickets_sinalizados: 0, tickets_com_produto: 0 });
+
+        // produto de cada ticket no Chatwoot (leitura)
+        const q = `
+            SELECT c.display_id,
+                   COALESCE(
+                     NULLIF(TRIM(c.custom_attributes->>'produtos'),''), NULLIF(TRIM(c.custom_attributes->>'produto'),''), NULLIF(TRIM(c.custom_attributes->>'Produto'),''),
+                     NULLIF(TRIM(ct.custom_attributes->>'produtos'),''), NULLIF(TRIM(ct.custom_attributes->>'produto'),''), NULLIF(TRIM(ct.custom_attributes->>'Produto'),'')
+                   ) AS produto
+            FROM conversations c
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            WHERE c.account_id = 1 AND c.display_id = ANY($1::int[])`;
+        const r = await pool.query(q, [ids]);
+        const prodMap = {};
+        let comProduto = 0;
+        r.rows.forEach(row => {
+            const did = row.display_id;
+            let prod = (row.produto || '').trim();
+            if (!prod) return;
+            prod = prod.charAt(0).toUpperCase() + prod.slice(1);
+            comProduto += 1;
+            const s = sinPorTicket[did] || { sinalizacoes: 1 };
+            if (!prodMap[prod]) prodMap[prod] = { produto: prod, tickets: 0, sinalizacoes: 0 };
+            prodMap[prod].tickets += 1;
+            prodMap[prod].sinalizacoes += s.sinalizacoes;
+        });
+        const produtos = Object.values(prodMap).sort((a, b) => b.sinalizacoes - a.sinalizacoes);
+        res.json({ success: true, produtos, tickets_sinalizados: ids.length, tickets_com_produto: comProduto });
+    } catch (e) { console.error('[q3-produtos]', e.message); res.status(500).json({ success: false, error: e.message, produtos: [] }); }
+});
+
 app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
