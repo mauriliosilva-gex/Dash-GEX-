@@ -235,6 +235,9 @@
                         <a data-menu-id="cw-time48" onclick="registrarClique('cw-time48'); mudarAba('chatwoot'); mudarSubAbaCw('time48'); ativarMenu('cw-time48'); fecharSidebarMobile();" class="sidebar-link">
                             <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Time 48 Horas
                         </a>
+                        <a data-menu-id="cw-adiar" onclick="registrarClique('cw-adiar'); mudarAba('chatwoot'); mudarSubAbaCw('adiar'); ativarMenu('cw-adiar'); fecharSidebarMobile();" class="sidebar-link">
+                            <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg> Adiar Casos
+                        </a>
                     </div>
                 </div>
 
@@ -287,6 +290,9 @@
                         </a>
                         <a data-menu-id="qual-sin" onclick="registrarClique('qual-sin'); mudarAba('qualidade'); mudarSubAbaQual('sinalizacoes'); ativarMenu('qual-sin'); fecharSidebarMobile();" class="sidebar-link">
                             <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Hist. de Sinalizações
+                        </a>
+                        <a data-menu-id="qual-q3" onclick="registrarClique('qual-q3'); mudarAba('qualidade'); mudarSubAbaQual('q3'); ativarMenu('qual-q3'); fecharSidebarMobile();" class="sidebar-link">
+                            <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg> Relatório Q3
                         </a>
                     </div>
                 </div>
@@ -702,6 +708,8 @@
                 
                 <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
                 <button id="btn-sub-qual-monitoriatk" onclick="mudarSubAbaQual('monitoriatk')" class="btn-setor btn-setor-inativo">🔎 Monitoria de Tickets</button>
+                <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
+                <button id="btn-sub-qual-q3" onclick="mudarSubAbaQual('q3')" class="btn-setor btn-setor-inativo">📊 Relatório Q3</button>
             </div>
 
             <!-- TELA 1: NOTAS DE MONITORIA -->
@@ -851,7 +859,29 @@
                     </div>
                 </section>
             </div>
-            
+
+            <!-- TELA Q3: RELATÓRIO EXECUTIVO DE QUALIDADE -->
+            <div id="tela-qual-q3" class="hidden space-y-6">
+                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-2 shadow-sm">
+                    <div class="mr-1">
+                        <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">📊 Relatório Q3 — Painel Executivo</h3>
+                        <p class="text-[10px] font-bold text-gray-500 mt-0.5">01/07/2026 a 28/09/2026 · Gestão de Qualidade</p>
+                    </div>
+                    <div class="w-px h-8 bg-gray-300 dark:bg-gray-800 mx-1"></div>
+                    <button onclick="mudarViewQ3('geral')" id="q3btn-geral" class="btn-setor btn-setor-ativo">Visão Geral</button>
+                    <button onclick="mudarViewQ3('sinalizacoes')" id="q3btn-sinalizacoes" class="btn-setor btn-setor-inativo">🎯 Sinalizações</button>
+                    <button onclick="mudarViewQ3('ncg')" id="q3btn-ncg" class="btn-setor btn-setor-inativo">🚨 NCG</button>
+                    <button onclick="mudarViewQ3('nota100')" id="q3btn-nota100" class="btn-setor btn-setor-inativo">🏆 Nota 100</button>
+                    <button onclick="mudarViewQ3('celulas')" id="q3btn-celulas" class="btn-setor btn-setor-inativo">🏢 Células</button>
+                    <button onclick="mudarViewQ3('analistas')" id="q3btn-analistas" class="btn-setor btn-setor-inativo">👥 Analistas</button>
+                    <button onclick="mudarViewQ3('produtos')" id="q3btn-produtos" class="btn-setor btn-setor-inativo">📦 Produtos</button>
+                    <button onclick="refreshManual(carregarQ3)" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm ml-auto">🔄 Recarregar</button>
+                </div>
+                <div id="q3-container" class="space-y-6">
+                    <div class="text-center py-16 text-gray-500 font-bold">Carregando relatório Q3...</div>
+                </div>
+            </div>
+
         </div>
 
         <!-- ABA: CHATWOOT (ADMIN ONLY) -->
@@ -1100,6 +1130,62 @@
                 </div>
             </div>
 
+            <!-- TELA 6: ADIAR CASOS (ADMIN) -->
+            <div id="tela-cw-adiar" class="hidden space-y-6">
+                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[600px] bg-white/50 dark:bg-black/20">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-3 shrink-0 bg-gray-50/50 dark:bg-transparent">
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <div>
+                                <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">🌙 Adiar até a Resposta do Cliente</h3>
+                                <p class="text-[10px] font-bold text-gray-500 mt-1">Só casos com a última mensagem enviada pelo agente</p>
+                            </div>
+                            <div class="w-px h-8 bg-gray-300 dark:bg-gray-800 mx-1"></div>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[9px] font-black text-gray-400 uppercase mr-1">Time</span>
+                                <button onclick="filtrarAdiar('TODOS')" id="btn-f-adiar-TODOS" class="btn-setor btn-setor-ativo">Todos</button>
+                                <button onclick="filtrarAdiar('RET')" id="btn-f-adiar-RET" class="btn-setor btn-setor-inativo">Retenção</button>
+                                <button onclick="filtrarAdiar('SAC')" id="btn-f-adiar-SAC" class="btn-setor btn-setor-inativo">SAC</button>
+                                <button onclick="filtrarAdiar('BKO')" id="btn-f-adiar-BKO" class="btn-setor btn-setor-inativo">BackOffice</button>
+                                <button onclick="filtrarAdiar('SMS')" id="btn-f-adiar-SMS" class="btn-setor btn-setor-inativo">SMS</button>
+                                <button onclick="filtrarAdiar('48H')" id="btn-f-adiar-48H" class="btn-setor btn-setor-inativo">48H</button>
+                            </div>
+                            <div class="w-px h-8 bg-gray-300 dark:bg-gray-800 mx-1"></div>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[9px] font-black text-gray-400 uppercase mr-1">Tempo</span>
+                                <button onclick="filtrarAdiarFaixa('TODAS')" id="btn-fx-adiar-TODAS" class="btn-setor btn-setor-ativo">Todas</button>
+                                <button onclick="filtrarAdiarFaixa('MENOS24')" id="btn-fx-adiar-MENOS24" class="btn-setor btn-setor-inativo">🟢 &lt; 24h</button>
+                                <button onclick="filtrarAdiarFaixa('24A48')" id="btn-fx-adiar-24A48" class="btn-setor btn-setor-inativo">🟡 24-48h</button>
+                                <button onclick="filtrarAdiarFaixa('MAIS48')" id="btn-fx-adiar-MAIS48" class="btn-setor btn-setor-inativo">🔴 +48h</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="exportarAdiar()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm">📥 Excel</button>
+                            <button id="btn-acao-adiar" onclick="abrirOpcoesAdiar()" class="bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-black px-4 py-1.5 rounded-lg transition-all shadow-sm">🌙 Adiar casos</button>
+                            <button onclick="refreshManual(carregarAdiar)" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm">🔄 Recarregar</button>
+                        </div>
+                    </div>
+                    <div class="px-6 py-2 shrink-0 border-b border-gray-100 dark:border-white/5">
+                        <span id="adiar-badge-total" class="text-[11px] font-bold text-gray-500 dark:text-gray-400"></span>
+                    </div>
+                    <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
+                        <table class="w-full text-left border-separate min-w-[820px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                                <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
+                                    <th class="py-3 px-3 pl-4 text-center" title="Selecionar todos"><input type="checkbox" id="chk-adiar-todos" class="w-4 h-4 accent-gexBlue cursor-pointer align-middle" onclick="toggleTodosAdiar(this)"></th>
+                                    <th class="py-3 px-3">Agente</th>
+                                    <th class="py-3 px-3 text-center" title="Última resposta há menos de 24h">🟢 &lt; 24h</th>
+                                    <th class="py-3 px-3 text-center" title="Entre 24h e 48h">🟡 24-48h</th>
+                                    <th class="py-3 px-3 text-center" title="Mais de 48h parado">🔴 +48h</th>
+                                    <th class="py-3 px-3 text-center font-black text-gexCyan">A adiar</th>
+                                    <th class="py-3 px-3 text-center pr-4">Auditoria</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-adiar-body" class="text-sm"></tbody>
+                            <tfoot id="tabela-adiar-foot" class="sticky bottom-0 bg-gray-100/95 dark:bg-gray-900/95 backdrop-blur-md z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] border-t border-white/5"></tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </main>
@@ -1190,6 +1276,32 @@
         </div>
     </div>
 
+    <!-- MODAL OPÇÕES DE ADIAMENTO -->
+    <div id="modal-adiar-opcoes" class="hidden fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                <h3 class="text-lg font-black text-gray-800 dark:text-white">🌙 Adiar casos</h3>
+                <button onclick="fecharOpcoesAdiar()" class="text-gray-500 hover:text-red-500 transition-colors"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p id="adiar-opcoes-resumo" class="text-sm text-gray-600 dark:text-gray-300"></p>
+                <p class="text-[11px] text-gray-400">Escolha por quanto tempo adiar. Em qualquer opção, o caso reabre sozinho quando o cliente responder.</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="executarAdiamento('1h')" class="p-4 rounded-xl border border-gray-200 dark:border-white/10 hover:border-gexBlue hover:bg-gexBlue/5 transition-all text-left"><div class="text-2xl mb-1">🕐</div><div class="font-bold text-sm text-gray-800 dark:text-white">1 hora</div></button>
+                    <button onclick="executarAdiamento('1d')" class="p-4 rounded-xl border border-gray-200 dark:border-white/10 hover:border-gexBlue hover:bg-gexBlue/5 transition-all text-left"><div class="text-2xl mb-1">📅</div><div class="font-bold text-sm text-gray-800 dark:text-white">1 dia</div></button>
+                    <button onclick="executarAdiamento('proxima')" class="p-4 rounded-xl border border-gray-200 dark:border-white/10 hover:border-gexBlue hover:bg-gexBlue/5 transition-all text-left"><div class="text-2xl mb-1">💬</div><div class="font-bold text-sm text-gray-800 dark:text-white">Próxima resposta</div></button>
+                    <button onclick="mostrarCustomAdiar()" class="p-4 rounded-xl border border-gray-200 dark:border-white/10 hover:border-gexBlue hover:bg-gexBlue/5 transition-all text-left"><div class="text-2xl mb-1">⚙️</div><div class="font-bold text-sm text-gray-800 dark:text-white">Personalizado</div></button>
+                </div>
+                <div id="adiar-custom" class="hidden flex items-center gap-2 pt-3 border-t border-gray-100 dark:border-white/10">
+                    <span class="text-[11px] font-bold text-gray-500">Adiar por</span>
+                    <input type="number" id="adiar-custom-valor" min="1" value="2" class="w-20 bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none">
+                    <select id="adiar-custom-unidade" class="bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none"><option value="horas">horas</option><option value="dias">dias</option></select>
+                    <button onclick="executarAdiamentoCustom()" class="bg-orange-600 hover:bg-orange-500 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all ml-auto">🌙 Adiar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL PRODUTOS TABULADOS -->
     <div id="modal-produtos" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
@@ -1206,8 +1318,57 @@
         </div>
     </div>
 
+    <!-- MODAL: TIME 48H (detalhe do agente) -->
+    <div id="modal-time48" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                <div>
+                    <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-t48-titulo">Time 48h</h3>
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Desempenho na etiqueta time-48h no período</p>
+                </div>
+                <button onclick="fecharModalTime48()" class="text-gray-500 hover:text-red-500 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-t48-conteudo"></div>
+        </div>
+    </div>
+    <!-- MODAL: RELATÓRIO Q3 (cards clicáveis) -->
+    <div id="modal-q3" class="hidden fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-[#0b1220] rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-white/10 flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-gradient-to-r from-gexBlue/10 to-gexCyan/10">
+                <div class="min-w-0">
+                    <h3 class="text-lg font-black text-gray-800 dark:text-white truncate" id="modal-q3-titulo">Detalhe</h3>
+                    <p class="text-[11px] font-bold text-gray-500 mt-0.5" id="modal-q3-sub"></p>
+                </div>
+                <button onclick="fecharModalQ3()" class="text-gray-500 hover:text-rose-500 transition-colors shrink-0 ml-3">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div id="modal-q3-controles" class="hidden px-6 py-3 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/20"></div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-2" id="modal-q3-conteudo"></div>
+        </div>
+    </div>
+
     <script>
         let usuarioAtual = null;
+        // 🔒 Adiar Casos: aba exclusiva de um e-mail (mais ninguém vê nem acessa)
+        const EMAILS_ADIAR = ['maurilio.silva@institutoexperience.com.br'];
+        function podeVerAdiar() { return !!(usuarioAtual && EMAILS_ADIAR.includes(String(usuarioAtual.email || '').toLowerCase())); }
+
+        // ===== Fechar QUALQUER modal: tecla Esc ou clique fora do card =====
+        function fecharTodosModais() {
+            document.querySelectorAll('.fixed[id^="modal-"]:not(.hidden)').forEach(function(m){ m.classList.add('hidden'); });
+        }
+        document.addEventListener('keydown', function(e){
+            if (e.key === 'Escape' || e.key === 'Esc') fecharTodosModais();
+        });
+        document.addEventListener('mousedown', function(e){
+            var t = e.target;
+            if (t && t.id && t.id.indexOf('modal-') === 0 && t.classList.contains('fixed') && !t.classList.contains('hidden')) {
+                t.classList.add('hidden');
+            }
+        });
 
         async function iniciarApp() {
             try {
@@ -1236,6 +1397,9 @@
                 const btnMonTk = document.getElementById('btn-sub-qual-monitoriatk');
                 if (btnMonTk) btnMonTk.style.display = 'none';
 
+                const btnQ3 = document.getElementById('btn-sub-qual-q3');
+                if (btnQ3) btnQ3.style.display = 'none';
+
                 const btnCasos = document.getElementById('btn-sub-tk-casos');
                 if (btnCasos) btnCasos.style.display = 'none';
 
@@ -1254,10 +1418,18 @@
             if (!usuarioAtual || usuarioAtual.role !== 'admin') {
                 document.querySelectorAll('button[onclick^="exportar"]').forEach(b => b.style.display = 'none');
                 document.querySelectorAll('.btn-refresh').forEach(b => b.style.display = 'none');
+                const _btnAcaoAdiar = document.getElementById('btn-acao-adiar');
+                if (_btnAcaoAdiar) _btnAcaoAdiar.style.display = 'none';
             } else {
                 document.body.classList.add('is-admin'); // Admin: Ativa Sidebar
                 const firstLink = document.querySelector('.sidebar-link');
                 if(firstLink) firstLink.classList.add('active-link');
+            }
+
+            // 🔒 Adiar Casos: esconde o atalho da sidebar de todos, exceto o e-mail autorizado
+            if (!podeVerAdiar()) {
+                const _lnkAdiar = document.querySelector('[data-menu-id="cw-adiar"]');
+                if (_lnkAdiar) _lnkAdiar.style.display = 'none';
             }
         }
 
@@ -1404,7 +1576,7 @@
         }
 
         function mudarSubAbaQual(aba) {
-            ['monitoria', 'sinalizacoes', 'monitoriatk'].forEach(id => {
+            ['monitoria', 'sinalizacoes', 'monitoriatk', 'q3'].forEach(id => {
                 const tela = document.getElementById(`tela-qual-${id}`);
                 const btn = document.getElementById(`btn-sub-qual-${id}`);
                 if(tela) { tela.classList.add('hidden'); tela.classList.remove('block'); }
@@ -1417,10 +1589,12 @@
             
             if (aba === 'sinalizacoes' && dadosSinalizacoes.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') carregarSinalizacoes('');
             if (aba === 'monitoriatk' && dadosMonitoriaTk.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') carregarMonitoriaTk('');
+            if (aba === 'q3' && !q3Carregado && usuarioAtual && usuarioAtual.role === 'admin') carregarQ3();
         }
 
         function mudarSubAbaCw(aba) {
-            ['recorrencia', 'tabulacao', 'mencoes', 'reembolsos', 'time48'].forEach(id => {
+            if (aba === 'adiar' && !podeVerAdiar()) aba = 'recorrencia';
+            ['recorrencia', 'tabulacao', 'mencoes', 'reembolsos', 'time48', 'adiar'].forEach(id => {
                 const tela = document.getElementById(`tela-cw-${id}`);
                 const btn = document.getElementById(`btn-sub-cw-${id}`);
                 
@@ -1448,6 +1622,9 @@
 
             if (aba === 'reembolsos' && dadosPagAmerican.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') {
                 carregarPagAmerican('');
+            }
+            if (aba === 'adiar' && !dadosAdiar && podeVerAdiar()) {
+                carregarAdiar();
             }
         }
 
@@ -1803,6 +1980,343 @@
                     <td class="py-3 px-3 text-center">${formatStatus(a.status_trv, isTop3)}</td>
                 </tr>`;
             }).join('');
+        }
+
+        // ===== RELATÓRIO Q3 — PAINEL EXECUTIVO DE QUALIDADE (ADMIN) =====
+        let dadosQ3 = null, dadosQ3Times = {}, dadosQ3Reemb = null, q3Carregado = false, viewQ3Atual = 'geral';
+        let q3TimeNota100 = {}, q3RankCtx = { ordem: 'desc', n: 5, time: 'TODOS' };
+
+        async function carregarQ3() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            const cont = document.getElementById('q3-container');
+            if (cont) cont.innerHTML = q3Loading('Carregando relatório Q3...');
+            dadosQ3Reemb = null;
+            try {
+                const r1 = await fetch('/api/q3?fresh=1').then(r => r.json()).catch(() => ({ success: false }));
+                dadosQ3 = (r1 && r1.success) ? parseSecoesQ3(r1.valores || []) : {};
+                dadosQ3Times = (r1 && r1.times) ? r1.times : {};
+                q3MontarTimesNota100();
+                q3Carregado = true;
+                renderViewQ3();
+            } catch (e) { if (cont) cont.innerHTML = q3Erro(e.message); }
+        }
+
+        function parseSecoesQ3(valores) {
+            const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/u;
+            function idSec(t) {
+                const s = (t || '').toUpperCase();
+                if (s.includes('TOP 10') && s.includes('SINALIZ')) return 'top_sin';
+                if ((s.includes('EVOLUÇÃO') || s.includes('EVOLUCAO')) && s.includes('SINALIZ')) return 'evol_sin';
+                if (s.includes('NCG') || s.includes('CONFORMIDADE')) return 'ncg';
+                if (s.includes('NOTA 100') || s.includes('EXCEL')) return 'nota100';
+                if (s.includes('POR CÉLULA') || s.includes('POR CELULA')) return 'celulas';
+                if (s.includes('INDIVIDUAL POR ANALISTA')) return 'analistas';
+                if (s.includes('GLOSS')) return 'glossario';
+                return null;
+            }
+            const out = {}; let atual = null;
+            for (const row of valores) {
+                const cells = (row || []).map(c => c == null ? '' : String(c));
+                const nonEmpty = cells.filter(c => c.trim() !== '');
+                if (nonEmpty.length === 0) continue;
+                const b = String(cells[1] || cells[0] || '').trim();
+                const ehTitulo = nonEmpty.length <= 1 && EMOJI.test(b);
+                if (ehTitulo) {
+                    const id = idSec(b);
+                    if (id && !out[id]) { atual = { id, titulo: b, linhas: [] }; out[id] = atual; }
+                    else { atual = { id: null, titulo: b, linhas: [] }; }
+                } else if (atual) { atual.linhas.push(cells.slice(1)); }
+            }
+            return out;
+        }
+
+        // formatação (dados vêm CRUS do backend)
+        function q3Num(v) { if (v === null || v === undefined || v === '') return null; if (typeof v === 'number') return isNaN(v) ? null : v; const n = parseFloat(String(v).replace('%', '').replace(',', '.')); return isNaN(n) ? null : n; }
+        function q3FmtNota(v) { const n = q3Num(v); return n === null ? '—' : (Math.round(n * 10) / 10).toFixed(1).replace('.', ','); }
+        function q3FmtPct(n) { if (n === null || isNaN(n)) return '—'; const a = Math.abs(n); return (a < 10 ? n.toFixed(1) : n.toFixed(0)).replace('.', ','); }
+        function q3Cor(n) { if (n === null) return 'text-slate-400'; if (n >= 90) return 'text-emerald-400'; if (n >= 80) return 'text-amber-400'; if (n >= 70) return 'text-orange-400'; return 'text-rose-400'; }
+        function q3CorKPI(n) { if (n === null) return 'text-gray-800 dark:text-white'; if (n >= 90) return 'text-emerald-400'; if (n >= 80) return 'text-amber-400'; if (n >= 70) return 'text-orange-400'; return 'text-rose-400'; }
+        function q3Grad(n) { if (n === null) return 'from-slate-500 to-slate-400'; if (n >= 90) return 'from-emerald-500 to-teal-400'; if (n >= 80) return 'from-amber-500 to-yellow-400'; if (n >= 70) return 'from-orange-500 to-amber-400'; return 'from-rose-500 to-red-400'; }
+        function q3Seta(evFrac) { const n = q3Num(evFrac); if (n === null) return '<span class="text-slate-500">—</span>'; const p = n * 100; if (p > 0.05) return '<span class="text-emerald-400 font-bold">▲ ' + q3FmtPct(p) + '%</span>'; if (p < -0.05) return '<span class="text-rose-400 font-bold">▼ ' + q3FmtPct(Math.abs(p)) + '%</span>'; return '<span class="text-slate-500">● 0%</span>'; }
+        function q3Norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' '); }
+        function q3TimeStr(s) { s = String(s || '').toUpperCase(); if (s.includes('SMS')) return 'SMS'; if (s.includes('BKO')) return 'BKO'; if (s.includes('48')) return '48H'; if (s.includes('SAC')) return 'SAC'; if (s.includes('RET') || s.includes('LIVE')) return 'RET'; return 'OUTROS'; }
+        function q3MontarTimesNota100() { q3TimeNota100 = {}; q3Linhas('nota100').forEach(r => { const raw = String(r[0] || ''); const m = raw.match(/\(([^)]+)\)/); if (m) q3TimeNota100[q3Norm(raw.replace(/\(.*\)/, ''))] = q3TimeStr(m[1]); }); }
+        function q3TimeDeAnalista(nome) { const nn = q3Norm(nome); return dadosQ3Times[nn] || q3TimeNota100[nn] || 'OUTROS'; }
+
+        // UI helpers
+        function q3Loading(t) { return '<div class="flex flex-col items-center justify-center py-20 gap-3"><div class="w-8 h-8 border-2 border-gexCyan border-t-transparent rounded-full animate-spin"></div><span class="text-gray-500 font-bold text-sm">' + t + '</span></div>'; }
+        function q3Erro(m) { return '<div class="text-center py-16 text-rose-400 font-bold">Erro: ' + m + '</div>'; }
+        function q3Panel(titulo, inner, sub) { return '<div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-6 shadow-lg bg-white/50 dark:bg-black/20"><h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider mb-1">' + titulo + '</h3>' + (sub ? '<p class="text-[11px] text-gray-500 mb-4">' + sub + '</p>' : '<div class="mb-4"></div>') + inner + '</div>'; }
+        function q3KPI(id, titulo, valor, sub, cor, onclick) {
+            const clk = onclick ? 'onclick="' + onclick + '" role="button" tabindex="0"' : '';
+            const hov = onclick ? ' cursor-pointer hover:-translate-y-1 hover:border-gexCyan/50 hover:shadow-[0_10px_30px_rgba(34,167,240,0.18)] active:translate-y-0' : '';
+            return '<div ' + clk + ' class="relative group glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 shadow-lg bg-white/50 dark:bg-black/20 transition-all duration-300' + hov + '">' +
+                '<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">' + titulo + '</div>' +
+                '<div class="text-3xl font-black font-mono ' + cor + '">' + valor + '</div>' +
+                '<div class="text-[11px] font-bold text-gray-500 mt-1 truncate">' + sub + '</div>' +
+                (onclick ? '<div class="absolute top-3 right-3 text-gray-300 dark:text-white/20 group-hover:text-gexCyan transition-colors">⤢</div>' : '') + '</div>';
+        }
+        function q3Bar(label, valorFmt, pct, grad) {
+            const w = Math.max(2, Math.min(100, Math.round(pct)));
+            return '<div class="mb-2.5 group"><div class="flex justify-between text-[11px] mb-1"><span class="font-bold text-gray-700 dark:text-gray-300 truncate pr-2 group-hover:text-gexCyan transition-colors">' + label + '</span><span class="font-mono font-black whitespace-nowrap">' + valorFmt + '</span></div><div class="h-2.5 rounded-full bg-gray-200 dark:bg-white/5 overflow-hidden"><div class="h-full rounded-full bg-gradient-to-r ' + grad + ' transition-all duration-1000 ease-out" style="width:' + w + '%"></div></div></div>';
+        }
+        function q3TimeBadge(t) { if (!t || t === 'OUTROS') return ''; const cor = { RET: 'bg-blue-500/15 text-blue-400', SAC: 'bg-purple-500/15 text-purple-400', BKO: 'bg-teal-500/15 text-teal-400', '48H': 'bg-orange-500/15 text-orange-400', SMS: 'bg-pink-500/15 text-pink-400' }[t] || 'bg-gray-500/15 text-gray-400'; return '<span class="px-1.5 py-0.5 rounded ' + cor + ' font-bold">' + t + '</span>'; }
+        function q3MiniLista(titulo, arr, campo) {
+            const itens = arr.map((a, i) => { const val = campo === 'evol' ? q3Seta(a.evol) : '<span class="font-mono font-black ' + q3Cor(a.media) + '">' + q3FmtNota(a.media) + '</span>'; return '<div class="flex items-center justify-between py-1.5 border-b border-gray-100 dark:border-white/5 last:border-0"><span class="text-xs font-bold text-gray-700 dark:text-gray-300 truncate pr-2">' + (i + 1) + '. ' + a.nome + ' <span class="text-[9px]">' + q3TimeBadge(a.time) + '</span></span>' + val + '</div>'; }).join('');
+            return '<div class="glass-panel border border-lightBorder dark:border-white/5 rounded-xl p-4 bg-white/40 dark:bg-black/10"><div class="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2">' + titulo + '</div>' + (itens || '<p class="text-gray-500 text-xs">Sem dados</p>') + '</div>';
+        }
+
+        // dados derivados
+        function q3Linhas(id) { return (dadosQ3 && dadosQ3[id] && dadosQ3[id].linhas) ? dadosQ3[id].linhas : []; }
+        function q3AchaTotal(linhas, i) { const r = linhas.find(x => String(x[0] || '').toUpperCase().includes('TOTAL')); return r ? q3Num(r[i]) : null; }
+        function q3AnalistasData() {
+            return q3Linhas('analistas').filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ANALISTA') && !c.includes('CONSOLID') && !c.includes('MÉDIA') && !c.includes('MEDIA') && !c.includes('DIAGN') && !c.includes('DADOS') && q3Num(r[4]) !== null; })
+                .map(r => ({ nome: String(r[0]).trim(), jul: r[1], ago: r[2], set: r[3], media: q3Num(r[4]), evol: r[5], time: q3TimeDeAnalista(r[0]) }));
+        }
+        function q3LinhaGeralCel() { return q3Linhas('celulas').find(r => String(r[0] || '').toUpperCase().includes('GERAL')); }
+
+        function mudarViewQ3(v) {
+            viewQ3Atual = v;
+            ['geral', 'sinalizacoes', 'ncg', 'nota100', 'celulas', 'analistas', 'produtos'].forEach(x => { const b = document.getElementById('q3btn-' + x); if (b) b.className = 'btn-setor ' + (x === v ? 'btn-setor-ativo' : 'btn-setor-inativo'); });
+            renderViewQ3();
+        }
+        function renderViewQ3() {
+            const c = document.getElementById('q3-container'); if (!c || !dadosQ3) return;
+            if (viewQ3Atual === 'produtos') { carregarReembQ3(); return; }
+            const map = { geral: renderQ3Geral, sinalizacoes: renderQ3Sinalizacoes, ncg: renderQ3NCG, nota100: renderQ3Nota100, celulas: renderQ3Celulas, analistas: renderQ3Analistas };
+            c.innerHTML = (map[viewQ3Atual] || renderQ3Geral)();
+        }
+
+        // VIEW: Visão Geral
+        function renderQ3Geral() {
+            const arr = q3AnalistasData();
+            const g = q3LinhaGeralCel();
+            const mediaGeral = g ? q3Num(g[4]) : null, evolGeral = g ? g[5] : null;
+            const totSin = q3AchaTotal(q3Linhas('top_sin'), 4);
+            const totNcg = q3AchaTotal(q3Linhas('ncg'), 4);
+            const n100 = q3Linhas('nota100').filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ANALISTA') && !c.includes('TOTAL') && !c.includes('DIRETRIZ') && q3Num(r[4]) !== null; });
+            const ord = arr.slice().sort((a, b) => b.media - a.media);
+            const melhor = ord[0], pior = ord[ord.length - 1];
+            const kpis = '<div class="grid grid-cols-2 lg:grid-cols-5 gap-4">' +
+                q3KPI('', 'Média Geral Q3', mediaGeral !== null ? q3FmtNota(mediaGeral) : '—', q3Seta(evolGeral), q3CorKPI(mediaGeral), 'q3CardMedia()') +
+                q3KPI('', 'Sinalizações Q3', totSin !== null ? totSin : '—', 'top 10 itens', 'text-gexCyan', 'q3CardSinalizacoes()') +
+                q3KPI('', 'NCG (nota zero)', totNcg !== null ? totNcg : '—', 'tolerância zero', 'text-rose-400', 'q3CardNCG()') +
+                q3KPI('', 'Analistas auditados', arr.length || '—', 'no trimestre', 'text-gray-800 dark:text-white', 'q3CardAnalistas()') +
+                q3KPI('', 'Destaques Nota 100', n100.length || '—', 'analistas', 'text-emerald-400', 'q3CardNota100()') + '</div>';
+            const dest = '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">' +
+                q3DestaqueCard('🥇 Melhor média (analista)', melhor, 'emerald', "q3AbrirRanking('desc')") +
+                q3DestaqueCard('⚠️ Menor média (analista)', pior, 'rose', "q3AbrirRanking('asc')") + '</div>';
+            const botoes = [['🎯 Sinalizações', 'sinalizacoes'], ['🚨 NCG', 'ncg'], ['🏆 Nota 100', 'nota100'], ['🏢 Células', 'celulas'], ['👥 Analistas', 'analistas'], ['📦 Produtos', 'produtos']]
+                .map(x => '<button onclick="mudarViewQ3(\'' + x[1] + '\')" class="px-4 py-2 rounded-xl bg-gray-100 dark:bg-white/5 hover:bg-gradient-to-r hover:from-gexBlue hover:to-gexCyan hover:text-white text-xs font-bold transition-all duration-300 hover:scale-105">' + x[0] + '</button>').join('');
+            return kpis + dest + q3Panel('🔎 Navegue pelas janelas', '<div class="flex flex-wrap gap-2">' + botoes + '</div>', 'Cada botão abre uma análise completa · clique nos cartões acima para o detalhe');
+        }
+        function q3DestaqueCard(titulo, obj, cor, onclick) {
+            if (!obj) return q3Panel(titulo, '<p class="text-gray-500 text-sm">Sem dados</p>');
+            const c = cor === 'emerald' ? 'text-emerald-400' : 'text-rose-400';
+            return '<div onclick="' + onclick + '" role="button" tabindex="0" class="relative group glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 shadow-lg bg-white/50 dark:bg-black/20 flex items-center justify-between cursor-pointer hover:-translate-y-1 hover:border-gexCyan/50 hover:shadow-[0_10px_30px_rgba(34,167,240,0.18)] transition-all duration-300"><div class="min-w-0"><div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">' + titulo + '</div><div class="text-lg font-black text-gray-800 dark:text-white truncate">' + obj.nome + ' <span class="text-[9px]">' + q3TimeBadge(obj.time) + '</span></div><div class="text-[10px] text-gexCyan font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">clique para ver o ranking →</div></div><div class="text-3xl font-black font-mono ' + c + ' ml-3">' + q3FmtNota(obj.media) + '</div></div>';
+        }
+
+        // VIEW: Sinalizações
+        function renderQ3Sinalizacoes() {
+            const top = q3Linhas('top_sin'), evol = q3Linhas('evol_sin');
+            const dados = top.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ITEM') && !c.includes('TOTAL') && q3Num(r[4]) !== null; });
+            const max = Math.max.apply(null, dados.map(r => q3Num(r[4]) || 0).concat([1]));
+            const bars = dados.map(r => q3Bar(r[0], (q3Num(r[4]) || 0) + ' <span class="text-gray-400 font-normal">(J' + r[1] + '/A' + r[2] + '/S' + r[3] + ')</span>', (q3Num(r[4]) || 0) / max * 100, 'from-gexBlue to-gexCyan')).join('');
+            const evolData = evol.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ITEM') && !c.includes('TOTAL') && !c.includes('DIAGN') && (q3Num(r[1]) !== null || q3Num(r[3]) !== null); });
+            const rowsEvol = evolData.map(r => '<tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gexCyan/5 transition-colors"><td class="py-2 px-2 text-xs font-bold text-gray-700 dark:text-gray-300">' + r[0] + '</td><td class="py-2 px-2 text-center font-mono text-xs text-gray-500">' + (r[1] || '-') + ' → ' + (r[3] || '-') + '</td><td class="py-2 px-2 text-center text-xs">' + q3Seta(r[5]) + '</td></tr>').join('');
+            return q3Panel('🎯 Top 10 itens mais sinalizados — Q3', bars, 'Total de sinalizações no trimestre (barra) + distribuição por mês (J/A/S)') +
+                q3Panel('📈 Evolução das sinalizações (Jul → Set)', '<div class="overflow-x-auto"><table class="w-full min-w-[420px]"><thead><tr class="text-[10px] text-gray-500 uppercase border-b border-white/10"><th class="text-left px-2 py-1">Item</th><th class="px-2">Jul → Set</th><th class="px-2">Evolução</th></tr></thead><tbody>' + rowsEvol + '</tbody></table></div>');
+        }
+
+        // VIEW: NCG
+        function renderQ3NCG() {
+            const ncg = q3Linhas('ncg');
+            const dados = ncg.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('TIPO') && !c.includes('TOTAL') && q3Num(r[4]) !== null; });
+            const max = Math.max.apply(null, dados.map(r => q3Num(r[4]) || 0).concat([1]));
+            const bars = dados.map(r => q3Bar(r[0], (q3Num(r[4]) || 0) + '', (q3Num(r[4]) || 0) / max * 100, 'from-rose-500 to-red-400')).join('');
+            const quem = dados.map(r => '<div class="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 mb-2"><div class="flex justify-between items-center mb-1"><span class="font-bold text-sm text-gray-800 dark:text-white pr-2">' + r[0] + '</span><span class="font-mono font-black text-rose-400 whitespace-nowrap">' + (q3Num(r[4]) || 0) + '</span></div><div class="text-[11px] text-gray-600 dark:text-gray-400"><b>Envolvidos:</b> ' + (r[5] || '—') + '</div></div>').join('');
+            const tot = q3AchaTotal(ncg, 4);
+            return '<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">' + q3KPI('', 'Total NCG no Q3', tot !== null ? tot : '—', 'ocorrências (nota zero)', 'text-rose-400') + q3KPI('', 'Tipos de NCG', dados.length, 'categorias', 'text-gray-800 dark:text-white') + q3KPI('', 'Política', 'Zero', 'tolerância', 'text-rose-400') + '</div>' +
+                q3Panel('🚨 NCG por tipo — Q3', bars, 'Não conformidades graves por categoria') +
+                q3Panel('👤 Quem — analistas envolvidos por NCG', quem);
+        }
+
+        // VIEW: Nota 100
+        function renderQ3Nota100() {
+            const n = q3Linhas('nota100');
+            const dados = n.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ANALISTA') && !c.includes('TOTAL') && !c.includes('DIRETRIZ') && q3Num(r[4]) !== null; });
+            dados.sort((a, b) => (q3Num(b[4]) || 0) - (q3Num(a[4]) || 0));
+            const meds = ['🥇', '🥈', '🥉'];
+            const podium = '<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">' + dados.slice(0, 3).map((r, i) => '<div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 text-center shadow-lg bg-gradient-to-b from-emerald-500/5 to-transparent"><div class="text-3xl mb-1">' + meds[i] + '</div><div class="font-black text-sm text-gray-800 dark:text-white">' + r[0] + '</div><div class="text-2xl font-black font-mono text-emerald-400 mt-1">' + (q3Num(r[4]) || 0) + '</div><div class="text-[10px] text-gray-500">notas 100 · ' + q3FmtPct((q3Num(r[5]) || 0) * 100) + '%</div></div>').join('') + '</div>';
+            const max = Math.max.apply(null, dados.map(r => q3Num(r[4]) || 0).concat([1]));
+            const bars = dados.map(r => q3Bar(r[0], (q3Num(r[4]) || 0) + ' · ' + q3FmtPct((q3Num(r[5]) || 0) * 100) + '%', (q3Num(r[4]) || 0) / max * 100, 'from-emerald-500 to-teal-400')).join('');
+            return podium + q3Panel('🏆 Ranking Nota 100 — Q3', bars, 'Total de notas 100 por analista (e % de notas 100 — meta > 75%)');
+        }
+
+        // VIEW: Células
+        function renderQ3Celulas() {
+            const cel = q3Linhas('celulas');
+            const dados = cel.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('CÉLULA') && !c.includes('CELULA') && !c.includes('GERAL') && !c.includes('DIAGN') && !c.includes('DADOS') && q3Num(r[4]) !== null; });
+            const bars = dados.map(r => { const m = q3Num(r[4]); return q3Bar(r[0], q3FmtNota(m) + ' &nbsp; ' + q3Seta(r[5]), m, q3Grad(m)); }).join('');
+            const g = q3LinhaGeralCel();
+            const kpi = g ? '<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">' + q3KPI('', 'Média Geral Operacional', q3FmtNota(q3Num(g[4])), q3Seta(g[5]), q3CorKPI(q3Num(g[4]))) + '</div>' : '';
+            return kpi + q3Panel('🏢 Média de nota por célula — Q3', bars, 'Nota média no trimestre (0–100) e evolução Jul → Set');
+        }
+
+        // VIEW: Analistas
+        function renderQ3Analistas() {
+            const arr = q3AnalistasData().sort((a, b) => b.media - a.media);
+            const rows = arr.map(a => '<tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gexCyan/5 transition-colors"><td class="py-2 px-2 text-xs font-bold text-gray-800 dark:text-white">' + a.nome + ' <span class="text-[9px]">' + q3TimeBadge(a.time) + '</span></td><td class="py-2 px-2 text-center font-mono text-xs text-gray-500">' + q3FmtNota(a.jul) + '</td><td class="py-2 px-2 text-center font-mono text-xs text-gray-500">' + q3FmtNota(a.ago) + '</td><td class="py-2 px-2 text-center font-mono text-xs text-gray-500">' + q3FmtNota(a.set) + '</td><td class="py-2 px-2 text-center font-mono font-black text-sm ' + q3Cor(a.media) + '">' + q3FmtNota(a.media) + '</td><td class="py-2 px-2 text-center text-xs">' + q3Seta(a.evol) + '</td></tr>').join('');
+            return '<div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-6 shadow-lg bg-white/50 dark:bg-black/20"><div class="flex flex-wrap justify-between items-center gap-3 mb-4"><h3 class="text-sm font-black text-gray-800 dark:text-white uppercase tracking-wider">👥 Evolução por analista — Q3 (' + arr.length + ')</h3><input type="text" id="q3-busca-ana" onkeyup="q3FiltrarAna()" placeholder="🔎 Buscar analista..." class="bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs outline-none w-48 focus:border-gexCyan transition-colors"></div><div class="overflow-x-auto"><table class="w-full min-w-[520px]"><thead><tr class="text-[10px] text-gray-500 uppercase border-b border-white/10"><th class="text-left px-2 py-1">Analista</th><th class="px-2">Jul</th><th class="px-2">Ago</th><th class="px-2">Set</th><th class="px-2">Média Q3</th><th class="px-2">Evolução</th></tr></thead><tbody id="q3-ana-body">' + rows + '</tbody></table></div></div>';
+        }
+        function q3FiltrarAna() { const t = (document.getElementById('q3-busca-ana').value || '').toLowerCase(); document.querySelectorAll('#q3-ana-body tr').forEach(tr => { tr.style.display = tr.textContent.toLowerCase().includes(t) ? '' : 'none'; }); }
+
+        // MODAL genérico Q3
+        function abrirModalQ3(titulo, sub, temControles) {
+            document.getElementById('modal-q3-titulo').innerText = titulo;
+            document.getElementById('modal-q3-sub').innerText = sub || '';
+            const ctrl = document.getElementById('modal-q3-controles');
+            if (temControles) ctrl.classList.remove('hidden'); else { ctrl.classList.add('hidden'); ctrl.innerHTML = ''; }
+            document.getElementById('modal-q3-conteudo').innerHTML = '';
+            document.getElementById('modal-q3').classList.remove('hidden');
+        }
+        function fecharModalQ3() { document.getElementById('modal-q3').classList.add('hidden'); }
+
+        // CARD: Média Geral
+        function q3CardMedia() {
+            const g = q3LinhaGeralCel();
+            abrirModalQ3('📊 Média Geral Q3 — ' + (g ? q3FmtNota(q3Num(g[4])) : '—'), 'Como a média do trimestre se distribui entre os ' + q3AnalistasData().length + ' analistas', false);
+            const arr = q3AnalistasData(), tot = arr.length || 1;
+            const exc = arr.filter(a => a.media >= 90).length, bom = arr.filter(a => a.media >= 80 && a.media < 90).length, att = arr.filter(a => a.media >= 70 && a.media < 80).length, cri = arr.filter(a => a.media < 70).length;
+            const evolOk = arr.filter(a => q3Num(a.evol) !== null);
+            let html = q3Panel('Distribuição por faixa de nota',
+                q3Bar('Excelente (≥90)', exc + ' analistas', exc / tot * 100, 'from-emerald-500 to-teal-400') +
+                q3Bar('Bom (80–89)', bom + ' analistas', bom / tot * 100, 'from-amber-500 to-yellow-400') +
+                q3Bar('Atenção (70–79)', att + ' analistas', att / tot * 100, 'from-orange-500 to-amber-400') +
+                q3Bar('Crítico (<70)', cri + ' analistas', cri / tot * 100, 'from-rose-500 to-red-400'), tot + ' analistas auditados no trimestre');
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">' + q3MiniLista('🔝 Puxam a média para cima', arr.slice().sort((a, b) => b.media - a.media).slice(0, 5), 'media') + q3MiniLista('🔻 Puxam a média para baixo', arr.slice().sort((a, b) => a.media - b.media).slice(0, 5), 'media') + '</div>';
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">' + q3MiniLista('📈 Mais evoluíram (Jul→Set)', evolOk.slice().sort((a, b) => q3Num(b.evol) - q3Num(a.evol)).slice(0, 5), 'evol') + q3MiniLista('📉 Mais caíram (Jul→Set)', evolOk.slice().sort((a, b) => q3Num(a.evol) - q3Num(b.evol)).slice(0, 5), 'evol') + '</div>';
+            document.getElementById('modal-q3-conteudo').innerHTML = html;
+        }
+
+        // CARD: Sinalizações
+        function q3CardSinalizacoes() {
+            const top = q3Linhas('top_sin'), evol = q3Linhas('evol_sin');
+            const tTot = top.find(r => String(r[0] || '').toUpperCase().includes('TOTAL'));
+            abrirModalQ3('🎯 Sinalizações Q3 — ' + (tTot ? (q3Num(tTot[4]) || 0) : '—'), 'Itens mais sinalizados e o que mais mudou no trimestre', false);
+            const dados = top.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ITEM') && !c.includes('TOTAL') && q3Num(r[4]) !== null; });
+            const max = Math.max.apply(null, dados.map(r => q3Num(r[4]) || 0).concat([1]));
+            const bars = dados.map(r => q3Bar(r[0], (q3Num(r[4]) || 0) + '', (q3Num(r[4]) || 0) / max * 100, 'from-gexBlue to-gexCyan')).join('');
+            const evolData = evol.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ITEM') && !c.includes('TOTAL') && !c.includes('DIAGN') && q3Num(r[5]) !== null; });
+            const subiu = evolData.slice().sort((a, b) => q3Num(b[5]) - q3Num(a[5])).slice(0, 3);
+            const caiu = evolData.slice().sort((a, b) => q3Num(a[5]) - q3Num(b[5])).slice(0, 3);
+            const mesRow = tTot ? '<div class="grid grid-cols-3 gap-3 mb-4">' + q3KPI('', 'Julho', q3Num(tTot[1]) || 0, 'sinalizações', 'text-gray-800 dark:text-white') + q3KPI('', 'Agosto', q3Num(tTot[2]) || 0, 'sinalizações', 'text-gray-800 dark:text-white') + q3KPI('', 'Setembro', q3Num(tTot[3]) || 0, 'sinalizações', 'text-gray-800 dark:text-white') + '</div>' : '';
+            let html = mesRow + q3Panel('Top 10 itens mais sinalizados', bars, 'Total no trimestre');
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">';
+            html += '<div class="glass-panel border border-rose-500/20 rounded-xl p-4 bg-rose-500/5"><div class="text-[11px] font-black text-rose-400 uppercase tracking-widest mb-2">📈 Mais aumentaram</div>' + subiu.map(r => '<div class="flex justify-between py-1 text-xs"><span class="font-bold text-gray-700 dark:text-gray-300 truncate pr-2">' + r[0] + '</span>' + q3Seta(r[5]) + '</div>').join('') + '</div>';
+            html += '<div class="glass-panel border border-emerald-500/20 rounded-xl p-4 bg-emerald-500/5"><div class="text-[11px] font-black text-emerald-400 uppercase tracking-widest mb-2">📉 Mais reduziram</div>' + caiu.map(r => '<div class="flex justify-between py-1 text-xs"><span class="font-bold text-gray-700 dark:text-gray-300 truncate pr-2">' + r[0] + '</span>' + q3Seta(r[5]) + '</div>').join('') + '</div>';
+            html += '</div>';
+            document.getElementById('modal-q3-conteudo').innerHTML = html;
+        }
+
+        // CARD: NCG
+        function q3CardNCG() {
+            const ncg = q3Linhas('ncg');
+            const tot = q3AchaTotal(ncg, 4);
+            abrirModalQ3('🚨 NCG (Nota Zero) — ' + (tot !== null ? tot : '—'), 'Não conformidades graves por tipo e quem esteve envolvido', false);
+            const dados = ncg.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('TIPO') && !c.includes('TOTAL') && q3Num(r[4]) !== null; }).sort((a, b) => (q3Num(b[4]) || 0) - (q3Num(a[4]) || 0));
+            const max = Math.max.apply(null, dados.map(r => q3Num(r[4]) || 0).concat([1]));
+            let html = q3Panel('NCG por tipo', dados.map(r => q3Bar(r[0], (q3Num(r[4]) || 0) + '', (q3Num(r[4]) || 0) / max * 100, 'from-rose-500 to-red-400')).join(''), 'Ordenado por total no trimestre');
+            html += '<div class="mt-4 space-y-2">' + dados.map(r => '<div class="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20"><div class="flex justify-between items-center mb-1"><span class="font-bold text-sm text-gray-800 dark:text-white pr-2">' + r[0] + '</span><span class="font-mono font-black text-rose-400">' + (q3Num(r[4]) || 0) + '</span></div><div class="text-[11px] text-gray-600 dark:text-gray-400"><b>Envolvidos:</b> ' + (r[5] || '—') + '</div></div>').join('') + '</div>';
+            document.getElementById('modal-q3-conteudo').innerHTML = html;
+        }
+
+        // CARD: Analistas auditados
+        function q3CardAnalistas() {
+            const arr = q3AnalistasData();
+            abrirModalQ3('👥 Analistas auditados — ' + arr.length, 'Panorama dos analistas no trimestre', false);
+            const times = ['RET', 'SAC', 'BKO', '48H', 'SMS', 'OUTROS'];
+            const rot = { RET: 'Retenção', SAC: 'SAC', BKO: 'BKO', '48H': '48H', SMS: 'SMS', OUTROS: 'Sem classificação' };
+            const tot = arr.length || 1;
+            const porTime = times.map(t => { const q = arr.filter(a => a.time === t).length; return q ? q3Bar(rot[t], q + ' analistas', q / tot * 100, 'from-gexBlue to-gexCyan') : ''; }).join('');
+            const exc = arr.filter(a => a.media >= 90).length, bom = arr.filter(a => a.media >= 80 && a.media < 90).length, att = arr.filter(a => a.media >= 70 && a.media < 80).length, cri = arr.filter(a => a.media < 70).length;
+            let html = q3Panel('Por faixa de nota',
+                q3Bar('Excelente (≥90)', exc + '', exc / tot * 100, 'from-emerald-500 to-teal-400') + q3Bar('Bom (80–89)', bom + '', bom / tot * 100, 'from-amber-500 to-yellow-400') + q3Bar('Atenção (70–79)', att + '', att / tot * 100, 'from-orange-500 to-amber-400') + q3Bar('Crítico (<70)', cri + '', cri / tot * 100, 'from-rose-500 to-red-400'), '');
+            html += '<div class="mt-4">' + q3Panel('Por time (classificação aproximada)', porTime || '<p class="text-gray-500 text-xs">Sem classificação de time disponível</p>', 'Baseado na base de médias e nos destaques Nota 100') + '</div>';
+            document.getElementById('modal-q3-conteudo').innerHTML = html;
+        }
+
+        // CARD: Nota 100
+        function q3CardNota100() {
+            const n = q3Linhas('nota100');
+            const dados = n.filter(r => { const c = String(r[0] || '').toUpperCase(); return r[0] && !c.includes('ANALISTA') && !c.includes('TOTAL') && !c.includes('DIRETRIZ') && q3Num(r[4]) !== null; }).sort((a, b) => (q3Num(b[4]) || 0) - (q3Num(a[4]) || 0));
+            abrirModalQ3('🏆 Destaques Nota 100 — ' + dados.length, 'Analistas com mais notas máximas no trimestre', false);
+            const max = Math.max.apply(null, dados.map(r => q3Num(r[4]) || 0).concat([1]));
+            const bars = dados.map((r, i) => q3Bar((i + 1) + '. ' + r[0], (q3Num(r[4]) || 0) + ' · ' + q3FmtPct((q3Num(r[5]) || 0) * 100) + '%', (q3Num(r[4]) || 0) / max * 100, 'from-emerald-500 to-teal-400')).join('');
+            document.getElementById('modal-q3-conteudo').innerHTML = q3Panel('Ranking de notas 100', bars, 'Total de notas 100 (e % de notas 100 no período)');
+        }
+
+        // CARD: Ranking (melhor/pior) com filtros
+        function q3AbrirRanking(ordem) {
+            q3RankCtx = { ordem: ordem, n: 5, time: 'TODOS' };
+            abrirModalQ3(ordem === 'desc' ? '🥇 Melhores médias — Q3' : '⚠️ Menores médias — Q3', 'Ranking por média do trimestre · escolha a quantidade e o time', true);
+            q3RenderRankControles(); q3RenderRank();
+        }
+        function q3RenderRankControles() {
+            const times = ['TODOS', 'RET', 'SAC', 'BKO', '48H', 'SMS', 'OUTROS'];
+            const rot = { TODOS: 'Todos', RET: 'Retenção', SAC: 'SAC', BKO: 'BKO', '48H': '48H', SMS: 'SMS', OUTROS: 'Outros' };
+            const qtdBtns = [5, 10, 20, 'todos'].map(v => '<button onclick="q3RankSetN(\'' + v + '\')" class="px-3 py-1 rounded-lg text-[11px] font-bold transition-all ' + (String(q3RankCtx.n) === String(v) ? 'bg-emerald-600 text-white shadow' : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-emerald-500/20') + '">' + (v === 'todos' ? 'Todos' : 'Top ' + v) + '</button>').join('');
+            const timeBtns = times.map(t => '<button onclick="q3RankSetTime(\'' + t + '\')" class="px-3 py-1 rounded-lg text-[11px] font-bold transition-all ' + (q3RankCtx.time === t ? 'bg-gexBlue text-white shadow' : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gexCyan/20') + '">' + rot[t] + '</button>').join('');
+            document.getElementById('modal-q3-controles').innerHTML = '<div class="flex flex-wrap items-center gap-2"><span class="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-1">Quantidade</span>' + qtdBtns + '<input type="number" min="1" placeholder="nº" onchange="q3RankSetN(this.value)" class="w-16 bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-white/10 rounded-lg px-2 py-1 text-[11px] outline-none focus:border-gexCyan"><div class="w-px h-5 bg-gray-300 dark:bg-white/10 mx-1"></div><span class="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-1">Time</span>' + timeBtns + '</div>';
+        }
+        function q3RankSetN(v) { q3RankCtx.n = (v === 'todos' || v === 'Todos' || v === '') ? 'todos' : (parseInt(v) || 5); q3RenderRankControles(); q3RenderRank(); }
+        function q3RankSetTime(t) { q3RankCtx.time = t; q3RenderRankControles(); q3RenderRank(); }
+        function q3RenderRank() {
+            let arr = q3AnalistasData();
+            if (q3RankCtx.time !== 'TODOS') arr = arr.filter(a => a.time === q3RankCtx.time);
+            arr.sort((a, b) => q3RankCtx.ordem === 'desc' ? b.media - a.media : a.media - b.media);
+            const n = q3RankCtx.n === 'todos' ? arr.length : q3RankCtx.n;
+            const lista = arr.slice(0, n);
+            if (!lista.length) { document.getElementById('modal-q3-conteudo').innerHTML = '<p class="text-gray-500 text-center py-10 font-bold">Nenhum analista neste time.</p>'; return; }
+            const rows = lista.map((a, i) => {
+                const pos = q3RankCtx.ordem === 'desc' ? (i < 3 ? ['🥇', '🥈', '🥉'][i] : (i + 1) + 'º') : (i + 1) + 'º';
+                return '<div class="flex items-center justify-between p-3 rounded-xl bg-white/40 dark:bg-black/10 border border-gray-100 dark:border-white/5 hover:border-gexCyan/40 transition-colors"><div class="flex items-center gap-3 min-w-0"><span class="text-sm font-black text-gray-400 w-8 text-center">' + pos + '</span><div class="min-w-0"><div class="text-sm font-bold text-gray-800 dark:text-white truncate">' + a.nome + ' <span class="text-[9px]">' + q3TimeBadge(a.time) + '</span></div><div class="text-[10px] text-gray-500">Jul ' + q3FmtNota(a.jul) + ' · Ago ' + q3FmtNota(a.ago) + ' · Set ' + q3FmtNota(a.set) + '</div></div></div><div class="text-right shrink-0 ml-3"><div class="text-xl font-black font-mono ' + q3Cor(a.media) + '">' + q3FmtNota(a.media) + '</div><div class="text-[10px]">' + q3Seta(a.evol) + '</div></div></div>';
+            }).join('');
+            const resumo = '<div class="text-[11px] text-gray-500 mb-3">Mostrando <b class="text-gexCyan">' + lista.length + '</b> de ' + arr.length + ' analista(s)' + (q3RankCtx.time !== 'TODOS' ? ' do time <b>' + q3RankCtx.time + '</b>' : '') + '.</div>';
+            document.getElementById('modal-q3-conteudo').innerHTML = resumo + '<div class="space-y-2">' + rows + '</div>';
+        }
+
+        // VIEW: Produtos (via Reembolsos por Plataforma, período Q3)
+        async function carregarReembQ3() {
+            const c = document.getElementById('q3-container'); if (!c) return;
+            if (dadosQ3Reemb) { renderQ3ProdutosReal(); return; }
+            c.innerHTML = q3Loading('Carregando reembolsos do trimestre...');
+            const since = Math.floor(new Date(2026, 6, 1, 0, 0, 0).getTime() / 1000);
+            const until = Math.floor(new Date(2026, 8, 30, 23, 59, 59).getTime() / 1000);
+            try {
+                const r = await fetch('/api/reembolsos-pagamerican?since=' + since + '&until=' + until).then(x => x.json()).catch(() => ({ success: false }));
+                dadosQ3Reemb = (r && r.success) ? (r.dados || []) : [];
+                renderQ3ProdutosReal();
+            } catch (e) { c.innerHTML = q3Erro(e.message); }
+        }
+        function renderQ3ProdutosReal() {
+            const c = document.getElementById('q3-container'); if (!c) return;
+            const dados = dadosQ3Reemb || [];
+            if (!dados.length) { c.innerHTML = q3Panel('📦 Produtos mais reembolsados — Q3', '<p class="text-gray-500 text-sm">Nenhum reembolso encontrado no período (01/07 a 30/09/2026).</p>', 'Fonte: Reembolsos por Plataforma (Chatwoot + log)'); return; }
+            const prod = {}; let totalReemb = 0;
+            dados.forEach(ag => (ag.detalhes || []).forEach(d => { totalReemb++; let p = (d.produto || 'Não informado').trim() || 'Não informado'; prod[p] = (prod[p] || 0) + 1; }));
+            const prodArr = Object.keys(prod).map(k => ({ nome: k, q: prod[k] })).sort((a, b) => b.q - a.q);
+            const anaArr = dados.slice().sort((a, b) => b.total_reembolsos - a.total_reembolsos);
+            const kpis = '<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">' +
+                q3KPI('', 'Reembolsos no Q3', totalReemb, '01/07 a 30/09', 'text-orange-400') +
+                q3KPI('', 'Produtos distintos', prodArr.length, 'reembolsados', 'text-gexCyan') +
+                q3KPI('', 'Analistas', anaArr.length, 'fizeram reembolso', 'text-gray-800 dark:text-white') +
+                q3KPI('', 'Top produto', prodArr[0] ? prodArr[0].q : '—', prodArr[0] ? prodArr[0].nome : '', 'text-orange-400') + '</div>';
+            const maxP = Math.max.apply(null, prodArr.map(p => p.q).concat([1]));
+            const barsP = prodArr.slice(0, 20).map(p => q3Bar(p.nome, p.q + ' reembolso' + (p.q > 1 ? 's' : ''), p.q / maxP * 100, 'from-orange-500 to-amber-400')).join('');
+            const maxA = Math.max.apply(null, anaArr.map(a => a.total_reembolsos).concat([1]));
+            const barsA = anaArr.slice(0, 20).map((a, i) => q3Bar((i + 1) + '. ' + a.agente_nome, a.total_reembolsos + ' reembolso' + (a.total_reembolsos > 1 ? 's' : ''), a.total_reembolsos / maxA * 100, 'from-gexBlue to-gexCyan')).join('');
+            c.innerHTML = kpis + '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">' + q3Panel('📦 Produtos mais reembolsados', barsP, 'Contagem de reembolsos por produto (Q3)') + q3Panel('🧑‍💼 Analistas que mais reembolsaram', barsA, 'Ranking por total de reembolsos (Q3)') + '</div>';
         }
 
         async function carregarQualidade(mes = '') {
@@ -2431,7 +2945,228 @@
         }
 
 
-        async function exportarStatusCasos() {
+        // ===== ADIAR CASOS (SNOOZE) — ADMIN =====
+        let dadosAdiar = null, filtroAdiarSetor = 'TODOS', filtroAdiarFaixa = 'TODAS';
+        let agentesSelAdiar = new Set();
+
+        async function carregarAdiar() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            const tb = document.getElementById('tabela-adiar-body');
+            if (tb && !dadosAdiar) tb.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-gray-500 font-bold">Carregando...</td></tr>`;
+            try {
+                const resp = await fetch('/api/casos-para-adiar?fresh=1');
+                const data = await resp.json();
+                if (data.success) { dadosAdiar = data; agentesSelAdiar.clear(); renderTabelaAdiar(); }
+            } catch (e) { console.error(e); }
+        }
+
+        function filtrarAdiar(setor) {
+            filtroAdiarSetor = setor; agentesSelAdiar.clear();
+            ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b => {
+                const btn = document.getElementById(`btn-f-adiar-${b}`);
+                if (btn) btn.className = `btn-setor ${b===setor?'btn-setor-ativo':'btn-setor-inativo'}`;
+            });
+            renderTabelaAdiar();
+        }
+        function filtrarAdiarFaixa(faixa) {
+            filtroAdiarFaixa = faixa;
+            ['TODAS','MENOS24','24A48','MAIS48'].forEach(b => {
+                const btn = document.getElementById(`btn-fx-adiar-${b}`);
+                if (btn) btn.className = `btn-setor ${b===faixa?'btn-setor-ativo':'btn-setor-inativo'}`;
+            });
+            renderTabelaAdiar();
+        }
+
+        function listaAdiarPorSetor() {
+            const casos = (dadosAdiar && dadosAdiar.casos) ? dadosAdiar.casos : [];
+            return filtroAdiarSetor==='TODOS' ? casos : casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroAdiarSetor}`));
+        }
+        function qtdNaFaixaAdiar(a) {
+            if (filtroAdiarFaixa==='MENOS24') return a.retornos||0;
+            if (filtroAdiarFaixa==='24A48') return a.aguardando||0;
+            if (filtroAdiarFaixa==='MAIS48') return a.fora_sla||0;
+            return a.total||0;
+        }
+        function agentesAlvoAdiar() {
+            let lista = listaAdiarPorSetor();
+            if (agentesSelAdiar.size>0) lista = lista.filter(a => agentesSelAdiar.has(a.nome));
+            return lista.filter(a => qtdNaFaixaAdiar(a) > 0);
+        }
+        function totalAdiarSelecionado() {
+            return agentesAlvoAdiar().reduce((s,a)=>s+qtdNaFaixaAdiar(a),0);
+        }
+        function textoBotaoAdiar() {
+            const t = totalAdiarSelecionado();
+            return t>0 ? `🌙 Adiar ${t} caso${t>1?'s':''}` : '🌙 Adiar casos';
+        }
+        function atualizarBotaoAdiar() {
+            const btn = document.getElementById('btn-acao-adiar');
+            if (btn) btn.innerHTML = textoBotaoAdiar();
+        }
+        function toggleAgenteAdiar(nome, checked) {
+            if (checked) agentesSelAdiar.add(nome); else agentesSelAdiar.delete(nome);
+            atualizarBotaoAdiar();
+        }
+        function toggleTodosAdiar(el) {
+            const vis = listaAdiarPorSetor().filter(a => qtdNaFaixaAdiar(a)>0).map(a=>a.nome);
+            if (el.checked) vis.forEach(n=>agentesSelAdiar.add(n)); else vis.forEach(n=>agentesSelAdiar.delete(n));
+            document.querySelectorAll('.chk-adiar').forEach(c => { c.checked = el.checked; });
+            atualizarBotaoAdiar();
+        }
+
+        function renderTabelaAdiar() {
+            const tb=document.getElementById('tabela-adiar-body'), tf=document.getElementById('tabela-adiar-foot');
+            const badge=document.getElementById('adiar-badge-total'), chkTodos=document.getElementById('chk-adiar-todos');
+            if (!tb||!tf||!dadosAdiar) return;
+            const lista = listaAdiarPorSetor();
+            atualizarBotaoAdiar();
+            if (badge) {
+                if (dadosAdiar.token_ok===false) badge.innerHTML=`<span class="text-red-500">⚠️ Configurar o token do Chatwoot no servidor (.env: CHATWOOT_API_TOKEN)</span>`;
+                else badge.innerHTML=`${dadosAdiar.total_geral||0} caso(s) aguardando resposta do cliente · <span class="text-emerald-500">última mensagem enviada pelo AGENTE</span>`;
+            }
+            if (chkTodos) chkTodos.checked=false;
+            if (!lista.length) { tb.innerHTML=`<tr><td colspan="7" class="py-6 text-center text-gray-500 font-bold">Nenhum caso neste filtro. 🎉</td></tr>`; tf.innerHTML=''; return; }
+            let tR=0,tA=0,tF=0,tG=0;
+            tb.innerHTML = lista.map(a=>{
+                tR+=a.retornos||0; tA+=a.aguardando||0; tF+=a.fora_sla||0; tG+=qtdNaFaixaAdiar(a);
+                const checked = agentesSelAdiar.has(a.nome)?'checked':'';
+                const rMenos = filtroAdiarFaixa==='MENOS24'?'ring-1 ring-gexBlue/40 rounded':'';
+                const r2448 = filtroAdiarFaixa==='24A48'?'ring-1 ring-gexBlue/40 rounded':'';
+                const rMais = filtroAdiarFaixa==='MAIS48'?'ring-1 ring-gexBlue/40 rounded':'';
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-3 px-3 pl-4 text-center"><input type="checkbox" class="chk-adiar w-4 h-4 accent-gexBlue cursor-pointer align-middle" data-nome="${a.nome}" ${checked} onclick="toggleAgenteAdiar('${a.nome}', this.checked)"></td>
+                    <td class="py-3 px-3 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.retornos>0?'text-emerald-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'} ${rMenos}">${a.retornos||0}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.aguardando>0?'text-yellow-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'} ${r2448}">${a.aguardando||0}</td>
+                    <td class="py-3 px-3 text-center font-mono ${a.fora_sla>0?'text-red-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'} ${rMais}">${a.fora_sla||0}</td>
+                    <td class="py-3 px-3 text-center font-mono font-black text-[15px] text-gexCyan">${qtdNaFaixaAdiar(a)}</td>
+                    <td class="py-3 px-3 text-center pr-4"><button onclick="abrirModalAdiar('${a.nome}')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap border border-white/5">👁️ Ver Tickets</button></td>
+                </tr>`;
+            }).join('');
+            tf.innerHTML = `
+                <tr>
+                    <td class="bg-transparent"></td>
+                    <td class="py-4 px-3 font-black text-gray-800 dark:text-white uppercase tracking-widest text-xs bg-transparent">Total Filtrado</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-emerald-500 text-[15px] bg-transparent">${tR}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-yellow-500 text-[15px] bg-transparent">${tA}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-red-500 text-[15px] bg-transparent">${tF}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-gexCyan text-lg bg-transparent">${tG}</td>
+                    <td class="bg-transparent"></td>
+                </tr>`;
+        }
+
+        function abrirModalAdiar(nomeAgente) {
+            if (!dadosAdiar||!dadosAdiar.casos) return;
+            const agente = dadosAdiar.casos.find(a=>a.nome===nomeAgente);
+            if (!agente) return;
+            document.getElementById('modal-casos-titulo').innerText = `Casos a Adiar: ${agente.nome}`;
+            let html = `<div class="mb-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">✓ Todos os casos abaixo têm a ÚLTIMA mensagem enviada pelo agente (aguardando resposta do cliente).</div><div class="space-y-3">`;
+            if (agente.detalhes && agente.detalhes.length) {
+                agente.detalhes.slice().sort((a,b)=>a.ordem-b.ordem).forEach(tk=>{
+                    const url=`https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
+                    let cor='bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+                    if (tk.status.includes('< 24h')) cor='bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
+                    if (tk.status.includes('24-48h')) cor='bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
+                    if (tk.status.includes('+48h')) cor='bg-red-500/10 text-red-500 border border-red-500/30';
+                    const preview=(tk.ultima_msg_preview||'').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                    html+=`
+                    <div class="p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/5">
+                        <div class="flex items-center justify-between gap-3 mb-2">
+                            <div class="min-w-0"><div class="font-bold text-sm text-gray-800 dark:text-white truncate">${tk.cliente}</div><div class="text-[11px] text-gray-500 dark:text-gray-400">#${tk.id} · parado há ${tk.horas_parado}h</div></div>
+                            <div class="flex items-center gap-2 shrink-0"><span class="px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${cor}">${tk.status}</span><a href="${url}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1.5 rounded-full transition-colors whitespace-nowrap">Abrir ↗</a></div>
+                        </div>
+                        <div class="text-[11px] bg-white dark:bg-black/20 rounded-lg p-2 border border-gray-100 dark:border-white/5">
+                            <span class="inline-block px-1.5 py-0.5 rounded bg-gexBlue/10 text-gexBlue font-bold mr-1 whitespace-nowrap">🧑‍💼 ${tk.ultima_msg_por||'Agente'}</span>
+                            <span class="text-gray-600 dark:text-gray-300 italic">"${preview}"</span>
+                        </div>
+                    </div>`;
+                });
+            } else html+='<p class="text-gray-500 text-sm">Sem casos.</p>';
+            html+='</div>';
+            document.getElementById('modal-casos-conteudo').innerHTML=html;
+            document.getElementById('modal-casos').classList.remove('hidden');
+        }
+
+        // ---- Modal de opções de adiamento ----
+        function abrirOpcoesAdiar() {
+            if (usuarioAtual && usuarioAtual.role!=='admin') return;
+            if (!dadosAdiar||!dadosAdiar.casos) return alert('Carregue os casos primeiro.');
+            if (dadosAdiar.token_ok===false) return alert('O token do Chatwoot ainda não foi configurado no servidor (.env: CHATWOOT_API_TOKEN).');
+            const alvos = agentesAlvoAdiar(); const total = totalAdiarSelecionado();
+            if (total===0) return alert('Nenhum caso para adiar neste filtro/seleção.');
+            const faixaTxt = {TODAS:'todas as faixas de tempo', MENOS24:'menos de 24h', '24A48':'24–48h', MAIS48:'mais de 48h'}[filtroAdiarFaixa];
+            const escopo = agentesSelAdiar.size>0 ? `${alvos.length} agente(s) selecionado(s)` : (filtroAdiarSetor==='TODOS'?'todos os times':`time ${filtroAdiarSetor}`);
+            document.getElementById('adiar-opcoes-resumo').innerHTML = `Você vai adiar <b class="text-gexCyan">${total} caso(s)</b> de <b>${escopo}</b> · <b>${faixaTxt}</b>.`;
+            document.getElementById('adiar-custom').classList.add('hidden');
+            document.getElementById('modal-adiar-opcoes').classList.remove('hidden');
+        }
+        function fecharOpcoesAdiar(){ document.getElementById('modal-adiar-opcoes').classList.add('hidden'); }
+        function mostrarCustomAdiar(){ document.getElementById('adiar-custom').classList.remove('hidden'); const el=document.getElementById('adiar-custom-valor'); if(el) el.focus(); }
+        function executarAdiamentoCustom(){
+            const v=parseInt(document.getElementById('adiar-custom-valor').value,10);
+            const u=document.getElementById('adiar-custom-unidade').value;
+            if (!v||v<=0) return alert('Digite um número válido.');
+            executarAdiamento('custom', v, u);
+        }
+
+        async function executarAdiamento(modo, valor, unidade) {
+            const alvos = agentesAlvoAdiar();
+            const nomes = alvos.map(a=>a.nome);
+            const total = totalAdiarSelecionado();
+            if (total===0) return alert('Nenhum caso para adiar.');
+            const rotulo = {'1h':'por 1 hora','1d':'por 1 dia','proxima':'até a próxima resposta','custom':`por ${valor} ${unidade}`}[modo];
+            if (!confirm(`⚠️ Confirmar\n\nAdiar ${total} caso(s) ${rotulo}?\n\nCada caso reabre automaticamente quando o cliente responder.`)) return;
+            fecharOpcoesAdiar();
+            const btn=document.getElementById('btn-acao-adiar');
+            if (btn){btn.disabled=true;btn.innerHTML='🌙 Adiando...';}
+            try {
+                const resp = await fetch('/api/adiar-casos?_='+Date.now(), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agentes:nomes,faixa:filtroAdiarFaixa,modo,valor,unidade})});
+                const data = await resp.json();
+                if (!data.success) throw new Error(data.error||'Falha ao adiar.');
+                let msg=`✅ Adiados: ${data.ok}\n❌ Falhas: ${data.falhas}`;
+                if (data.falhas>0 && data.erros && data.erros.length) msg+=`\n\nPrimeiros erros:\n`+data.erros.slice(0,5).map(e=>`#${e.id}: ${e.erro}`).join('\n');
+                alert(msg);
+                setTimeout(()=>carregarAdiar(),800);
+            } catch(e){ alert('Erro: '+e.message); }
+            finally { if(btn){btn.disabled=false;setTimeout(()=>{btn.innerHTML=textoBotaoAdiar();},1200);} }
+        }
+
+        async function exportarAdiar() {
+            if (usuarioAtual && usuarioAtual.role!=='admin') return;
+            const alvos = agentesAlvoAdiar();
+            if (!alvos.length) return alert('Sem dados para exportar neste filtro/seleção.');
+            const passaFaixa = (h) => {
+                if (filtroAdiarFaixa==='MENOS24') return h<24;
+                if (filtroAdiarFaixa==='24A48') return h>=24&&h<=48;
+                if (filtroAdiarFaixa==='MAIS48') return h>48;
+                return true;
+            };
+            const AZUL='FF1B52AF', BRANCO='FFFFFFFF';
+            const wb = new ExcelJS.Workbook();
+            const ws = wb.addWorksheet('Casos a Adiar', {views:[{state:'frozen',ySplit:1}]});
+            ws.columns = [
+                {header:'Agente',key:'agente',width:26},{header:'Cliente',key:'cliente',width:26},
+                {header:'#ID',key:'id',width:9},{header:'Última Mensagem De',key:'por',width:20},
+                {header:'Prévia da Última Mensagem',key:'preview',width:55},{header:'Parado (h)',key:'horas',width:11},
+                {header:'Situação',key:'sit',width:12}
+            ];
+            alvos.forEach(a=>{
+                (a.detalhes||[]).filter(d=>passaFaixa(d.horas_parado)).forEach(d=>{
+                    ws.addRow({agente:a.nome,cliente:d.cliente,id:d.id,por:d.ultima_msg_por||'Agente',preview:d.ultima_msg_preview||'',horas:d.horas_parado,sit:(d.status||'').replace(/[^0-9A-Za-z<>+\- ]/g,'').trim()});
+                });
+            });
+            const wr = wb.addWorksheet('Resumo por Agente', {views:[{state:'frozen',ySplit:1}]});
+            wr.columns=[{header:'Agente',key:'nome',width:28},{header:'< 24h',key:'r',width:10},{header:'24-48h',key:'a',width:10},{header:'+48h',key:'f',width:10},{header:'A adiar',key:'t',width:10}];
+            alvos.forEach(a=>wr.addRow({nome:a.nome,r:a.retornos||0,a:a.aguardando||0,f:a.fora_sla||0,t:qtdNaFaixaAdiar(a)}));
+            [ws,wr].forEach(sheet=>{ sheet.getRow(1).eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:AZUL}};c.font={bold:true,color:{argb:BRANCO}};c.alignment={vertical:'middle'};}); sheet.getRow(1).height=20; });
+            const buf = await wb.xlsx.writeBuffer();
+            const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+            const url=URL.createObjectURL(blob); const link=document.createElement('a');
+            link.href=url; link.download=`Casos_Para_Adiar_${filtroAdiarSetor}_${filtroAdiarFaixa}.xlsx`; link.click(); URL.revokeObjectURL(url);
+        }
+
+                async function exportarStatusCasos() {
         if (!dadosDistribuicao || !dadosDistribuicao.casos || dadosDistribuicao.casos.length === 0) {
             return alert('Sem dados para exportar.');
         }
@@ -3980,6 +4715,28 @@ async function exportarExcelCartPanda() {
 
         let dadosTime48 = [];
         let calTime48 = null;
+
+        function abrirModalTime48(nomeAgente) {
+            const d = dadosTime48.find(x => x.agente === nomeAgente);
+            if (!d) return;
+            const tks = parseInt(d.tickets) || 0;
+            const rets = parseInt(d.retornos) || 0;
+            const taxa = tks > 0 ? ((rets / tks) * 100).toFixed(1) : '0';
+            document.getElementById('modal-t48-titulo').innerText = `Time 48h: ${d.agente}`;
+            const kpi = (label, valor, cor) => `<div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm"><div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">${label}</div><div class="text-2xl font-black font-mono ${cor}">${valor}</div></div>`;
+            let html = '<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">';
+            html += kpi('Tickets recebidos', tks, 'text-gray-800 dark:text-white');
+            html += kpi('Retornos', rets, 'text-orange-500');
+            html += kpi('Taxa de retorno', taxa + '%', 'text-orange-500');
+            html += kpi('Mensagens enviadas', parseInt(d.mensagens) || 0, 'text-gray-800 dark:text-white');
+            html += kpi('TMC 1º contato', formatarTempo(d.tmc_medio_minutos), 'text-emerald-500');
+            html += kpi('TMR média retorno', formatarTempo(d.tmr_medio_minutos), 'text-gexCyan');
+            html += '</div>';
+            html += '<p class="text-[11px] text-gray-400 mt-4">Métricas consolidadas da etiqueta <b>time-48h</b> para este agente no período selecionado.</p>';
+            document.getElementById('modal-t48-conteudo').innerHTML = html;
+            document.getElementById('modal-time48').classList.remove('hidden');
+        }
+        function fecharModalTime48() { document.getElementById('modal-time48').classList.add('hidden'); }
 
         function formatarTempo(minutos) {
             if (!minutos || isNaN(minutos) || minutos === 0) return '-';
