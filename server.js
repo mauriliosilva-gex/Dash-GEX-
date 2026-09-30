@@ -61,6 +61,7 @@ const queryTickets = `
     FROM messages m
     INNER JOIN users u ON u.id = m.sender_id
     WHERE m.sender_type = 'User'
+        AND m.account_id = 1
         AND m.message_type = 1
         AND m.private = FALSE
         AND m.content IS NOT NULL
@@ -1663,18 +1664,22 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
     try {
         // 1. LER O COFRE DO GOOGLE SHEETS
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
-        let logMap = {};
-        try {
-            const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
-            const _t = (await _r.text()).trim();
-            const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
-            if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
-                const tk = String(l.ticket || l[0] || '').trim();
-                if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
-                const dl = new Date(l.data_hora || l[1]);
-                logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
-            });
-        } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+        // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
+        const _pLog = (async () => {
+            let logMap = {};
+            try {
+                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+                const _t = (await _r.text()).trim();
+                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
+                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                    const tk = String(l.ticket || l[0] || '').trim();
+                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
+                    const dl = new Date(l.data_hora || l[1]);
+                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+                });
+            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+            return logMap;
+        })();
 
         // 2. FILTRO DE DATAS DO PAINEL
         let dInicio, dFim;
@@ -1721,7 +1726,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const result = await pool.query(q, [dCorteSQL]);
+        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (NODE.JS FAZ O TRABALHO PESADO)
         const resumoAgentes = {};
@@ -1900,18 +1905,22 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
     try {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
-        let logMap = {};
-        try {
-            const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
-            const _t = (await _r.text()).trim();
-            const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
-            if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
-                const tk = String(l.ticket || l[0] || '').trim();
-                if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
-                const dl = new Date(l.data_hora || l[1]);
-                logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
-            });
-        } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+        // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
+        const _pLog = (async () => {
+            let logMap = {};
+            try {
+                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+                const _t = (await _r.text()).trim();
+                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
+                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                    const tk = String(l.ticket || l[0] || '').trim();
+                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
+                    const dl = new Date(l.data_hora || l[1]);
+                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+                });
+            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+            return logMap;
+        })();
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -1958,7 +1967,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const result = await pool.query(q, [dCorteSQL]);
+        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -2019,18 +2028,22 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
     try {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
-        let logMap = {};
-        try {
-            const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
-            const _t = (await _r.text()).trim();
-            const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
-            if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
-                const tk = String(l.ticket || l[0] || '').trim();
-                if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
-                const dl = new Date(l.data_hora || l[1]);
-                logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
-            });
-        } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+        // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
+        const _pLog = (async () => {
+            let logMap = {};
+            try {
+                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+                const _t = (await _r.text()).trim();
+                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
+                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                    const tk = String(l.ticket || l[0] || '').trim();
+                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
+                    const dl = new Date(l.data_hora || l[1]);
+                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+                });
+            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+            return logMap;
+        })();
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -2077,7 +2090,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const result = await pool.query(q, [dCorteSQL]);
+        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -2462,7 +2475,7 @@ app.get('/api/raio-x-perf', (req, res) => {
             intervalo_min: 15,
             rotas: ROTAS_WARM
         },
-        pool: { em_uso: pool.totalCount - pool.idleCount, livres: pool.idleCount, total: pool.totalCount, fila: pool.waitingCount, max: 4 },
+        pool: { em_uso: pool.totalCount - pool.idleCount, livres: pool.idleCount, total: pool.totalCount, fila: pool.waitingCount, max: (pool.options && pool.options.max) || 10 },
         cache: cache
     });
 });
