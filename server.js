@@ -584,7 +584,10 @@ app.get('/api/qualidade', async (req, res) => {
             ];
             
             // A ordem importa! 48H e SMS são lidos primeiro para evitar conflito com "SAC - SMS"
-            if (setorRaw.includes('48H') || nomes48H.some(n => nomeFormatado.includes(n))) {
+            // Adaptacao (novatos): setor da planilha "Adaptacao - Retencao - Email" tem prioridade sobre o resto
+            if (setorRaw.includes('ADAPTA')) {
+                siglaSetor = 'ADAPTACAO';
+            } else if (setorRaw.includes('48H') || nomes48H.some(n => nomeFormatado.includes(n))) {
                 siglaSetor = '48H';
             } else if (setorRaw.includes('SMS') || nomesSMS.some(n => nomeFormatado.includes(n))) {
                 siglaSetor = 'SMS';
@@ -1823,7 +1826,33 @@ app.get('/api/time48', async (req, res) => {
         ORDER BY total_tickets DESC;
         `;
         const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
-        res.json({ success: true, dados: result.rows });
+
+        // Lista de tickets por agente (para o "Ver Tickets" abrir as conversas, igual aos demais paineis)
+        const qDetalhes = `
+            SELECT DISTINCT
+                COALESCE(u.name, 'SEM ATRIBUIR') AS agente,
+                c.display_id,
+                c.id AS conv_id,
+                ct.name AS cliente
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
+            LEFT JOIN tags tg ON tg.id = t.tag_id
+            WHERE c.account_id = 1
+              AND tg.name ILIKE '%time-48h%'
+              AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+            ORDER BY c.display_id DESC;
+        `;
+        const detResult = await pool.query(qDetalhes, [dataInicioSQL, dataFimSQL]);
+        const detalhesPorAgente = {};
+        detResult.rows.forEach(r => {
+            if (!detalhesPorAgente[r.agente]) detalhesPorAgente[r.agente] = [];
+            detalhesPorAgente[r.agente].push({ id: r.display_id || r.conv_id, cliente: r.cliente || 'Cliente sem nome' });
+        });
+        const dados = result.rows.map(r => ({ ...r, detalhes: detalhesPorAgente[r.agente] || [] }));
+        res.json({ success: true, dados: dados });
     } catch (error) { 
         console.error("Erro Time 48h:", error);
         res.status(500).json({ success: false, error: error.message }); 
