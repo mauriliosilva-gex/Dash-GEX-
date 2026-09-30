@@ -748,6 +748,7 @@
                                 <button id="btn-qual-BKO" onclick="filtrarQualidade('BKO')" class="btn-setor btn-setor-inativo">BackOffice</button>
                                 <button id="btn-qual-SMS" onclick="filtrarQualidade('SMS')" class="btn-setor btn-setor-inativo">SMS</button>
                                 <button id="btn-qual-48H" onclick="filtrarQualidade('48H')" class="btn-setor btn-setor-inativo">48H</button>
+                                <button id="btn-qual-ADAPTACAO" onclick="filtrarQualidade('ADAPTACAO')" class="btn-setor btn-setor-inativo">Adaptação</button>
                             </div>
                         </div>
                         
@@ -2333,7 +2334,7 @@
 
         function filtrarQualidade(setor) {
             setorQualAtivo = setor;
-            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => {
+            ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H', 'ADAPTACAO'].forEach(b => {
                 const btn = document.getElementById(`btn-qual-${b}`);
                 if (btn) { btn.classList.remove(b===setor?'btn-setor-inativo':'btn-setor-ativo'); btn.classList.add(b===setor?'btn-setor-ativo':'btn-setor-inativo'); }
             });
@@ -4719,20 +4720,26 @@ async function exportarExcelCartPanda() {
         function abrirModalTime48(nomeAgente) {
             const d = dadosTime48.find(x => x.agente === nomeAgente);
             if (!d) return;
-            const tks = parseInt(d.tickets) || 0;
-            const rets = parseInt(d.retornos) || 0;
-            const taxa = tks > 0 ? ((rets / tks) * 100).toFixed(1) : '0';
             document.getElementById('modal-t48-titulo').innerText = `Time 48h: ${d.agente}`;
-            const kpi = (label, valor, cor) => `<div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm"><div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">${label}</div><div class="text-2xl font-black font-mono ${cor}">${valor}</div></div>`;
-            let html = '<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">';
-            html += kpi('Tickets recebidos', tks, 'text-gray-800 dark:text-white');
-            html += kpi('Retornos', rets, 'text-orange-500');
-            html += kpi('Taxa de retorno', taxa + '%', 'text-orange-500');
-            html += kpi('Mensagens enviadas', parseInt(d.mensagens) || 0, 'text-gray-800 dark:text-white');
-            html += kpi('TMC 1º contato', formatarTempo(d.tmc_medio_minutos), 'text-emerald-500');
-            html += kpi('TMR média retorno', formatarTempo(d.tmr_medio_minutos), 'text-gexCyan');
+            let html = '<div class="space-y-3">';
+            if (d.detalhes && d.detalhes.length > 0) {
+                d.detalhes.forEach(tk => {
+                    const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
+                    html += `
+                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                            <p class="text-sm font-black text-gray-800 dark:text-white">${tk.cliente}</p>
+                            <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${tk.id}</p>
+                        </div>
+                        <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                            Abrir Conversa ↗️
+                        </a>
+                    </div>`;
+                });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket encontrado neste período.</p>';
+            }
             html += '</div>';
-            html += '<p class="text-[11px] text-gray-400 mt-4">Métricas consolidadas da etiqueta <b>time-48h</b> para este agente no período selecionado.</p>';
             document.getElementById('modal-t48-conteudo').innerHTML = html;
             document.getElementById('modal-time48').classList.remove('hidden');
         }
