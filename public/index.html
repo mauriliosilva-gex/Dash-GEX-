@@ -1401,17 +1401,9 @@
                 document.getElementById('header-user-role').innerText = usuarioAtual.role === 'admin' ? 'Coordenador / Gestão' : 'Visão Analista';
                 
                 configurarPermissoes();
-                // 1º acesso do dia (por navegador) carrega TUDO; nos demais loads do dia, so a aba aberta recarrega
-                const _hojeStr = new Date().toLocaleDateString('en-CA');
-                let _primeiroDoDia = true;
-                try { _primeiroDoDia = localStorage.getItem('dashCargaDia') !== _hojeStr; } catch (e) {}
-                if (_primeiroDoDia) {
-                    try { localStorage.setItem('dashCargaDia', _hojeStr); } catch (e) {}
-                    carregarTudo();
-                    const _t0 = Date.now(); REFRESH_POR_TELA.forEach(([id]) => { _ultRefreshTela[id] = _t0; });
-                } else {
-                    setTimeout(tocarTelaAberta, 80);
-                }
+                // Toda abertura do Dash carrega TUDO de uma vez (como antes); depois cada tela se atualiza sozinha no ciclo dela (sem refresh cego de tudo)
+                carregarTudo();
+                const _t0 = Date.now(); REFRESH_POR_TELA.forEach(([id]) => { _ultRefreshTela[id] = _t0; });
             } catch (e) { console.error("Erro auth", e); }
         }
 
