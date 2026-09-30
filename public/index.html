@@ -2783,14 +2783,25 @@
 
         // ===== Helpers de export moderno (dashboard) =====
         function chunkSemanasMes(dias) {
+            if (!dias || dias.length === 0) return [];
+            // Semana comeca na SEGUNDA (ISO). Se o mes comeca no meio da semana, a(s) coluna(s)
+            // antes do dia 1 (ex.: a segunda) entram em branco. Vai ate o ultimo dia do mes.
+            const fmt = dt => dt.toISOString().split('T')[0];
+            const primeiro = new Date(dias[0] + 'T12:00:00Z');
+            const ultimo = new Date(dias[dias.length - 1] + 'T12:00:00Z');
+            const cursor = new Date(primeiro.getTime());
+            const wd = cursor.getUTCDay();                    // 0=Dom,1=Seg,...,6=Sab
+            cursor.setUTCDate(cursor.getUTCDate() - (wd === 0 ? 6 : wd - 1)); // recua ate a segunda-feira
             const semanas = [];
-            (dias || []).forEach(ds => {
-                const dia = parseInt(ds.split('-')[2], 10);
-                const idx = Math.min(Math.floor((dia - 1) / 7), 4);
-                if (!semanas[idx]) semanas[idx] = { nome: `Semana ${idx + 1}`, datas: [] };
-                semanas[idx].datas.push(ds);
-            });
-            return semanas.filter(Boolean);
+            while (cursor <= ultimo) {
+                const idx = semanas.length;
+                semanas.push({ nome: `Semana ${idx + 1}`, datas: [] });
+                for (let i = 0; i < 7 && cursor <= ultimo; i++) {
+                    semanas[idx].datas.push(fmt(cursor));
+                    cursor.setUTCDate(cursor.getUTCDate() + 1);
+                }
+            }
+            return semanas;
         }
         function rotuloData(ds) {
             const p = ds.split('-');
@@ -2897,50 +2908,53 @@
                 const resp = await fetch('/api/tickets-diario' + (window._perTkGeral || ''));
                 const data = await resp.json();
                 if (!data.success) return alert('Erro: ' + (data.error || ''));
-                let agentes = data.agentes || [];
-                if (filtroTkGeralSetor !== 'TODOS') agentes = agentes.filter(a => (a.nome||'').toUpperCase().includes(`- ${filtroTkGeralSetor}`));
-                if (agentes.length === 0) return alert('Sem dados para exportar.');
+                const todosAgentes = data.agentes || [];
+                if (todosAgentes.length === 0) return alert('Sem dados para exportar.');
                 const semanas = chunkSemanasMes(data.dias);
                 const NAVY='FF0A2540', BRANCO='FFFFFFFF', BANDA='FFF4F7FB', TOTSEM='FFE8F0FE', GRAND='FFFFF2CC';
                 const tints=['FF1B52AF','FF0EA5E9','FF2563EB','FF0891B2','FF4F46E5'];
                 const wb=new ExcelJS.Workbook();
-                const ws=wb.addWorksheet('Tickets por Dia',{views:[{state:'frozen',xSplit:1,ySplit:4}]});
-
-                let totalCols=1; semanas.forEach(s=>{ totalCols += s.datas.length + 1; }); totalCols += 2;
-                ws.getColumn(1).width=30; let cw=2;
-                semanas.forEach(s=>{ s.datas.forEach(()=>{ ws.getColumn(cw).width=9; cw++; }); ws.getColumn(cw).width=11; cw++; });
-                ws.getColumn(cw).width=13; ws.getColumn(cw+1).width=11;
-
-                ws.mergeCells(1,1,1,totalCols); const t=ws.getCell(1,1); t.value='DASH GEX  ·  TICKETS POR DIA (Mensagens Enviadas)'; estiloTitulo(t,NAVY,BRANCO); ws.getRow(1).height=30;
-                ws.mergeCells(2,1,2,totalCols); const sub=ws.getCell(2,1); const periodo=`${data.dias[0].split('-').reverse().join('/')} a ${data.dias[data.dias.length-1].split('-').reverse().join('/')}`; sub.value=`Período: ${periodo}   ·   Filtro: ${filtroTkGeralSetor}   ·   Gerado em ${new Date().toLocaleDateString('pt-BR')}`; sub.font={italic:true,size:10,color:{argb:'FF64748B'}}; sub.alignment={indent:1}; ws.getRow(2).height=18;
-
-                ws.mergeCells(3,1,4,1); estiloHeaderCel(ws.getCell(3,1),NAVY,BRANCO); ws.getCell(3,1).value='Analista';
-                let col=2;
-                semanas.forEach((s,si)=>{
-                    const tint=tints[si%tints.length]; const span=s.datas.length+1;
-                    ws.mergeCells(3,col,3,col+span-1); const d1=s.datas[0].split('-'),d2=s.datas[s.datas.length-1].split('-'); const gh=ws.getCell(3,col); gh.value=`${s.nome}   (${d1[2]}/${d1[1]} – ${d2[2]}/${d2[1]})`; estiloHeaderCel(gh,tint,BRANCO);
-                    s.datas.forEach(ds=>{ const c=ws.getCell(4,col); c.value=rotuloData(ds); estiloHeaderCel(c,tint,BRANCO,9); col++; });
-                    const ct=ws.getCell(4,col); ct.value='Total'; estiloHeaderCel(ct,'FF334155',BRANCO,9); col++;
-                });
-                ws.mergeCells(3,col,4,col); const cg=ws.getCell(3,col); cg.value='TOTAL'; estiloHeaderCel(cg,'FFB45309',BRANCO); col++;
-                ws.mergeCells(3,col,4,col); const cm=ws.getCell(3,col); cm.value='Meta %'; estiloHeaderCel(cm,'FF334155',BRANCO);
-
-                let r=5;
-                agentes.forEach((a,ai)=>{
-                    const band=ai%2===1; let cc=1;
-                    const cn=ws.getCell(r,cc); cn.value=a.nome; cn.font={bold:true,size:11,color:{argb:'FF1E293B'}}; cn.alignment={indent:1,vertical:'middle'}; if(band)cn.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++;
-                    let totalGeral=0;
-                    semanas.forEach(s=>{
-                        let totSem=0;
-                        s.datas.forEach(ds=>{ const v=(a.porDia&&a.porDia[ds])||0; totSem+=v; const c=ws.getCell(r,cc); c.value=v||null; c.alignment={horizontal:'center'}; c.font={size:10,color:{argb:v?'FF334155':'FFCBD5E1'}}; if(band)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++; });
-                        totalGeral+=totSem; const ct=ws.getCell(r,cc); ct.value=totSem; ct.alignment={horizontal:'center'}; ct.font={bold:true,size:10,color:{argb:'FF1B52AF'}}; ct.fill={type:'pattern',pattern:'solid',fgColor:{argb:TOTSEM}}; cc++;
+                const periodo=`${data.dias[0].split('-').reverse().join('/')} a ${data.dias[data.dias.length-1].split('-').reverse().join('/')}`;
+                function montarAbaTime(nomeAba, agentes, rotuloFiltro) {
+                    if (!agentes || agentes.length === 0) return;
+                    const ws=wb.addWorksheet(nomeAba,{views:[{state:'frozen',xSplit:1,ySplit:4}]});
+                    let totalCols=1; semanas.forEach(s=>{ totalCols += s.datas.length + 1; }); totalCols += 2;
+                    ws.getColumn(1).width=30; let cw=2;
+                    semanas.forEach(s=>{ s.datas.forEach(()=>{ ws.getColumn(cw).width=9; cw++; }); ws.getColumn(cw).width=11; cw++; });
+                    ws.getColumn(cw).width=13; ws.getColumn(cw+1).width=11;
+                    ws.mergeCells(1,1,1,totalCols); const t=ws.getCell(1,1); t.value='DASH GEX  ·  TICKETS POR DIA (Mensagens Enviadas)'; estiloTitulo(t,NAVY,BRANCO); ws.getRow(1).height=30;
+                    ws.mergeCells(2,1,2,totalCols); const sub=ws.getCell(2,1); sub.value=`Período: ${periodo}   ·   Filtro: ${rotuloFiltro}   ·   Gerado em ${new Date().toLocaleDateString('pt-BR')}`; sub.font={italic:true,size:10,color:{argb:'FF64748B'}}; sub.alignment={indent:1}; ws.getRow(2).height=18;
+                    ws.mergeCells(3,1,4,1); estiloHeaderCel(ws.getCell(3,1),NAVY,BRANCO); ws.getCell(3,1).value='Analista';
+                    let col=2;
+                    semanas.forEach((s,si)=>{
+                        const tint=tints[si%tints.length]; const span=s.datas.length+1;
+                        ws.mergeCells(3,col,3,col+span-1); const d1=s.datas[0].split('-'),d2=s.datas[s.datas.length-1].split('-'); const gh=ws.getCell(3,col); gh.value=`${s.nome}   (${d1[2]}/${d1[1]} – ${d2[2]}/${d2[1]})`; estiloHeaderCel(gh,tint,BRANCO);
+                        s.datas.forEach(ds=>{ const c=ws.getCell(4,col); c.value=rotuloData(ds); estiloHeaderCel(c,tint,BRANCO,9); col++; });
+                        const ct=ws.getCell(4,col); ct.value='Total'; estiloHeaderCel(ct,'FF334155',BRANCO,9); col++;
                     });
-                    const cG=ws.getCell(r,cc); cG.value=totalGeral; cG.alignment={horizontal:'center'}; cG.font={bold:true,size:12,color:{argb:'FF7C2D12'}}; cG.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRAND}}; cc++;
-                    const meta=Math.min(Math.round((totalGeral/400)*100),100); const cMe=ws.getCell(r,cc); cMe.value=meta/100; cMe.numFmt='0%'; cMe.alignment={horizontal:'center'}; const corMeta=meta>=90?'FF16A34A':meta>=70?'FFCA8A04':'FFDC2626'; cMe.font={bold:true,size:11,color:{argb:corMeta}}; if(band)cMe.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}};
-                    ws.getRow(r).height=20; r++;
+                    ws.mergeCells(3,col,4,col); const cg=ws.getCell(3,col); cg.value='TOTAL'; estiloHeaderCel(cg,'FFB45309',BRANCO); col++;
+                    ws.mergeCells(3,col,4,col); const cm=ws.getCell(3,col); cm.value='Meta %'; estiloHeaderCel(cm,'FF334155',BRANCO);
+                    let r=5;
+                    agentes.forEach((a,ai)=>{
+                        const band=ai%2===1; let cc=1;
+                        const cn=ws.getCell(r,cc); cn.value=a.nome; cn.font={bold:true,size:11,color:{argb:'FF1E293B'}}; cn.alignment={indent:1,vertical:'middle'}; if(band)cn.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++;
+                        let totalGeral=0;
+                        semanas.forEach(s=>{
+                            let totSem=0;
+                            s.datas.forEach(ds=>{ const v=(a.porDia&&a.porDia[ds])||0; totSem+=v; const c=ws.getCell(r,cc); c.value=v||null; c.alignment={horizontal:'center'}; c.font={size:10,color:{argb:v?'FF334155':'FFCBD5E1'}}; if(band)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}}; cc++; });
+                            totalGeral+=totSem; const ct=ws.getCell(r,cc); ct.value=totSem; ct.alignment={horizontal:'center'}; ct.font={bold:true,size:10,color:{argb:'FF1B52AF'}}; ct.fill={type:'pattern',pattern:'solid',fgColor:{argb:TOTSEM}}; cc++;
+                        });
+                        const cG=ws.getCell(r,cc); cG.value=totalGeral; cG.alignment={horizontal:'center'}; cG.font={bold:true,size:12,color:{argb:'FF7C2D12'}}; cG.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRAND}}; cc++;
+                        const meta=Math.min(Math.round((totalGeral/400)*100),100); const cMe=ws.getCell(r,cc); cMe.value=meta/100; cMe.numFmt='0%'; cMe.alignment={horizontal:'center'}; const corMeta=meta>=90?'FF16A34A':meta>=70?'FFCA8A04':'FFDC2626'; cMe.font={bold:true,size:11,color:{argb:corMeta}}; if(band)cMe.fill={type:'pattern',pattern:'solid',fgColor:{argb:BANDA}};
+                        ws.getRow(r).height=20; r++;
+                    });
+                    aplicarBordas(ws,3,1,r-1,totalCols);
+                }
+                montarAbaTime('Geral', todosAgentes, 'TODOS');
+                [['RET','Retenção'],['SAC','SAC'],['BKO','BackOffice'],['SMS','SMS'],['48H','48H']].forEach(([sig,nomeAba])=>{
+                    const ag = todosAgentes.filter(a => (a.nome||'').toUpperCase().includes(`- ${sig}`));
+                    montarAbaTime(nomeAba, ag, sig);
                 });
-                aplicarBordas(ws,3,1,r-1,totalCols);
-
                 await baixarWB(wb, `Tickets_Geral_Diario_${new Date().toISOString().split('T')[0]}.xlsx`);
             } catch(e){ console.error(e); alert('Erro ao gerar o Excel.'); }
         }
