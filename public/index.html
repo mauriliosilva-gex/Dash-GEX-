@@ -210,6 +210,12 @@
                     Resultados (Retenção)
                 </a>
 
+                <!-- RAIO-X DE DESEMPENHO (exclusivo por e-mail) -->
+                <a id="lnk-raiox" data-menu-id="raiox" onclick="registrarClique('raiox'); mudarAba('raiox'); ativarMenu('raiox'); fecharSidebarMobile();" class="sidebar-link" style="display:none">
+                    <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    🩻 Raio-X (Desempenho)
+                </a>
+
                 <!-- PASTA: CHATWOOT & IA -->
                 <div class="pt-2">
                     <button onclick="toggleMenuPasta('pasta-cw')" class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all group shadow-sm">
@@ -1189,6 +1195,16 @@
             </div>
         </div>
 
+        <div id="aba-raiox" class="hidden space-y-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-[12px] font-black uppercase tracking-wider text-gray-800 dark:text-white">🩻 Raio-X de Desempenho</h3>
+                    <p class="text-[10px] font-bold text-gray-500 mt-1">Saúde das otimizações do Dash — acesso exclusivo</p>
+                </div>
+                <button onclick="carregarRaioXPerf()" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Atualizar</button>
+            </div>
+            <div id="raiox-conteudo" class="space-y-4"></div>
+        </div>
     </main>
 
     <!-- MODAL SINALIZAÇÕES -->
@@ -1356,6 +1372,8 @@
         // 🔒 Adiar Casos: aba exclusiva de um e-mail (mais ninguém vê nem acessa)
         const EMAILS_ADIAR = ['maurilio.silva@institutoexperience.com.br'];
         function podeVerAdiar() { return !!(usuarioAtual && EMAILS_ADIAR.includes(String(usuarioAtual.email || '').toLowerCase())); }
+        const EMAILS_RAIOX = ['maurilio.silva@institutoexperience.com.br'];
+        function podeVerRaioX() { return !!(usuarioAtual && EMAILS_RAIOX.includes(String(usuarioAtual.email || '').toLowerCase())); }
 
         // ===== Fechar QUALQUER modal: tecla Esc ou clique fora do card =====
         function fecharTodosModais() {
@@ -1383,7 +1401,17 @@
                 document.getElementById('header-user-role').innerText = usuarioAtual.role === 'admin' ? 'Coordenador / Gestão' : 'Visão Analista';
                 
                 configurarPermissoes();
-                carregarTudo();
+                // 1º acesso do dia (por navegador) carrega TUDO; nos demais loads do dia, so a aba aberta recarrega
+                const _hojeStr = new Date().toLocaleDateString('en-CA');
+                let _primeiroDoDia = true;
+                try { _primeiroDoDia = localStorage.getItem('dashCargaDia') !== _hojeStr; } catch (e) {}
+                if (_primeiroDoDia) {
+                    try { localStorage.setItem('dashCargaDia', _hojeStr); } catch (e) {}
+                    carregarTudo();
+                    const _t0 = Date.now(); REFRESH_POR_TELA.forEach(([id]) => { _ultRefreshTela[id] = _t0; });
+                } else {
+                    setTimeout(tocarTelaAberta, 80);
+                }
             } catch (e) { console.error("Erro auth", e); }
         }
 
@@ -1431,6 +1459,12 @@
             if (!podeVerAdiar()) {
                 const _lnkAdiar = document.querySelector('[data-menu-id="cw-adiar"]');
                 if (_lnkAdiar) _lnkAdiar.style.display = 'none';
+            }
+
+            // 🔒 Raio-X de Desempenho: link da sidebar aparece so pro e-mail autorizado
+            if (podeVerRaioX()) {
+                const _lnkRx = document.getElementById('lnk-raiox');
+                if (_lnkRx) _lnkRx.style.display = '';
             }
         }
 
@@ -1550,7 +1584,7 @@
         });
 
         function mudarAba(abaId) {
-            ['retencao', 'tickets', 'qualidade', 'chatwoot'].forEach(id => {
+            ['retencao', 'tickets', 'qualidade', 'chatwoot', 'raiox'].forEach(id => {
                 const elAba = document.getElementById(`aba-${id}`);
                 if(elAba) {
                     elAba.classList.add('hidden');
@@ -1574,6 +1608,8 @@
             }
             
             if (abaId === 'tickets' && !dadosDistribuicao && usuarioAtual && usuarioAtual.role === 'admin') carregarDistribuicao();
+            if (abaId === 'raiox' && podeVerRaioX()) carregarRaioXPerf();
+            setTimeout(tocarTelaAberta, 80);
         }
 
         function mudarSubAbaQual(aba) {
@@ -1591,6 +1627,7 @@
             if (aba === 'sinalizacoes' && dadosSinalizacoes.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') carregarSinalizacoes('');
             if (aba === 'monitoriatk' && dadosMonitoriaTk.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') carregarMonitoriaTk('');
             if (aba === 'q3' && !q3Carregado && usuarioAtual && usuarioAtual.role === 'admin') carregarQ3();
+            setTimeout(tocarTelaAberta, 80);
         }
 
         function mudarSubAbaCw(aba) {
@@ -1627,6 +1664,7 @@
             if (aba === 'adiar' && !dadosAdiar && podeVerAdiar()) {
                 carregarAdiar();
             }
+            setTimeout(tocarTelaAberta, 80);
         }
 
         function mudarSubAbaTk(aba) {
@@ -1669,6 +1707,7 @@
                 // Faz a requisição filtrada
                 carregarProdutividade(`?since=${Math.floor(ini.getTime() / 1000)}&until=${Math.floor(fim.getTime() / 1000)}`);
             }
+            setTimeout(tocarTelaAberta, 80);
         }
 
         let dadosAgentes = [], dadosQualidade = [], dadosSinalizacoes = [], dadosTkAtual = [], dadosTkSemanal = [], dadosTkGeral = [], dadosDistribuicao = null;
@@ -1708,30 +1747,90 @@
             setTimeout(() => { FORCAR_FRESH = false; }, 6000);
         }
 
+        async function carregarRaioXPerf() {
+            if (!podeVerRaioX()) return;
+            const cont = document.getElementById('raiox-conteudo');
+            if (!cont) return;
+            try {
+                const r = await fetch('/api/raio-x-perf');
+                const d = await r.json();
+                if (!d.success) { cont.innerHTML = '<p class="text-red-500 font-bold text-sm">' + (d.error || 'Erro') + '</p>'; return; }
+                const card = (t, c) => `<div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm">${t}${c}</div>`;
+                const w = d.warmer;
+                const wBadge = w.ativo ? '<span class="text-emerald-500 font-black">🟢 ATIVO</span>' : '<span class="text-gray-400 font-black">⚪ Dormindo (sem acesso recente)</span>';
+                const warmerHtml = card('<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Aquecedor (Warmer)</div>',
+                    `<div class="text-sm space-y-1"><div>Status: ${wBadge}</div><div>Último acesso real: <b>${w.ultimo_acesso_real_min == null ? '—' : w.ultimo_acesso_real_min + ' min atrás'}</b></div><div>Token no .env: ${w.token_configurado ? '✔️ sim' : '⚠️ não (usando padrão)'}</div><div>Revalida a cada <b>${w.intervalo_min} min</b> · ${w.rotas.length} rotas</div></div>`);
+                const p = d.pool;
+                const poolCor = p.fila > 0 ? 'text-red-500' : 'text-emerald-500';
+                const poolHtml = card('<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Pool de conexões</div>',
+                    `<div class="text-sm space-y-1"><div>Em uso: <b>${p.em_uso}</b> / ${p.max}</div><div>Livres: <b>${p.livres}</b></div><div>Na fila: <b class="${poolCor}">${p.fila}</b> ${p.fila > 0 ? '(banco ocupado!)' : '(saudável)'}</div></div>`);
+                let linhas = d.cache.map(c => `<tr class="border-t border-gray-200 dark:border-gray-800"><td class="py-2 px-3 font-mono text-[11px]">${c.rota}</td><td class="py-2 px-3 text-center font-mono">${c.idade_min} min</td><td class="py-2 px-3 text-center font-mono ${c.tempo_ms != null && c.tempo_ms > 3000 ? 'text-red-500 font-bold' : 'text-gray-600 dark:text-gray-300'}">${c.tempo_ms == null ? '—' : c.tempo_ms + ' ms'}</td></tr>`).join('');
+                if (!linhas) linhas = '<tr><td colspan="3" class="py-4 text-center text-gray-500 text-sm">Cache vazio (ninguém acessou ainda).</td></tr>';
+                const cacheHtml = card('<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Cache por rota (idade e tempo da última consulta)</div>',
+                    `<table class="w-full text-sm"><thead><tr class="text-[10px] text-gray-500 uppercase"><th class="py-1 px-3 text-left">Rota</th><th class="py-1 px-3 text-center">Idade do cache</th><th class="py-1 px-3 text-center">Tempo da consulta</th></tr></thead><tbody>${linhas}</tbody></table>`);
+                cont.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${warmerHtml}${poolHtml}</div>${cacheHtml}<p class="text-[10px] text-gray-400">Atualizado em ${new Date(d.gerado_em).toLocaleString('pt-BR')} · atualiza sozinho a cada 15s</p>`;
+            } catch (e) { cont.innerHTML = '<p class="text-red-500 font-bold text-sm">Falha ao carregar o Raio-X.</p>'; }
+        }
+        // Auto-refresh POR TELA ABERTA: cada visao so recarrega quando esta na tela (nao recarrega abas fechadas).
+        // Admin: Status de Casos / Caixas / Tickets Atual so pelo botao Atualizar · Agente: Tickets Atual 15min · Demais: 20min · so com o navegador visivel.
+        const REFRESH_POR_TELA = [
+            ['tela-tk-atual',          () => carregarTickets(''),        900000],
+            ['tela-tk-casos',          () => carregarDistribuicao(),     900000],
+            ['tela-tk-distribuicao',   () => carregarDistribuicao(),     900000],
+            ['aba-retencao',           () => carregarDadosReais(''),     1200000],
+            ['tela-tk-semanal',        () => carregarTicketsSemanal(window._perVisaoMensal || '', diasFiltroSemanal || 7), 1200000],
+            ['tela-tk-geral',          () => carregarTicketsGeral(window._perTkGeral || ''), 1200000],
+            ['tela-tk-prod',           () => carregarProdutividade(''),  1200000],
+            ['tela-cw-recorrencia',    () => carregarRecorrencia(),      1200000],
+            ['tela-cw-tabulacao',      () => carregarProdutosMetricas(), 1200000],
+            ['tela-cw-mencoes',        () => carregarMencoesAbertos(),   1200000],
+            ['tela-cw-reembolsos',     () => { carregarPagAmerican(''); carregarBuyGoods(''); carregarCartPanda(''); }, 1200000],
+            ['tela-cw-time48',         () => carregarTime48(''),         1200000],
+            ['tela-qual-monitoria',    () => carregarQualidade(''),      1200000],
+            ['tela-qual-sinalizacoes', () => carregarSinalizacoes(''),   1200000],
+            ['tela-qual-monitoriatk',  () => carregarMonitoriaTk(''),    1200000]
+        ];
+        const _ultRefreshTela = {};
+        function tocarTelaAberta() {
+            const agora = Date.now();
+            const _ehAdmin = !!(usuarioAtual && usuarioAtual.role === 'admin');
+            for (const [id, fn, ms] of REFRESH_POR_TELA) {
+                const el = document.getElementById(id);
+                if (!el || el.offsetParent === null) continue;
+                // Admin: Tickets Atual / Status de Casos / Caixas so atualizam pelo botao Atualizar (carregam 1x ao entrar); Tickets Atual do agente reatualiza a cada 15min
+                if (['tela-tk-atual', 'tela-tk-casos', 'tela-tk-distribuicao'].includes(id) && _ehAdmin && _ultRefreshTela[id] !== undefined) continue;
+                if (_ultRefreshTela[id] === undefined || agora - _ultRefreshTela[id] >= ms) {
+                    _ultRefreshTela[id] = agora;
+                    try { fn(); } catch (e) {}
+                }
+            }
+        }
         function carregarTudo() {
-            carregarDadosReais(''); 
-            carregarQualidade(''); 
-            carregarTickets(''); 
-            carregarTicketsGeral('');
-            
+            const fila = [
+                () => carregarDadosReais(''),
+                () => carregarQualidade(''),
+                () => carregarTickets(''),
+                () => carregarTicketsGeral('')
+            ];
             const selectMesSemanal = document.getElementById('mes-tickets-semanais');
-            if (selectMesSemanal && selectMesSemanal.value) {
-                gerarBotoesSemanas(selectMesSemanal.value);
+            if (selectMesSemanal && selectMesSemanal.value) fila.push(() => gerarBotoesSemanas(selectMesSemanal.value));
+            if (usuarioAtual && usuarioAtual.role === 'admin') {
+                fila.push(
+                    () => carregarSinalizacoes(''),
+                    () => carregarRecorrencia(),
+                    () => carregarProdutosMetricas(),
+                    () => carregarMencoesAbertos(),
+                    () => carregarMonitoriaTk(''),
+                    () => carregarPagAmerican(''),
+                    () => carregarTime48(''),
+                    () => carregarDistribuicao(),
+                    () => carregarProdutividade(''),
+                    () => carregarBuyGoods(''),
+                    () => carregarCartPanda('')
+                );
             }
-
-            if(usuarioAtual && usuarioAtual.role === 'admin') {
-                carregarSinalizacoes('');
-                carregarRecorrencia();
-                carregarProdutosMetricas();
-                carregarMencoesAbertos(); 
-                carregarMonitoriaTk('');
-                carregarPagAmerican(''); 
-                carregarTime48('');
-                carregarDistribuicao();
-                carregarProdutividade('');
-                carregarBuyGoods('');
-                carregarCartPanda('');
-            }
+            // B: escalona 1 rota a cada 300ms pra nao disparar tudo de uma vez (sem rajada no Postgres do Chatwoot)
+            fila.forEach((fn, i) => setTimeout(() => { try { fn(); } catch (e) {} }, i * 300));
         }
 
         // 🔄 Atualiza SOMENTE a aba/visão aberta agora (dados ao vivo). Admin-only.
@@ -5028,7 +5127,14 @@ async function exportarExcelCartPanda() {
             // Chama a inteligência do menu
             atualizarHotMenu();
             iniciarApp();
-            setInterval(carregarTudo, 15 * 60 * 1000);
+            // Auto-refresh POR TELA ABERTA: verifica a cada 20s e recarrega so a visao aberta que passou do intervalo.
+            setInterval(() => { if (!document.hidden) tocarTelaAberta(); }, 20 * 1000);
+            // Raio-X (Desempenho): atualiza a cada 15s so com a aba aberta e visivel
+            setInterval(() => {
+                if (document.hidden || !podeVerRaioX()) return;
+                const el = document.getElementById('aba-raiox');
+                if (el && !el.classList.contains('hidden')) carregarRaioXPerf();
+            }, 15 * 1000);
         });
     </script>
 </body>
