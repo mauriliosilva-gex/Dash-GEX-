@@ -10,6 +10,7 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const { Pool } = require('pg');
+const http = require('http'); // F: usado pelo aquecedor de cache interno
 
 const app = express();
 
@@ -42,7 +43,12 @@ const pool = new Pool({
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
-    ssl: false // SSL desligado conforme configurado
+    ssl: false, // SSL desligado conforme configurado
+    max: 10,                      // teto de conexoes do Dash (equilibra protecao do Chatwoot x carga da 1a leitura)
+    statement_timeout: 45000,     // mata query travada (com folga p/ as consultas pesadas legitimas)
+    idleTimeoutMillis: 10000,     // fecha conexao ociosa em 10s (evita reusar conexao ja derrubada pelo servidor)
+    connectionTimeoutMillis: 30000, // tolerancia p/ pegar conexao sob carga (evita "connection timeout")
+    keepAlive: true               // mantem o TCP vivo (evita "connection terminated unexpectedly")
 });
 
 // 🔥 OTIMIZAÇÃO EXTREMA: Query direta usando os índices do banco de dados (ignorando excluídos/privados)
@@ -186,6 +192,7 @@ app.get('/api/me', verificarLogin, (req, res) => {
 // 4.5. SISTEMA DE CACHE INTELIGENTE BLINDADO (Anti-DoS)
 // ==========================================
 let cacheMemoria = {};
+let tempoRotas = {}; // ultimo tempo (ms) de cada rota — alimenta o Raio-X de Desempenho
 const MAX_CACHE_KEYS = 200; // Trava de segurança para impedir estouro de RAM
 
 const cacheMiddleware = (req, res, next) => {
@@ -200,6 +207,8 @@ const cacheMiddleware = (req, res, next) => {
         const qs = u.searchParams.toString();
         chaveUrl = u.pathname + (qs ? '?' + qs : '');
     } catch (e) { chaveUrl = req.originalUrl; }
+
+    if (chaveUrl.includes('/api/raio-x-perf')) return next(); // Raio-X de Desempenho: sempre ao vivo, nunca cacheado
 
     // 🛡️ PROTEÇÃO DoS: Se o cache inchar de forma anormal, limpa a memória
     if (Object.keys(cacheMemoria).length > MAX_CACHE_KEYS) {
@@ -222,6 +231,7 @@ const cacheMiddleware = (req, res, next) => {
     res.json = function(dados) {
         if (dados && dados.success) {
             cacheMemoria[chaveUrl] = { tempo: agora, data: dados };
+            tempoRotas[chaveUrl] = Date.now() - agora;
             console.log(`🔄 Dados Atualizados e Cache Salvo (${tempoCacheMinutos}m): ${chaveUrl}`);
         }
         sendJsonOriginal.call(this, dados);
@@ -294,6 +304,20 @@ app.post('/hook/snooze/:token', express.json({ limit: '3mb' }), async (req, res)
     }
 });
 
+// F: aquecedor de cache (warmer) — revalida em background as rotas pesadas do Postgres, sem o admin esperar.
+// Requisicao interna (localhost + token) finge um admin so-leitura; o ultimoAcessoApi so conta acesso REAL.
+const WARM_TOKEN = process.env.WARM_TOKEN || 'gex-warm-2026-interno';
+const EMAIL_ADM_WARM = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',')[0].trim();
+let ultimoAcessoApi = 0;
+app.use('/api', (req, res, next) => {
+    if (req.headers['x-warm-token'] === WARM_TOKEN) {
+        req.user = { emails: [{ value: EMAIL_ADM_WARM }], role: 'admin' };
+        req.isAuthenticated = () => true;
+    } else {
+        ultimoAcessoApi = Date.now();
+    }
+    next();
+});
 app.use('/api', verificarLogin, cacheMiddleware);
 app.use(verificarLogin, express.static(path.join(__dirname, 'public')));
 
@@ -1061,12 +1085,9 @@ app.get('/api/produtividade', async (req, res) => {
             dataInicioSQL = unixParaYYYYMMDD(req.query.since); 
             dataFimSQL = unixParaYYYYMMDD(req.query.until);
         } else {
-            // 🔥 CORREÇÃO RESTAURADA: Busca os últimos 7 dias por padrão em vez de só "hoje"
+            // Padrao: apenas o DIA ATUAL (o calendario do painel permite escolher outras datas)
             const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-            const seteDiasAtras = new Date(agora);
-            seteDiasAtras.setDate(agora.getDate() - 7);
-            
-            dataInicioSQL = formatarDataSQL(seteDiasAtras); 
+            dataInicioSQL = formatarDataSQL(agora); 
             dataFimSQL = formatarDataSQL(agora);    
         }
 
@@ -1234,6 +1255,7 @@ app.get('/api/recorrencia', async (req, res) => {
             WHERE m.sender_type = 'Contact'
               AND m.message_type = 0
               AND m.account_id = 1 -- 🔥 A BALA DE PRATA: Filtrando apenas a conta real
+              AND m.created_at >= NOW() - INTERVAL '8 months' -- so os ultimos meses (a saida ja mostra 6); alivia a tabela messages
               AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE -- Ignora msgs apagadas
         ),
         Returns AS (
@@ -1664,6 +1686,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
             dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
             dFim = agora;
         }
+        const dCorte = new Date(dInicio); dCorte.setDate(dCorte.getDate() - 90); const dCorteSQL = dCorte.toISOString().slice(0, 10); // E: filtro de data movido pro banco (periodo + 90 dias de margem) — reduz o scan sem cortar resultado
 
         // 3. LER O BANCO DO CHATWOOT (100% LEITURA, SEM FILTRAR DATA AQUI)
         const q = `
@@ -1690,6 +1713,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         LEFT JOIN users u ON u.id = c.assignee_id
         LEFT JOIN contacts ct ON ct.id = c.contact_id
         WHERE c.account_id = 1
+          AND c.updated_at >= $1::timestamp
           AND (
               COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%']) OR
               COALESCE(ct.custom_attributes::text, '') ILIKE ANY(ARRAY['%pagamerican%', '%pagamerica%', '%pag american%', '%pag_american%'])
@@ -1697,7 +1721,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const result = await pool.query(q);
+        const result = await pool.query(q, [dCorteSQL]);
 
         // 4. CRUZAMENTO DE DADOS (NODE.JS FAZ O TRABALHO PESADO)
         const resumoAgentes = {};
@@ -1898,6 +1922,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
             dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
             dFim = agora;
         }
+        const dCorte = new Date(dInicio); dCorte.setDate(dCorte.getDate() - 90); const dCorteSQL = dCorte.toISOString().slice(0, 10); // E: filtro de data movido pro banco (periodo + 90 dias de margem) — reduz o scan sem cortar resultado
 
         // 3. LER O BANCO DO CHATWOOT (FILTRO BUYGOODS)
         const q = `
@@ -1924,6 +1949,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         LEFT JOIN users u ON u.id = c.assignee_id
         LEFT JOIN contacts ct ON ct.id = c.contact_id
         WHERE c.account_id = 1
+          AND c.updated_at >= $1::timestamp
           AND (
               -- 🔥 VARIAÇÕES DO BUYGOODS AQUI
               COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%buygoods%', '%buygods%']) OR
@@ -1932,7 +1958,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const result = await pool.query(q);
+        const result = await pool.query(q, [dCorteSQL]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -2015,6 +2041,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
             dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
             dFim = agora;
         }
+        const dCorte = new Date(dInicio); dCorte.setDate(dCorte.getDate() - 90); const dCorteSQL = dCorte.toISOString().slice(0, 10); // E: filtro de data movido pro banco (periodo + 90 dias de margem) — reduz o scan sem cortar resultado
 
         // 3. LER O BANCO DO CHATWOOT (FILTRO CARTPANDA)
         const q = `
@@ -2041,6 +2068,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         LEFT JOIN users u ON u.id = c.assignee_id
         LEFT JOIN contacts ct ON ct.id = c.contact_id
         WHERE c.account_id = 1
+          AND c.updated_at >= $1::timestamp
           AND (
               -- 🔥 VARIAÇÕES DO CARTPANDA AQUI
               COALESCE(c.custom_attributes::text, '') ILIKE ANY(ARRAY['%cartpanda%', '%cart panda%', '%cart_panda%', '%cart-panda%']) OR
@@ -2049,7 +2077,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const result = await pool.query(q);
+        const result = await pool.query(q, [dCorteSQL]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -2409,6 +2437,36 @@ app.get('/api/resumo-recorrencia', async (req, res) => {
     } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
 
+// 🔒 RAIO-X DE DESEMPENHO — acesso exclusivo por e-mail (configuravel via EMAILS_RAIOX)
+function ehDonoRaioX(req) {
+    const email = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const permitidos = (process.env.EMAILS_RAIOX || 'maurilio.silva@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    return permitidos.includes(email);
+}
+app.get('/api/raio-x-perf', (req, res) => {
+    if (!ehDonoRaioX(req)) return res.status(403).json({ success: false, error: 'Acesso restrito.' });
+    const agora = Date.now();
+    const cache = Object.keys(cacheMemoria).map(k => ({
+        rota: k,
+        idade_min: +((agora - cacheMemoria[k].tempo) / 60000).toFixed(1),
+        tempo_ms: (tempoRotas[k] != null) ? tempoRotas[k] : null
+    })).sort((a, b) => a.rota.localeCompare(b.rota));
+    const acesso_min = ultimoAcessoApi ? +((agora - ultimoAcessoApi) / 60000).toFixed(1) : null;
+    res.json({
+        success: true,
+        gerado_em: new Date().toISOString(),
+        warmer: {
+            token_configurado: !!process.env.WARM_TOKEN,
+            ativo: !!(ultimoAcessoApi && (agora - ultimoAcessoApi <= 20 * 60 * 1000)),
+            ultimo_acesso_real_min: acesso_min,
+            intervalo_min: 15,
+            rotas: ROTAS_WARM
+        },
+        pool: { em_uso: pool.totalCount - pool.idleCount, livres: pool.idleCount, total: pool.totalCount, fila: pool.waitingCount, max: 4 },
+        cache: cache
+    });
+});
+
 const PORT = process.env.PORT || 3003;
 
 // ==========================================
@@ -2739,3 +2797,21 @@ app.get('/api/q3-produtos', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
+
+// F: warmer — a cada 15min, se houve acesso REAL recente (<=20min), revalida em background as rotas pesadas
+// do Postgres (escalonado, 1 por vez). Se ninguem usou o Dash, nao roda (aguarda) — nao toca no Chatwoot.
+const ROTAS_WARM = ['/api/recorrencia', '/api/produtos-metricas', '/api/mencoes-abertos', '/api/produtividade', '/api/time48'];
+function aquecerRota(rota) {
+    return new Promise((resolve) => {
+        const rq = http.get({ host: '127.0.0.1', port: PORT, path: rota + '?fresh=1', headers: { 'x-warm-token': WARM_TOKEN } }, (r) => { r.resume(); r.on('end', resolve); });
+        rq.on('error', () => resolve());
+        rq.setTimeout(30000, () => { try { rq.destroy(); } catch (e) {} resolve(); });
+    });
+}
+setInterval(async () => {
+    if (Date.now() - ultimoAcessoApi > 20 * 60 * 1000) return; // ninguem usando o Dash -> aguarda
+    for (const rota of ROTAS_WARM) {
+        await aquecerRota(rota);
+        await new Promise(r => setTimeout(r, 800)); // escalona pra nao criar rajada no Postgres
+    }
+}, 15 * 60 * 1000);
