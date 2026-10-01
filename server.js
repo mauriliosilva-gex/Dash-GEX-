@@ -1010,7 +1010,8 @@ app.get('/api/distribuicao', async (req, res) => {
                         WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
                         WHEN t.name ILIKE '%sms%' THEN 'SMS'
                         ELSE 'OUTROS'
-                    END AS setor
+                    END AS setor,
+                    (i.name = 'Atendimento | Brasil') AS so_48h   -- caixa Brasil: entra aqui só pela etiqueta 48H
                 FROM conversations c
                 LEFT JOIN teams t ON t.id = c.team_id
                 LEFT JOIN inboxes i ON i.id = c.inbox_id
@@ -1026,7 +1027,8 @@ app.get('/api/distribuicao', async (req, res) => {
                 ct.name AS cliente,
                 oc.first_reply_created_at,
                 oc.last_activity_at,
-                oc.created_at
+                oc.created_at,
+                oc.so_48h
             FROM OpenConversations oc
             LEFT JOIN users u ON u.id = oc.assignee_id
             LEFT JOIN contacts ct ON ct.id = oc.contact_id
@@ -1043,9 +1045,6 @@ app.get('/api/distribuicao', async (req, res) => {
             if (!nomeAgente) {
                 if (siglaSetor === 'OUTROS') return;
                 nome = `SEM ATRIBUIR - ${siglaSetor}`;
-            } else if (siglaSetor === '48H') {
-                // Etiqueta do Time 48H (time-48h* / painel-do-pedido*) leva o caso pra aba 48H, seja qual for o time do agente
-                nome = nomeAgente.replace(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b.*$/, '').trim() + ' - 48H';
             } else {
                 // Time SÓ pelo nome do agente no Chatwoot. Entram apenas RET/SAC/BKO/SMS/48H;
                 // LD, PRD, BR e quem não tem sigla são ignorados.
@@ -1056,6 +1055,7 @@ app.get('/api/distribuicao', async (req, res) => {
                 nome = nomeAgente.replace(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b.*$/, '').trim() + ' - ' + sig;
             }
             
+            if (r.so_48h && !nome.endsWith(' - 48H')) return;   // caixa "Atendimento | Brasil": só conta no Time 48H; nos outros times continua fora, como antes
             if (!resCasosMap[nome]) resCasosMap[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
             
             const dataBaseParaSLA = r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at);
