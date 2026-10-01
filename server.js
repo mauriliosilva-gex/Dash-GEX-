@@ -44,12 +44,46 @@ const pool = new Pool({
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
     ssl: false, // SSL desligado conforme configurado
-    max: 10,                      // teto de conexoes do Dash (equilibra protecao do Chatwoot x carga da 1a leitura)
+    application_name: 'dash-gex', // identifica as conexoes do Dash no Postgres (pg_stat_activity)
+    max: 4,                       // teto de conexoes do Dash (reduzido de 10 p/ 4 em 01/10/2026 p/ nao pesar no banco do Chatwoot)
     statement_timeout: 45000,     // mata query travada (com folga p/ as consultas pesadas legitimas)
     idleTimeoutMillis: 10000,     // fecha conexao ociosa em 10s (evita reusar conexao ja derrubada pelo servidor)
     connectionTimeoutMillis: 30000, // tolerancia p/ pegar conexao sob carga (evita "connection timeout")
     keepAlive: true               // mantem o TCP vivo (evita "connection terminated unexpectedly")
 });
+
+// 🛡️ BLINDAGEM (01/10/2026) — o Dash só LÊ o banco do Chatwoot e não pode prejudicar o atendimento
+// 1) Conexão perdida (banco reiniciou/caiu): só registra no log. Sem isto o processo do Dash cai junto.
+pool.on('error', (err) => { console.error('⚠️ Pool do Postgres: conexão perdida (o Dash continua no ar):', err && err.message); });
+// 2) Freio: 3 falhas seguidas de banco (timeout/queda) => o Dash para de consultar por 3 min e as telas recebem o último dado guardado.
+const FREIO = { falhas: 0, ate: 0, acionamentos: 0, ultimo_erro: '', ultimo_acionamento: 0 };
+const FREIO_LIMITE = 3, FREIO_PAUSA_MS = 3 * 60 * 1000;
+function erroDeSaudeDoBanco(e) {
+    const cod = String((e && e.code) || ''), msg = String((e && e.message) || '').toLowerCase();
+    return ['57014', '57P01', '57P02', '57P03', '53300', '53400'].includes(cod) || cod.startsWith('08')
+        || ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'EHOSTUNREACH', 'ENETUNREACH'].includes(cod)
+        || msg.includes('timeout') || msg.includes('connection terminated') || msg.includes('too many clients');
+}
+const _poolQueryOriginal = pool.query.bind(pool);
+pool.query = function (...args) {
+    if (typeof args[args.length - 1] === 'function') return _poolQueryOriginal(...args);   // estilo callback: segue igual
+    if (Date.now() < FREIO.ate) {
+        const e = new Error('Banco do Chatwoot instável: o Dash pausou as consultas por alguns minutos para não sobrecarregar.');
+        e.code = 'FREIO_DASH';
+        return Promise.reject(e);
+    }
+    return _poolQueryOriginal(...args).then((r) => { FREIO.falhas = 0; return r; }, (e) => {
+        if (erroDeSaudeDoBanco(e)) {
+            FREIO.falhas += 1; FREIO.ultimo_erro = String((e && e.message) || e).slice(0, 160);
+            if (FREIO.falhas >= FREIO_LIMITE) {
+                FREIO.ate = Date.now() + FREIO_PAUSA_MS; FREIO.acionamentos += 1; FREIO.ultimo_acionamento = Date.now();
+                FREIO.falhas = FREIO_LIMITE - 1;   // depois da pausa, 1 falha nova já pausa de novo
+                console.warn(`🛑 Freio do banco ACIONADO por ${FREIO_PAUSA_MS / 60000} min — último erro: ${FREIO.ultimo_erro}`);
+            }
+        }
+        throw e;
+    });
+};
 
 // 🔥 OTIMIZAÇÃO EXTREMA: Query direta usando os índices do banco de dados (ignorando excluídos/privados)
 const queryTickets = `
@@ -196,6 +230,8 @@ let cacheMemoria = {};
 let tempoRotas = {}; // ultimo tempo (ms) de cada rota — alimenta o Raio-X de Desempenho
 const MAX_CACHE_KEYS = 200; // Trava de segurança para impedir estouro de RAM
 
+const emAndamento = {};          // 🛡️ consultas rodando agora (por URL) — quem pedir a mesma coisa espera e aproveita o resultado
+let consultasAproveitadas = 0, dadosGuardadosServidos = 0;
 const cacheMiddleware = (req, res, next) => {
     const agora = Date.now();
     // 🔄 Refresh manual (líder clicou Atualizar/Sincronizar/Recarregar): fura o cache e busca dados frescos.
@@ -228,6 +264,19 @@ const cacheMiddleware = (req, res, next) => {
         return res.json(cacheMemoria[chaveUrl].data);
     }
 
+    // 🛡️ A mesma consulta já está rodando (outra pessoa abriu a mesma tela agora): espera ela terminar e usa o mesmo resultado, sem rodar de novo no banco
+    if (req.method === 'GET' && emAndamento[chaveUrl]) {
+        consultasAproveitadas += 1;
+        return emAndamento[chaveUrl].then((d) => (d && d.success) ? res.json(d) : next()).catch(() => next());
+    }
+    let liberarEmAndamento = null;
+    if (req.method === 'GET') {
+        emAndamento[chaveUrl] = new Promise((resolve) => { liberarEmAndamento = resolve; });
+        const encerrar = () => { if (liberarEmAndamento) { const liberar = liberarEmAndamento; liberarEmAndamento = null; delete emAndamento[chaveUrl]; liberar(null); } };
+        res.on('finish', encerrar);
+        res.on('close', encerrar);
+    }
+
     const sendJsonOriginal = res.json;
     res.json = function(dados) {
         if (dados && dados.success) {
@@ -235,6 +284,15 @@ const cacheMiddleware = (req, res, next) => {
             tempoRotas[chaveUrl] = Date.now() - agora;
             console.log(`🔄 Dados Atualizados e Cache Salvo (${tempoCacheMinutos}m): ${chaveUrl}`);
         }
+        // 🛡️ GET que falhou por erro do servidor/banco e já tinha dado guardado: entrega o último dado bom (marcado) em vez do erro
+        if (!(dados && dados.success) && req.method === 'GET' && this.statusCode >= 500 && cacheMemoria[chaveUrl]) {
+            const idadeMin = Math.round((Date.now() - cacheMemoria[chaveUrl].tempo) / 60000);
+            dadosGuardadosServidos += 1;
+            console.warn(`🛟 Banco falhou — entregando o último dado bom (de ${idadeMin} min atrás): ${chaveUrl}`);
+            this.status(200);
+            dados = Object.assign({}, cacheMemoria[chaveUrl].data, { dados_guardados: true, dados_guardados_min: idadeMin });
+        }
+        if (liberarEmAndamento) { const liberar = liberarEmAndamento; liberarEmAndamento = null; delete emAndamento[chaveUrl]; liberar(dados); }
         sendJsonOriginal.call(this, dados);
     };
     next();
@@ -1793,11 +1851,13 @@ app.get('/api/time48', async (req, res) => {
             dataFimSQL = unixParaYYYYMMDD(req.query.until);
         } else {
             const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-            const dInicio = new Date(2000, 0, 1);   // sem data escolhida = todo o período
+            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);   // sem data escolhida = mês atual (do dia 1º até hoje); outro período pelo calendário
             dataInicioSQL = formatarDataSQL(dInicio);
             dataFimSQL = formatarDataSQL(agora);
         }
 
+        // 🛡️ Conversas com as etiquetas buscadas UMA vez: as consultas abaixo só leem essas conversas, sem varrer todas as conversas do Chatwoot
+        const idsTime = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')`)).rows.map(r => r.id);
         const q = `
         WITH CasosFiltrados AS (
             SELECT DISTINCT
@@ -1808,45 +1868,51 @@ app.get('/api/time48', async (req, res) => {
                 (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS primeira_resp_agente
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
-            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
-            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
-              AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')
+              AND c.id = ANY($3::bigint[])
               AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
         ),
-        StatsAgente AS (
-            SELECT 
+        PorTicket AS (
+            -- 🛡️ cada ticket é calculado UMA vez (antes os subselects de TMC/TMR rodavam de novo pra cada mensagem do ticket)
+            SELECT
+                cf.conv_id,
                 cf.agente,
-                COUNT(DISTINCT cf.conv_id) AS total_tickets,
-                COUNT(DISTINCT CASE WHEN m.message_type = 0 AND m.created_at > cf.primeira_resp_agente THEN cf.conv_id END) AS retornos,
-                COUNT(CASE WHEN m.message_type = 1 AND m.sender_type = 'User' AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE THEN m.id END) AS mensagens_enviadas,
-                
-                COALESCE(AVG(EXTRACT(EPOCH FROM (
+                GREATEST((SELECT COUNT(*) FROM messages mp WHERE mp.conversation_id = cf.conv_id AND mp.private = FALSE), 1) AS peso,
+                EXISTS (SELECT 1 FROM messages mt WHERE mt.conversation_id = cf.conv_id AND mt.private = FALSE AND mt.message_type = 0 AND mt.created_at > cf.primeira_resp_agente) AS teve_retorno,
+                (SELECT COUNT(*) FROM messages me WHERE me.conversation_id = cf.conv_id AND me.private = FALSE AND me.message_type = 1 AND me.sender_type = 'User' AND (me.content_attributes->>'deleted')::boolean IS NOT TRUE) AS msgs_enviadas,
+                EXTRACT(EPOCH FROM (
                     (SELECT MIN(m1.created_at) FROM messages m1 WHERE m1.conversation_id = cf.conv_id AND m1.message_type = 1 AND m1.private = FALSE) - cf.created_at
-                )::interval)) / 60, 0) AS tmc_minutos,
-                
-                COALESCE(AVG(
-                    (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
+                )::interval) AS tmc_seg,
+                (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
                     FROM messages msg
-                    JOIN messages resp ON resp.conversation_id = msg.conversation_id 
-                                      AND resp.message_type = 1 
-                                      AND resp.private = FALSE 
+                    JOIN messages resp ON resp.conversation_id = msg.conversation_id
+                                      AND resp.message_type = 1
+                                      AND resp.private = FALSE
                                       AND resp.created_at > msg.created_at
-                    WHERE msg.conversation_id = cf.conv_id 
-                      AND msg.message_type = 0 
+                    WHERE msg.conversation_id = cf.conv_id
+                      AND msg.message_type = 0
                       AND msg.private = FALSE
                       AND NOT EXISTS (
-                          SELECT 1 FROM messages m_mid 
-                          WHERE m_mid.conversation_id = msg.conversation_id 
-                            AND m_mid.created_at > msg.created_at 
+                          SELECT 1 FROM messages m_mid
+                          WHERE m_mid.conversation_id = msg.conversation_id
+                            AND m_mid.created_at > msg.created_at
                             AND m_mid.created_at < resp.created_at
                       )
-                    )
-                ) / 60, 0) AS tmr_minutos
+                ) AS tmr_seg
             FROM CasosFiltrados cf
-            LEFT JOIN messages m ON m.conversation_id = cf.conv_id AND m.private = FALSE
-            GROUP BY cf.agente
+        ),
+        StatsAgente AS (
+            -- mesmos números de antes: TMC e TMR seguem ponderados pela quantidade de mensagens públicas do ticket (como a média por mensagem fazia)
+            SELECT
+                agente,
+                COUNT(*) AS total_tickets,
+                COUNT(*) FILTER (WHERE teve_retorno) AS retornos,
+                SUM(msgs_enviadas)::bigint AS mensagens_enviadas,
+                COALESCE(SUM(tmc_seg * peso) / NULLIF(SUM(peso) FILTER (WHERE tmc_seg IS NOT NULL), 0) / 60, 0) AS tmc_minutos,
+                COALESCE(SUM(tmr_seg * peso) / NULLIF(SUM(peso) FILTER (WHERE tmr_seg IS NOT NULL), 0) / 60, 0) AS tmr_minutos
+            FROM PorTicket
+            GROUP BY agente
         )
         SELECT 
             agente,
@@ -1858,7 +1924,7 @@ app.get('/api/time48', async (req, res) => {
         FROM StatsAgente
         ORDER BY total_tickets DESC;
         `;
-        const result = await pool.query(q, [dataInicioSQL, dataFimSQL]);
+        const result = await pool.query(q, [dataInicioSQL, dataFimSQL, idsTime]);
 
         // Lista de tickets por agente (para o "Ver Tickets" abrir as conversas, igual aos demais paineis)
         const qDetalhes = `
@@ -1870,15 +1936,13 @@ app.get('/api/time48', async (req, res) => {
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
             LEFT JOIN contacts ct ON ct.id = c.contact_id
-            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
-            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
-              AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')
+              AND c.id = ANY($3::bigint[])
               AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
             ORDER BY c.display_id DESC;
         `;
-        const detResult = await pool.query(qDetalhes, [dataInicioSQL, dataFimSQL]);
+        const detResult = await pool.query(qDetalhes, [dataInicioSQL, dataFimSQL, idsTime]);
         const detalhesPorAgente = {};
         detResult.rows.forEach(r => {
             if (!detalhesPorAgente[r.agente]) detalhesPorAgente[r.agente] = [];
@@ -1890,14 +1954,12 @@ app.get('/api/time48', async (req, res) => {
             SELECT COALESCE(u.name, 'SEM ATRIBUIR') AS agente, COUNT(DISTINCT c.id) AS em_aberto
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
-            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
-            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
               AND c.status = 0
-              AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')
+              AND c.id = ANY($1::bigint[])
             GROUP BY 1;
         `;
-        const abResult = await pool.query(qAbertos);
+        const abResult = await pool.query(qAbertos, [idsTime]);
         const abertosPorAgente = {};
         abResult.rows.forEach(r => { abertosPorAgente[r.agente] = parseInt(r.em_aberto) || 0; });
         // Abertos criados fora do período escolhido: entram no "Ver Tickets" pra bater com a coluna Em Aberto
@@ -1910,16 +1972,14 @@ app.get('/api/time48', async (req, res) => {
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
             LEFT JOIN contacts ct ON ct.id = c.contact_id
-            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
-            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
               AND c.status = 0
-              AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')
+              AND c.id = ANY($3::bigint[])
               AND NOT (c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                    AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo')
             ORDER BY c.display_id DESC;
         `;
-        const foraResult = await pool.query(qAbertosFora, [dataInicioSQL, dataFimSQL]);
+        const foraResult = await pool.query(qAbertosFora, [dataInicioSQL, dataFimSQL, idsTime]);
         foraResult.rows.forEach(r => {
             if (!detalhesPorAgente[r.agente]) detalhesPorAgente[r.agente] = [];
             detalhesPorAgente[r.agente].push({ id: r.display_id || r.conv_id, cliente: r.cliente || 'Cliente sem nome', fora_periodo: true });
@@ -1940,13 +2000,12 @@ app.get('/api/time48', async (req, res) => {
                       WHERE t2.taggable_id = c.id AND t2.taggable_type = 'Conversation' AND (tg2.name ILIKE '%time-48h%' OR tg2.name ILIKE 'painel-do-pedido%')) AS etiquetas
                 FROM conversations c
                 WHERE c.account_id = 1
-                  AND EXISTS (SELECT 1 FROM taggings t JOIN tags tg ON tg.id = t.tag_id
-                              WHERE t.taggable_id = c.id AND t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%'))
+                  AND c.id = ANY($3::bigint[])
                   AND ((c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                     AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo') OR c.status = 0)
             ) x;
         `;
-        const infoResult = await pool.query(qInfo, [dataInicioSQL, dataFimSQL]);
+        const infoResult = await pool.query(qInfo, [dataInicioSQL, dataFimSQL, idsTime]);
         const infoPorId = {};
         infoResult.rows.forEach(r => {
             infoPorId[String(r.display_id || r.conv_id)] = {
@@ -1972,25 +2031,28 @@ app.get('/api/time48', async (req, res) => {
                     (SELECT MAX(mr.created_at) FROM messages mr WHERE mr.conversation_id = z.conv_id AND mr.message_type = 1 AND mr.private = FALSE
                        AND mr.sender_type = 'User' AND mr.created_at < z.primeiro_retorno_em) AS resp_antes_retorno
                 FROM (
+                  SELECT w.*,
+                    (SELECT MIN(mc.created_at) FROM messages mc WHERE mc.conversation_id = w.conv_id AND mc.message_type = 0 AND mc.private = FALSE
+                       AND mc.created_at > w.primeira_resp_sla) AS primeiro_retorno_em
+                  FROM (
                     SELECT
                         c.display_id,
                         c.id AS conv_id,
                         c.status,
                         c.created_at,
-                        (SELECT MIN(mc.created_at) FROM messages mc WHERE mc.conversation_id = c.id AND mc.message_type = 0 AND mc.private = FALSE
-                           AND mc.created_at > (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User')) AS primeiro_retorno_em,
+                        (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS primeira_resp_sla,
                         (SELECT MAX(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS ultima_resp_agente,
                         (SELECT MAX(mc.created_at) FROM messages mc WHERE mc.conversation_id = c.id AND mc.message_type = 0 AND mc.private = FALSE) AS ultima_msg_cliente
                     FROM conversations c
                     WHERE c.account_id = 1
-                      AND EXISTS (SELECT 1 FROM taggings t JOIN tags tg ON tg.id = t.tag_id
-                                  WHERE t.taggable_id = c.id AND t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%'))
+                      AND c.id = ANY($3::bigint[])
                       AND ((c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                         AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo') OR c.status = 0)
+                  ) w
                 ) z
             ) y;
         `;
-        const slaResult = await pool.query(qSla, [dataInicioSQL, dataFimSQL]);
+        const slaResult = await pool.query(qSla, [dataInicioSQL, dataFimSQL, idsTime]);
         const slaPorId = {};
         slaResult.rows.forEach(r => {
             slaPorId[String(r.display_id || r.conv_id)] = { aberto_ha_min: r.aberto_ha_min, retorno_cliente_min: r.retorno_cliente_min, aguardando_cliente_min: r.aguardando_cliente_min, cliente_esperando_min: r.cliente_esperando_min };
@@ -2046,6 +2108,8 @@ app.get('/api/time48-etiquetas', async (req, res) => {
             dataFimSQL = formatarDataSQL(agora);
         }
 
+        // 🛡️ Conversas com as etiquetas buscadas UMA vez: as consultas abaixo só leem essas conversas, sem varrer todas as conversas do Chatwoot
+        const idsSel = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND lower(tg.name) = ANY($1::text[])`, [etiquetas])).rows.map(r => r.id);
         const q = `
         WITH CasosFiltrados AS (
             SELECT DISTINCT
@@ -2056,45 +2120,51 @@ app.get('/api/time48-etiquetas', async (req, res) => {
                 (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS primeira_resp_agente
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
-            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
-            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
-              AND lower(tg.name) = ANY($3::text[])
+              AND c.id = ANY($3::bigint[])
               AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
         ),
-        StatsAgente AS (
-            SELECT 
+        PorTicket AS (
+            -- 🛡️ cada ticket é calculado UMA vez (antes os subselects de TMC/TMR rodavam de novo pra cada mensagem do ticket)
+            SELECT
+                cf.conv_id,
                 cf.agente,
-                COUNT(DISTINCT cf.conv_id) AS total_tickets,
-                COUNT(DISTINCT CASE WHEN m.message_type = 0 AND m.created_at > cf.primeira_resp_agente THEN cf.conv_id END) AS retornos,
-                COUNT(CASE WHEN m.message_type = 1 AND m.sender_type = 'User' AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE THEN m.id END) AS mensagens_enviadas,
-                
-                COALESCE(AVG(EXTRACT(EPOCH FROM (
+                GREATEST((SELECT COUNT(*) FROM messages mp WHERE mp.conversation_id = cf.conv_id AND mp.private = FALSE), 1) AS peso,
+                EXISTS (SELECT 1 FROM messages mt WHERE mt.conversation_id = cf.conv_id AND mt.private = FALSE AND mt.message_type = 0 AND mt.created_at > cf.primeira_resp_agente) AS teve_retorno,
+                (SELECT COUNT(*) FROM messages me WHERE me.conversation_id = cf.conv_id AND me.private = FALSE AND me.message_type = 1 AND me.sender_type = 'User' AND (me.content_attributes->>'deleted')::boolean IS NOT TRUE) AS msgs_enviadas,
+                EXTRACT(EPOCH FROM (
                     (SELECT MIN(m1.created_at) FROM messages m1 WHERE m1.conversation_id = cf.conv_id AND m1.message_type = 1 AND m1.private = FALSE) - cf.created_at
-                )::interval)) / 60, 0) AS tmc_minutos,
-                
-                COALESCE(AVG(
-                    (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
+                )::interval) AS tmc_seg,
+                (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
                     FROM messages msg
-                    JOIN messages resp ON resp.conversation_id = msg.conversation_id 
-                                      AND resp.message_type = 1 
-                                      AND resp.private = FALSE 
+                    JOIN messages resp ON resp.conversation_id = msg.conversation_id
+                                      AND resp.message_type = 1
+                                      AND resp.private = FALSE
                                       AND resp.created_at > msg.created_at
-                    WHERE msg.conversation_id = cf.conv_id 
-                      AND msg.message_type = 0 
+                    WHERE msg.conversation_id = cf.conv_id
+                      AND msg.message_type = 0
                       AND msg.private = FALSE
                       AND NOT EXISTS (
-                          SELECT 1 FROM messages m_mid 
-                          WHERE m_mid.conversation_id = msg.conversation_id 
-                            AND m_mid.created_at > msg.created_at 
+                          SELECT 1 FROM messages m_mid
+                          WHERE m_mid.conversation_id = msg.conversation_id
+                            AND m_mid.created_at > msg.created_at
                             AND m_mid.created_at < resp.created_at
                       )
-                    )
-                ) / 60, 0) AS tmr_minutos
+                ) AS tmr_seg
             FROM CasosFiltrados cf
-            LEFT JOIN messages m ON m.conversation_id = cf.conv_id AND m.private = FALSE
-            GROUP BY cf.agente
+        ),
+        StatsAgente AS (
+            -- mesmos números de antes: TMC e TMR seguem ponderados pela quantidade de mensagens públicas do ticket (como a média por mensagem fazia)
+            SELECT
+                agente,
+                COUNT(*) AS total_tickets,
+                COUNT(*) FILTER (WHERE teve_retorno) AS retornos,
+                SUM(msgs_enviadas)::bigint AS mensagens_enviadas,
+                COALESCE(SUM(tmc_seg * peso) / NULLIF(SUM(peso) FILTER (WHERE tmc_seg IS NOT NULL), 0) / 60, 0) AS tmc_minutos,
+                COALESCE(SUM(tmr_seg * peso) / NULLIF(SUM(peso) FILTER (WHERE tmr_seg IS NOT NULL), 0) / 60, 0) AS tmr_minutos
+            FROM PorTicket
+            GROUP BY agente
         )
         SELECT 
             agente,
@@ -2106,7 +2176,7 @@ app.get('/api/time48-etiquetas', async (req, res) => {
         FROM StatsAgente
         ORDER BY total_tickets DESC;
         `;
-        const result = await pool.query(q, [dataInicioSQL, dataFimSQL, etiquetas]);
+        const result = await pool.query(q, [dataInicioSQL, dataFimSQL, idsSel]);
 
         // Lista de tickets por agente (para o "Ver Tickets" abrir as conversas, igual aos demais paineis)
         const qDetalhes = `
@@ -2118,15 +2188,13 @@ app.get('/api/time48-etiquetas', async (req, res) => {
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
             LEFT JOIN contacts ct ON ct.id = c.contact_id
-            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
-            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
-              AND lower(tg.name) = ANY($3::text[])
+              AND c.id = ANY($3::bigint[])
               AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
             ORDER BY c.display_id DESC;
         `;
-        const detResult = await pool.query(qDetalhes, [dataInicioSQL, dataFimSQL, etiquetas]);
+        const detResult = await pool.query(qDetalhes, [dataInicioSQL, dataFimSQL, idsSel]);
         const detalhesPorAgente = {};
         detResult.rows.forEach(r => {
             if (!detalhesPorAgente[r.agente]) detalhesPorAgente[r.agente] = [];
@@ -2138,16 +2206,14 @@ app.get('/api/time48-etiquetas', async (req, res) => {
             SELECT COALESCE(u.name, 'SEM ATRIBUIR') AS agente, COUNT(DISTINCT c.id) AS em_aberto
             FROM conversations c
             LEFT JOIN users u ON u.id = c.assignee_id
-            LEFT JOIN taggings t ON t.taggable_id = c.id AND t.taggable_type = 'Conversation'
-            LEFT JOIN tags tg ON tg.id = t.tag_id
             WHERE c.account_id = 1
               AND c.status = 0
-              AND lower(tg.name) = ANY($3::text[])
+              AND c.id = ANY($3::bigint[])
               AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
             GROUP BY 1;
         `;
-        const abResult = await pool.query(qAbertos, [dataInicioSQL, dataFimSQL, etiquetas]);
+        const abResult = await pool.query(qAbertos, [dataInicioSQL, dataFimSQL, idsSel]);
         const abertosPorAgente = {};
         abResult.rows.forEach(r => { abertosPorAgente[r.agente] = parseInt(r.em_aberto) || 0; });
         // Detalhe de cada ticket p/ o "Ver Tickets": situação no Chatwoot, retorno do cliente (depois da 1ª resposta do agente), mensagens do agente e etiquetas
@@ -2166,13 +2232,12 @@ app.get('/api/time48-etiquetas', async (req, res) => {
                       WHERE t2.taggable_id = c.id AND t2.taggable_type = 'Conversation' AND (tg2.name ILIKE '%time-48h%' OR tg2.name ILIKE 'painel-do-pedido%')) AS etiquetas
                 FROM conversations c
                 WHERE c.account_id = 1
-                  AND EXISTS (SELECT 1 FROM taggings t JOIN tags tg ON tg.id = t.tag_id
-                              WHERE t.taggable_id = c.id AND t.taggable_type = 'Conversation' AND lower(tg.name) = ANY($3::text[]))
+                  AND c.id = ANY($3::bigint[])
                   AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                   AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
             ) x;
         `;
-        const infoResult = await pool.query(qInfo, [dataInicioSQL, dataFimSQL, etiquetas]);
+        const infoResult = await pool.query(qInfo, [dataInicioSQL, dataFimSQL, idsSel]);
         const infoPorId = {};
         infoResult.rows.forEach(r => {
             infoPorId[String(r.display_id || r.conv_id)] = {
@@ -2198,25 +2263,28 @@ app.get('/api/time48-etiquetas', async (req, res) => {
                     (SELECT MAX(mr.created_at) FROM messages mr WHERE mr.conversation_id = z.conv_id AND mr.message_type = 1 AND mr.private = FALSE
                        AND mr.sender_type = 'User' AND mr.created_at < z.primeiro_retorno_em) AS resp_antes_retorno
                 FROM (
+                  SELECT w.*,
+                    (SELECT MIN(mc.created_at) FROM messages mc WHERE mc.conversation_id = w.conv_id AND mc.message_type = 0 AND mc.private = FALSE
+                       AND mc.created_at > w.primeira_resp_sla) AS primeiro_retorno_em
+                  FROM (
                     SELECT
                         c.display_id,
                         c.id AS conv_id,
                         c.status,
                         c.created_at,
-                        (SELECT MIN(mc.created_at) FROM messages mc WHERE mc.conversation_id = c.id AND mc.message_type = 0 AND mc.private = FALSE
-                           AND mc.created_at > (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User')) AS primeiro_retorno_em,
+                        (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS primeira_resp_sla,
                         (SELECT MAX(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS ultima_resp_agente,
                         (SELECT MAX(mc.created_at) FROM messages mc WHERE mc.conversation_id = c.id AND mc.message_type = 0 AND mc.private = FALSE) AS ultima_msg_cliente
                     FROM conversations c
                     WHERE c.account_id = 1
-                      AND EXISTS (SELECT 1 FROM taggings t JOIN tags tg ON tg.id = t.tag_id
-                                  WHERE t.taggable_id = c.id AND t.taggable_type = 'Conversation' AND lower(tg.name) = ANY($3::text[]))
+                      AND c.id = ANY($3::bigint[])
                       AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                       AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+                  ) w
                 ) z
             ) y;
         `;
-        const slaResult = await pool.query(qSla, [dataInicioSQL, dataFimSQL, etiquetas]);
+        const slaResult = await pool.query(qSla, [dataInicioSQL, dataFimSQL, idsSel]);
         const slaPorId = {};
         slaResult.rows.forEach(r => {
             slaPorId[String(r.display_id || r.conv_id)] = { aberto_ha_min: r.aberto_ha_min, retorno_cliente_min: r.retorno_cliente_min, aguardando_cliente_min: r.aguardando_cliente_min, cliente_esperando_min: r.cliente_esperando_min };
@@ -2827,6 +2895,8 @@ app.get('/api/raio-x-perf', (req, res) => {
             rotas: ROTAS_WARM
         },
         pool: { em_uso: pool.totalCount - pool.idleCount, livres: pool.idleCount, total: pool.totalCount, fila: pool.waitingCount, max: (pool.options && pool.options.max) || 10 },
+        freio: { pausado: agora < FREIO.ate, ate: FREIO.ate ? new Date(FREIO.ate).toISOString() : null, acionamentos: FREIO.acionamentos, falhas_seguidas: FREIO.falhas, ultimo_erro: FREIO.ultimo_erro },
+        protecao: { consultas_aproveitadas: consultasAproveitadas, dados_guardados_servidos: dadosGuardadosServidos },
         cache: cache
     });
 });
@@ -3164,7 +3234,7 @@ app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 // F: warmer — a cada 15min, se houve acesso REAL recente (<=20min), revalida em background as rotas pesadas
 // do Postgres (escalonado, 1 por vez). Se ninguem usou o Dash, nao roda (aguarda) — nao toca no Chatwoot.
-const ROTAS_WARM = ['/api/resumo-recorrencia', '/api/produtos-metricas', '/api/mencoes-abertos', '/api/produtividade', '/api/time48'];
+const ROTAS_WARM = ['/api/resumo-recorrencia', '/api/produtividade']; // /api/time48, Produtos e Menções saíram do aquecedor (01/10/2026): carregam 1x no acesso e depois só pelo 🔄 Atualizar
 function aquecerRota(rota) {
     return new Promise((resolve) => {
         const rq = http.get({ host: '127.0.0.1', port: PORT, path: rota + '?fresh=1', headers: { 'x-warm-token': WARM_TOKEN } }, (r) => { r.resume(); r.on('end', resolve); });
@@ -3175,6 +3245,7 @@ function aquecerRota(rota) {
 setInterval(async () => {
     if (Date.now() - ultimoAcessoApi > 20 * 60 * 1000) return; // ninguem usando o Dash -> aguarda
     for (const rota of ROTAS_WARM) {
+        if (pool.waitingCount > 0 || Date.now() < FREIO.ate) break;   // 🛡️ banco ocupado (fila) ou com freio: pula esta rodada
         await aquecerRota(rota);
         await new Promise(r => setTimeout(r, 800)); // escalona pra nao criar rajada no Postgres
     }
