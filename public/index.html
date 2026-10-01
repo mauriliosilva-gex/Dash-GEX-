@@ -4877,6 +4877,7 @@ async function exportarExcelCartPanda() {
             document.getElementById('modal-t48-titulo').innerText = `Time 48h: ${d.agente}`;
             let html = '<div class="space-y-3">';
             html += t48DetResumo(d);
+            html += t48ChipFiltro();   // aviso do filtro pelos botões do ticket
             if (d.detalhes && d.detalhes.length > 0) {
                 d.detalhes.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
@@ -4974,6 +4975,9 @@ async function exportarExcelCartPanda() {
                 const r = chip.querySelector('.t48-pill-rot'); if (r) r.textContent = nova ? (el.dataset.pillrot || '') : '';
             }
             t48DetAplicar(painel, cont);
+        }
+        function t48ChipFiltro() {   // aviso "🔎 Filtrando por" do filtro pelos botões do ticket
+            return `<div class="t48-pill-ativo hidden flex flex-wrap items-center gap-2 text-[11px] font-bold text-gexCyan"><span>🔎 Filtrando por:</span><span class="t48-pill-rot text-gray-800 dark:text-white"></span><button type="button" onclick="t48DetPill(this)" class="text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-700 text-gray-500 hover:text-red-500 hover:border-red-500/50">✕ limpar</button></div>`;
         }
 
         function formatarTempo(minutos) {
@@ -5452,6 +5456,7 @@ async function exportarExcelCartPanda() {
             document.getElementById('modal-t48x-sub').innerText = `Etiquetas: ${(st.buscadas || []).join(', ')}`;
             let html = '<div class="space-y-3">';
             html += t48DetResumo(d);
+            html += t48ChipFiltro();   // aviso do filtro pelos botões do ticket
             if (d.detalhes && d.detalhes.length > 0) {
                 d.detalhes.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
@@ -5491,22 +5496,28 @@ async function exportarExcelCartPanda() {
         function t48DetBadges(tk) {
             if (!tk || tk.status === undefined || tk.status === null) return '';
             const st = T48_STATUS[tk.status] || ['❔ Status ' + t48xEsc(tk.status), 'bg-gray-500/10 text-gray-500 border-gray-500/30'];
-            const pill = (txt, cls) => `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${cls}">${txt}</span>`;
+            const pill = (txt, cls, chave, rot) => chave   // com chave: vira botão que filtra a lista (mesmo filtro do "Todos os casos em aberto")
+                ? `<button type="button" onclick="t48DetPill(this)" data-pill="${t48xEsc(chave)}" data-pillrot="${t48xEsc(rot || txt)}" title="Filtrar: ${t48xEsc(rot || txt)}" class="text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer hover:brightness-125 transition ${cls}">${txt}</button>`
+                : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${cls}">${txt}</span>`;
+            const faixaF = m => m == null ? 0 : (m < 1440 ? 1 : (m <= 2880 ? 2 : 3)), FX = ['', 'até 24h', '24–48h', 'mais de 48h'];   // mesmas faixas do "Todos os casos em aberto"
+            const idadeF = faixaF(tk.aberto_ha_min), slaF = faixaF(tk.cliente_esperando_min);
+            const retF = tk.retorno_cliente_min == null ? 0 : (tk.retorno_cliente_min < 60 ? 1 : (tk.retorno_cliente_min <= 1440 ? 2 : 3)), FR = ['', 'até 1h', 'de 1h a 24h', 'mais de 24h'];
+            const diaF = tk.criado_em ? new Date(tk.criado_em).toLocaleDateString('pt-BR') : '', nMsgF = parseInt(tk.msgs_agente) || 0;
             const ret = tk.teve_retorno
-                ? pill('↩️ Teve retorno · ' + t48DataBR(tk.ultimo_retorno), 'bg-orange-500/10 text-orange-500 border-orange-500/30')
-                : pill('Sem retorno', 'bg-gray-500/10 text-gray-400 border-gray-500/20');
+                ? pill('↩️ Teve retorno · ' + t48DataBR(tk.ultimo_retorno), 'bg-orange-500/10 text-orange-500 border-orange-500/30', 'ret:1', '↩️ Teve retorno')
+                : pill('Sem retorno', 'bg-gray-500/10 text-gray-400 border-gray-500/20', 'ret:0', 'Sem retorno');
             const sla = [];   // SLA do ticket: há quanto tempo está aberto, quanto o cliente levou pra retornar e há quanto tempo o agente espera o cliente
-            if (tk.fora_periodo) sla.push(pill('📌 Aberto de fora do período escolhido', 'bg-purple-500/10 text-purple-400 border-purple-500/30'));
-            if (tk.aberto_ha_min != null) sla.push(pill('⏱️ Aberto há ' + t48Dur(tk.aberto_ha_min), 'bg-gray-500/10 text-gray-400 border-gray-500/30'));   // só informa a idade do ticket
+            if (tk.fora_periodo) sla.push(pill('📌 Aberto de fora do período escolhido', 'bg-purple-500/10 text-purple-400 border-purple-500/30', 'foraper:1', '📌 Aberto de fora do período escolhido'));
+            if (tk.aberto_ha_min != null) sla.push(pill('⏱️ Aberto há ' + t48Dur(tk.aberto_ha_min), 'bg-gray-500/10 text-gray-400 border-gray-500/30', 'idade:' + idadeF, '⏱️ Aberto há ' + FX[idadeF]));   // só informa a idade do ticket
             if (tk.cliente_esperando_min != null) {   // SLA: o cliente mandou a última mensagem e o agente ainda não respondeu
                 const hE = tk.cliente_esperando_min / 60;
                 const corE = hE > 48 ? 'bg-red-500/10 text-red-500 border-red-500/30' : (hE >= 24 ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30');
-                sla.push(pill('💬 Cliente sem resposta há ' + t48Dur(tk.cliente_esperando_min) + (hE > 48 ? ' · fora do SLA' : ''), corE));
+                sla.push(pill('💬 Cliente sem resposta há ' + t48Dur(tk.cliente_esperando_min) + (hE > 48 ? ' · fora do SLA' : ''), corE, 'sla:' + slaF, '💬 Cliente sem resposta há ' + FX[slaF] + (slaF === 3 ? ' (fora do SLA)' : '')));
             }
-            if (tk.retorno_cliente_min != null) sla.push(pill('⏳ Cliente retornou em ' + t48Dur(tk.retorno_cliente_min), 'bg-orange-500/10 text-orange-400 border-orange-500/30'));
-            if (tk.aguardando_cliente_min != null) sla.push(pill('⌛ Aguardando o cliente há ' + t48Dur(tk.aguardando_cliente_min), 'bg-sky-500/10 text-sky-500 border-sky-500/30'));
-            const meta = `<span class="hidden t48-tk-meta" data-rec="${tk.fora_periodo ? 0 : 1}" data-st="${t48xEsc(tk.status)}" data-ret="${tk.teve_retorno ? 1 : 0}" data-msgs="${parseInt(tk.msgs_agente) || 0}" data-fora="${tk.cliente_esperando_min != null && tk.cliente_esperando_min > 2880 ? 1 : 0}" data-txt="${t48xEsc(String((tk.cliente || '') + ' ' + tk.id).toLowerCase())}"></span>`;
-            return `<div class="flex flex-wrap items-center gap-1.5 mt-2">${pill(st[0], st[1])}${ret}${pill('✉️ ' + (parseInt(tk.msgs_agente) || 0) + ' msg do agente', 'bg-gexBlue/10 text-gexCyan border-gexBlue/30')}${pill('📅 Criado ' + t48DataBR(tk.criado_em), 'bg-gray-500/10 text-gray-500 border-gray-500/20')}</div>`
+            if (tk.retorno_cliente_min != null) sla.push(pill('⏳ Cliente retornou em ' + t48Dur(tk.retorno_cliente_min), 'bg-orange-500/10 text-orange-400 border-orange-500/30', 'retmin:' + retF, '⏳ Cliente retornou em ' + FR[retF]));
+            if (tk.aguardando_cliente_min != null) sla.push(pill('⌛ Aguardando o cliente há ' + t48Dur(tk.aguardando_cliente_min), 'bg-sky-500/10 text-sky-500 border-sky-500/30', 'aguard:1', '⌛ Aguardando o cliente'));
+            const meta = `<span class="hidden t48-tk-meta" data-rec="${tk.fora_periodo ? 0 : 1}" data-st="${t48xEsc(tk.status)}" data-ret="${tk.teve_retorno ? 1 : 0}" data-msgs="${parseInt(tk.msgs_agente) || 0}" data-fora="${tk.cliente_esperando_min != null && tk.cliente_esperando_min > 2880 ? 1 : 0}" data-txt="${t48xEsc(String((tk.cliente || '') + ' ' + tk.id).toLowerCase())}" data-pst="${t48xEsc(tk.status)}" data-pret="${tk.teve_retorno ? 1 : 0}" data-pmsg="${nMsgF > 0 ? 1 : 0}" data-pdia="${t48xEsc(diaF)}" data-pidade="${idadeF}" data-psla="${slaF}" data-pretmin="${retF}" data-paguard="${tk.aguardando_cliente_min != null ? 1 : 0}" data-pforaper="${tk.fora_periodo ? 1 : 0}"></span>`;
+            return `<div class="flex flex-wrap items-center gap-1.5 mt-2">${pill(st[0], st[1], 'st:' + tk.status, st[0])}${ret}${pill('✉️ ' + (parseInt(tk.msgs_agente) || 0) + ' msg do agente', 'bg-gexBlue/10 text-gexCyan border-gexBlue/30', 'msg:' + (nMsgF > 0 ? 1 : 0), nMsgF > 0 ? '✉️ Com mensagem do agente' : '✉️ Sem mensagem do agente')}${pill('📅 Criado ' + t48DataBR(tk.criado_em), 'bg-gray-500/10 text-gray-500 border-gray-500/20', diaF ? 'dia:' + diaF : '', '📅 Criado em ' + diaF.slice(0, 5))}</div>`
                 + (sla.length ? `<div class="flex flex-wrap items-center gap-1.5 mt-1.5">${sla.join('')}</div>` : '')
                 + (tk.etiquetas ? `<p class="text-[10px] text-gray-400 mt-1.5">🏷️ ${t48xEsc(tk.etiquetas)}</p>` : '') + meta;
         }
