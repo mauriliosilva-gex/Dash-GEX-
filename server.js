@@ -2813,7 +2813,7 @@ app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 // F: warmer — a cada 15min, se houve acesso REAL recente (<=20min), revalida em background as rotas pesadas
 // do Postgres (escalonado, 1 por vez). Se ninguem usou o Dash, nao roda (aguarda) — nao toca no Chatwoot.
-const ROTAS_WARM = ['/api/recorrencia', '/api/produtos-metricas', '/api/mencoes-abertos', '/api/produtividade', '/api/time48'];
+const ROTAS_WARM = ['/api/resumo-recorrencia', '/api/produtos-metricas', '/api/mencoes-abertos', '/api/produtividade', '/api/time48'];
 function aquecerRota(rota) {
     return new Promise((resolve) => {
         const rq = http.get({ host: '127.0.0.1', port: PORT, path: rota + '?fresh=1', headers: { 'x-warm-token': WARM_TOKEN } }, (r) => { r.resume(); r.on('end', resolve); });
