@@ -1071,12 +1071,21 @@
 
             <!-- TELA 5: TIME 48 HORAS -->
             <div id="tela-cw-time48" class="hidden space-y-6">
+                <!-- SUB-ABAS DO TIME 48 (Visão Geral / Etiqueta 48H / Etiqueta Painel) -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="btn-t48v-geral" onclick="mudarViewTime48('geral')" class="btn-setor btn-setor-ativo">⏳ Visão Geral</button>
+                    <button id="btn-t48v-48h" onclick="mudarViewTime48('48h')" class="btn-setor btn-setor-inativo">🏷️ Etiqueta 48H</button>
+                    <button id="btn-t48v-painel" onclick="mudarViewTime48('painel')" class="btn-setor btn-setor-inativo">📦 Etiqueta Painel</button>
+                </div>
+                <div id="t48-view-geral" class="space-y-6">
                 
                 <!-- CARDS DE RESUMO -->
                 <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-white/50 dark:bg-black/20">
+                    <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-white/50 dark:bg-black/20 cursor-pointer hover:border-gexCyan dark:hover:border-gexCyan transition-colors" onclick="abrirModalT48Abertos()" title="Clique para ver todos os casos em aberto">
                         <h3 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 relative">Tickets Recebidos</h3>
                         <span class="text-3xl font-black text-gray-800 dark:text-white font-mono relative" id="card-t48-tickets">0</span>
+                        <span class="text-xs font-bold text-yellow-500 ml-2 bg-yellow-500/10 px-2 py-0.5 rounded-full relative align-middle" id="card-t48-abertos" title="Todos os casos com etiqueta do time que estão com status Aberta agora no Chatwoot (sem filtro de data)">0 em aberto</span>
+                        <p class="text-[9px] font-bold text-gexCyan uppercase tracking-widest mt-2 relative">👁️ Ver casos em aberto</p>
                     </div>
                     <div class="glass-panel border border-orange-500/30 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-orange-500/5">
                         <div class="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent pointer-events-none"></div>
@@ -1100,12 +1109,19 @@
                     </div>
                 </div>
 
+                <!-- SLA DO TIME 48H (tempo de retorno do cliente e tempo em aberto) -->
+                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl px-5 py-3 shadow-lg bg-white/50 dark:bg-black/20 flex flex-wrap items-center gap-x-6 gap-y-2" id="t48-sla-geral">
+                    <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">⏱️ SLA do Time 48H</span>
+                    <span class="text-[11px] font-bold text-gray-500">Carregando...</span>
+                </div>
+
                 <!-- TABELA E CALENDÁRIO -->
                 <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[500px] bg-white/50 dark:bg-black/20">
                     <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-4 shrink-0 bg-gray-50/50 dark:bg-transparent">
                         <div>
                             <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">⏳ Performance: Time 48 Horas</h3>
-                            <p class="text-[10px] font-bold text-gray-500 mt-1">Lendo conversas com a etiqueta "time-48h"</p>
+                            <p class="text-[10px] font-bold text-gray-500 mt-1">Lendo conversas com todas as etiquetas da equipe (time-48h* e painel-do-pedido*)</p>
+                            <p class="text-[10px] font-bold text-gray-400 mt-1" id="t48-info-fora"></p>
                         </div>
                         <div class="flex items-center gap-2">
                             <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-xl border border-gray-300 dark:border-white/10 h-8 relative min-w-[240px]">
@@ -1124,10 +1140,13 @@
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Agente</th>
                                     <th class="py-3 px-3 text-center">Tickets Recebidos</th>
+                                    <th class="py-3 px-3 text-center text-yellow-500" title="Dos tickets recebidos no período, quantos estão com status Aberta agora no Chatwoot">Em Aberto</th>
                                     <th class="py-3 px-3 text-center text-orange-500" title="Tickets que o cliente precisou mandar mensagem novamente">Retornos</th>
                                     <th class="py-3 px-3 text-center">Mensagens Enviadas</th>
                                     <th class="py-3 px-3 text-center text-emerald-500">TMC (1º Contato)</th>
                                     <th class="py-3 px-3 text-center text-gexCyan">TMR (Média de Retorno)</th>
+                                    <th class="py-3 px-3 text-center text-orange-400" title="Média do tempo que o cliente levou pra responder depois da mensagem do agente">↩️ Retorno do Cliente</th>
+                                    <th class="py-3 px-3 text-center text-red-400" title="Média de há quanto tempo os tickets em aberto estão abertos (SLA 48h)">⏱️ Tempo em Aberto</th>
                                     <th class="py-3 px-3 text-center">Ação</th>
                                 </tr>
                             </thead>
@@ -1135,6 +1154,11 @@
                         </table>
                     </div>
                 </div>
+                </div>
+                <!-- VIEW: ETIQUETA 48H (etiquetas time-48h*; o JS monta ao abrir) -->
+                <div id="t48-view-48h" class="hidden space-y-6"></div>
+                <!-- VIEW: ETIQUETA PAINEL (etiquetas painel-do-pedido*; o JS monta ao abrir) -->
+                <div id="t48-view-painel" class="hidden space-y-6"></div>
             </div>
 
             <!-- TELA 6: ADIAR CASOS (ADMIN) -->
@@ -1341,13 +1365,28 @@
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <div>
                     <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-t48-titulo">Time 48h</h3>
-                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Desempenho na etiqueta time-48h no período</p>
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Desempenho nas etiquetas da equipe no período</p>
                 </div>
                 <button onclick="fecharModalTime48()" class="text-gray-500 hover:text-red-500 transition-colors">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
             <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-t48-conteudo"></div>
+        </div>
+    </div>
+    <!-- MODAL: TIME 48H POR ETIQUETA (Ver Tickets das abas Etiqueta 48H / Etiqueta Painel) -->
+    <div id="modal-t48x" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                <div>
+                    <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-t48x-titulo">Time 48h</h3>
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1" id="modal-t48x-sub">Desempenho nas etiquetas marcadas no período</p>
+                </div>
+                <button onclick="fecharModalT48x()" class="text-gray-500 hover:text-red-500 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-t48x-conteudo"></div>
         </div>
     </div>
     <!-- MODAL: RELATÓRIO Q3 (cards clicáveis) -->
@@ -4827,6 +4866,7 @@ async function exportarExcelCartPanda() {
             if (!d) return;
             document.getElementById('modal-t48-titulo').innerText = `Time 48h: ${d.agente}`;
             let html = '<div class="space-y-3">';
+            html += t48DetResumo(d);
             if (d.detalhes && d.detalhes.length > 0) {
                 d.detalhes.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
@@ -4835,6 +4875,7 @@ async function exportarExcelCartPanda() {
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${tk.cliente}</p>
                             <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${tk.id}</p>
+                            ${t48DetBadges(tk)}
                         </div>
                         <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
                             Abrir Conversa ↗️
@@ -4846,9 +4887,84 @@ async function exportarExcelCartPanda() {
             }
             html += '</div>';
             document.getElementById('modal-t48-conteudo').innerHTML = html;
+            const pnT48 = document.querySelector('#modal-t48-conteudo .t48-det-painel'); if (pnT48) t48DetAplicar(pnT48, document.getElementById('modal-t48-conteudo'));   // já abre com o filtro inicial aplicado
             document.getElementById('modal-time48').classList.remove('hidden');
         }
         function fecharModalTime48() { document.getElementById('modal-time48').classList.add('hidden'); }
+        // Card "Tickets Recebidos" da Visão Geral: abre TODOS os casos em aberto (de todos os agentes), no mesmo formato do "Ver Tickets", com o SLA
+        function abrirModalT48Abertos() {
+            const abertos = [];
+            (dadosTime48 || []).forEach(d => (d.detalhes || []).forEach(tk => { if (tk.status === 0) abertos.push({ tk: tk, agente: d.agente }); }));
+            const espera = x => x.tk.cliente_esperando_min != null ? x.tk.cliente_esperando_min : -1;
+            abertos.sort((a, b) => (espera(b) - espera(a)) || ((b.tk.aberto_ha_min || 0) - (a.tk.aberto_ha_min || 0)));   // mais crítico primeiro: cliente esperando resposta há mais tempo
+            document.getElementById('modal-t48-titulo').innerText = `Time 48h: Todos os casos em aberto (${abertos.length})`;
+            let html = '<div class="space-y-3">';
+            if (abertos.length > 0) {
+                html += `<div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white/40 dark:bg-black/20 px-4 py-2 flex flex-wrap items-center gap-x-5 gap-y-1">${t48SlaResumo([{ detalhes: abertos.map(x => x.tk) }])}</div>`;
+                html += t48DetResumo({ detalhes: abertos.map(x => x.tk) });
+                html += `<div class="t48-pill-ativo hidden flex flex-wrap items-center gap-2 text-[11px] font-bold text-gexCyan"><span>🔎 Filtrando por:</span><span class="t48-pill-rot text-gray-800 dark:text-white"></span><button type="button" onclick="t48DetPill(this)" class="text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-700 text-gray-500 hover:text-red-500 hover:border-red-500/50">✕ limpar</button></div>`;
+                abertos.forEach(x => {
+                    const tk = x.tk;
+                    const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
+                    html += `
+                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                            <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente)}</p>
+                            <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${tk.id}</p>
+                            <p class="text-[11px] font-bold text-gexCyan mt-1">👤 ${t48xEsc(x.agente)}</p>
+                            ${t48AbertoPills(tk, x.agente)}
+                        </div>
+                        <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                            Abrir Conversa ↗️
+                        </a>
+                    </div>`;
+                });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum caso em aberto.</p>';
+            }
+            html += '</div>';
+            const cont = document.getElementById('modal-t48-conteudo');
+            cont.innerHTML = html;
+            const pn = cont.querySelector('.t48-det-painel');
+            if (pn) { pn.dataset.t48filtro = 'abertos'; pn.dataset.t48base = 'abertos'; t48DetAplicar(pn, cont); }   // abre (e volta) em "Em aberto"; a busca também acha pelo nome do agente
+            document.getElementById('modal-time48').classList.remove('hidden');
+        }
+        // "Todos os casos em aberto": no ticket só status, retorno, aberto há, criado, SLA e agente de outro time — cada um é um botão que filtra a lista
+        function t48AbertoPills(tk, agente) {
+            const btn = (chave, rot, txt, cls) => `<button type="button" onclick="t48DetPill(this)" data-pill="${t48xEsc(chave)}" data-pillrot="${t48xEsc(rot)}" title="Filtrar: ${t48xEsc(rot)}" class="text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer hover:brightness-125 transition ${cls}">${txt}</button>`;
+            const st = T48_STATUS[tk.status] || ['❔ Status ' + t48xEsc(tk.status), 'bg-gray-500/10 text-gray-500 border-gray-500/30'];
+            const faixa = m => m == null ? 0 : (m < 1440 ? 1 : (m <= 2880 ? 2 : 3));   // 1 = até 24h · 2 = 24–48h · 3 = mais de 48h
+            const FX = ['', 'até 24h', '24–48h', 'mais de 48h'];
+            const idade = faixa(tk.aberto_ha_min), sla = faixa(tk.cliente_esperando_min);
+            const dia = tk.criado_em ? new Date(tk.criado_em).toLocaleDateString('pt-BR') : '';
+            const outro = !t48EhDoTime(agente);
+            const p = [btn('st:' + tk.status, st[0], st[0], st[1])];
+            p.push(tk.teve_retorno
+                ? btn('ret:1', '↩️ Teve retorno', '↩️ Teve retorno · ' + t48DataBR(tk.ultimo_retorno), 'bg-orange-500/10 text-orange-500 border-orange-500/30')
+                : btn('ret:0', 'Sem retorno', 'Sem retorno', 'bg-gray-500/10 text-gray-400 border-gray-500/20'));
+            if (idade) p.push(btn('idade:' + idade, '⏱️ Aberto há ' + FX[idade], '⏱️ Aberto há ' + t48Dur(tk.aberto_ha_min), 'bg-gray-500/10 text-gray-400 border-gray-500/30'));
+            if (dia) p.push(btn('dia:' + dia, '📅 Criado em ' + dia.slice(0, 5), '📅 Criado ' + t48DataBR(tk.criado_em), 'bg-gray-500/10 text-gray-500 border-gray-500/20'));
+            if (sla) p.push(btn('sla:' + sla, '💬 Cliente sem resposta há ' + FX[sla] + (sla === 3 ? ' (fora do SLA)' : ''), '💬 Cliente sem resposta há ' + t48Dur(tk.cliente_esperando_min) + (sla === 3 ? ' · fora do SLA' : ''),
+                ['', 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30', 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30', 'bg-red-500/10 text-red-500 border-red-500/30'][sla]));
+            if (outro) p.push(btn('outro:1', '👥 Agente de outro time', '👥 Agente de outro time', 'bg-pink-500/10 text-pink-400 border-pink-500/30'));
+            const meta = `<span class="hidden t48-tk-meta" data-rec="${tk.fora_periodo ? 0 : 1}" data-st="${t48xEsc(tk.status)}" data-ret="${tk.teve_retorno ? 1 : 0}" data-msgs="${parseInt(tk.msgs_agente) || 0}" data-fora="${sla === 3 ? 1 : 0}" data-txt="${t48xEsc(String((tk.cliente || '') + ' ' + tk.id + ' ' + agente).toLowerCase())}" data-pst="${t48xEsc(tk.status)}" data-pret="${tk.teve_retorno ? 1 : 0}" data-pidade="${idade}" data-pdia="${t48xEsc(dia)}" data-psla="${sla}" data-poutro="${outro ? 1 : 0}"></span>`;
+            return `<div class="flex flex-wrap items-center gap-1.5 mt-2">${p.join('')}</div>` + meta;
+        }
+        function t48DetPill(el) {
+            const cont = el.closest('#modal-t48-conteudo, #modal-t48x-conteudo');
+            const painel = cont ? cont.querySelector('.t48-det-painel') : null;
+            if (!painel) return;
+            const chave = el.dataset.pill || '';
+            const nova = (chave && painel.dataset.t48pill !== chave) ? chave : '';   // clicar de novo no mesmo botão (ou em "limpar") tira o filtro
+            painel.dataset.t48pill = nova;
+            cont.querySelectorAll('[data-pill]').forEach(b => { const on = !!nova && b.dataset.pill === nova; b.classList.toggle('ring-2', on); b.classList.toggle('ring-gexCyan', on); });
+            const chip = cont.querySelector('.t48-pill-ativo');
+            if (chip) {
+                chip.classList.toggle('hidden', !nova);
+                const r = chip.querySelector('.t48-pill-rot'); if (r) r.textContent = nova ? (el.dataset.pillrot || '') : '';
+            }
+            t48DetAplicar(painel, cont);
+        }
 
         function formatarTempo(minutos) {
             if (!minutos || isNaN(minutos) || minutos === 0) return '-';
@@ -4866,7 +4982,7 @@ async function exportarExcelCartPanda() {
             
             try {
                 if(btnSync) btnSync.innerHTML = '⏳';
-                if(tb) tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando métricas...</td></tr>`;
+                if(tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando métricas...</td></tr>`;
                 
                 const response = await fetch('/api/time48' + parametrosUrl);
                 const data = await response.json();
@@ -4875,11 +4991,11 @@ async function exportarExcelCartPanda() {
                     dadosTime48 = data.dados || [];
                     renderTabelaTime48();
                 } else {
-                    if(tb) tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
+                    if(tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
                 }
                 if(btnSync) btnSync.innerHTML = 'Buscar';
             } catch (error) { 
-                if(tb) tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de API.</td></tr>`;
+                if(tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de API.</td></tr>`;
                 if(btnSync) btnSync.innerHTML = 'Buscar';
             }
         }
@@ -4889,8 +5005,11 @@ async function exportarExcelCartPanda() {
             if(!tb) return;
 
             if (dadosTime48.length === 0) {
-                tb.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum ticket da etiqueta time-48h no período.</td></tr>`;
+                tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum ticket das etiquetas da equipe no período.</td></tr>`;
                 document.getElementById('card-t48-tickets').innerText = '0';
+                const elAbZero = document.getElementById('card-t48-abertos'); if (elAbZero) elAbZero.innerText = '0 em aberto';
+                const elSlaZero = document.getElementById('t48-sla-geral'); if (elSlaZero) elSlaZero.innerHTML = t48SlaResumo([]);
+                const elInfoZero = document.getElementById('t48-info-fora'); if (elInfoZero) elInfoZero.innerText = '';
                 document.getElementById('card-t48-retornos').innerText = '0';
                 document.getElementById('card-t48-tx-retorno').innerText = '0%';
                 document.getElementById('card-t48-msgs').innerText = '0';
@@ -4900,16 +5019,19 @@ async function exportarExcelCartPanda() {
             }
 
             let sumTickets = 0, sumRetornos = 0, sumMsgs = 0, sumTmcWeighted = 0, sumTmrWeighted = 0;
+            let sumAbertos = 0;
             
             tb.innerHTML = dadosTime48.map(d => {
                 const tks = parseInt(d.tickets);
                 const rets = parseInt(d.retornos);
                 
                 sumTickets += tks;
+                sumAbertos += parseInt(d.em_aberto) || 0;
                 sumRetornos += rets;
                 sumMsgs += parseInt(d.mensagens);
                 sumTmcWeighted += parseFloat(d.tmc_medio_minutos) * tks;
                 sumTmrWeighted += parseFloat(d.tmr_medio_minutos) * tks;
+                if (!t48EhDoTime(d.agente)) return '';   // agente de outro time: entra nos totais, mas não vira linha da tabela
 
                 const taxaRetornoAgente = tks > 0 ? ((rets / tks) * 100).toFixed(1) : 0;
 
@@ -4917,6 +5039,7 @@ async function exportarExcelCartPanda() {
                 <tr class="ranking-row row-normal linha-animada">
                     <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">👤 ${d.agente}</td>
                     <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${tks}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] font-black text-yellow-500">${parseInt(d.em_aberto) || 0}</td>
                     <td class="py-4 px-3 text-center">
                         <span class="font-mono text-[16px] font-black text-orange-500">${rets}</span>
                         <span class="text-[10px] text-gray-500 ml-1 font-bold">(${taxaRetornoAgente}%)</span>
@@ -4924,6 +5047,8 @@ async function exportarExcelCartPanda() {
                     <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${d.mensagens}</td>
                     <td class="py-4 px-3 text-center font-mono text-[14px] text-emerald-500">${formatarTempo(d.tmc_medio_minutos)}</td>
                     <td class="py-4 px-3 text-center font-mono text-[14px] text-gexCyan">${formatarTempo(d.tmr_medio_minutos)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-orange-400">${t48Dur(d.sla_retorno_medio_min)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-gray-800 dark:text-white">${t48Dur(d.sla_aberto_medio_min)}${d.sla_aberto_fora ? `<span class="block text-[10px] font-bold text-red-500">🔴 ${d.sla_aberto_fora} fora do SLA</span>` : ''}</td>
                     <td class="py-4 px-3 text-center">
                         <button onclick="abrirModalTime48('${d.agente}')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap border border-white/5">Ver Tickets</button>
                     </td>
@@ -4931,6 +5056,9 @@ async function exportarExcelCartPanda() {
             }).join('');
 
             document.getElementById('card-t48-tickets').innerText = sumTickets;
+            const elAb = document.getElementById('card-t48-abertos'); if (elAb) elAb.innerText = sumAbertos + ' em aberto';
+            const elSla = document.getElementById('t48-sla-geral'); if (elSla) elSla.innerHTML = t48SlaResumo(dadosTime48);
+            const elInfo = document.getElementById('t48-info-fora'); if (elInfo) elInfo.innerText = t48InfoFora(dadosTime48);
             document.getElementById('card-t48-retornos').innerText = sumRetornos;
             document.getElementById('card-t48-tx-retorno').innerText = sumTickets > 0 ? ((sumRetornos / sumTickets) * 100).toFixed(1) + '%' : '0%';
             document.getElementById('card-t48-msgs').innerText = sumMsgs;
@@ -5028,6 +5156,459 @@ async function exportarExcelCartPanda() {
             }
             
             btn.innerHTML = originalText;
+        }
+
+        // ===== TIME 48H — ABAS "ETIQUETA 48H" E "ETIQUETA PAINEL" (busca pelas etiquetas marcadas) =====
+        const ETIQUETAS_T48X = {
+            '48h': [
+                { nome: 'time-48h-sodaslim',         desc: 'Célula 48h - SodaSlim', cor: '#6CC7AE' },
+                { nome: 'time-48h-sodatide',         desc: 'Célula 48h - Sodatide', cor: '#6CC7AE' },
+                { nome: 'time-48h-gelatide',         desc: 'Celula 48h por produto; atribuicao automatica por RCV48H e campo Produto.', cor: '#6CC7AE' },
+                { nome: 'time-48h-gumitide',         desc: 'Celula 48h por produto; atribuicao automatica por RCV48H e campo Produto.', cor: '#6CC7AE' },
+                { nome: 'time-48h-memocept',         desc: 'Celula 48h por produto; atribuicao automatica por RCV48H e campo Produto.', cor: '#6CC7AE' },
+                { nome: 'time-48h-dermapure',        desc: 'Celula 48h por produto; atribuicao automatica por RCV48H e campo Produto.', cor: '#6CC7AE' },
+                { nome: 'time-48h-memopezil',        desc: 'Celula 48h por produto; atribuicao automatica por RCV48H e campo Produto.', cor: '#6CC7AE' },
+                { nome: 'time-48h-slim-rise',        desc: 'Celula 48h por produto; atribuicao automatica por RCV48H e campo Produto.', cor: '#6CC7AE' },
+                { nome: 'time-48h-produto-pendente', desc: 'Celula 48h: preencher Produto; a automacao troca pela etiqueta especifica. Produto novo requer cadastro da regra.', cor: '#F59E0B' },
+                { nome: 'time-48h',                  desc: '', cor: '#6CC7AE' }
+            ],
+            painel: [
+                { nome: 'painel-do-pedido-sodapeak-bg', desc: 'Leads vindos do painel do pedido sodapeak BuyGoods', cor: '#A11400' },
+                { nome: 'painel-do-pedido-memocept',    desc: 'Tag para leads vindos do portal do pedido memocept', cor: '#7904C6' },
+                { nome: 'painel-do-pedido-sodapeak',    desc: 'Tag para leads vindos do portal do pedido sodapeak', cor: '#009CE0' }
+            ]
+        };
+        const t48xEstado = {
+            '48h':  { montada: false, dados: [], marcadas: new Set(ETIQUETAS_T48X['48h'].map(e => e.nome)), buscadas: [], cal: null, datas: [] },
+            painel: { montada: false, dados: [], marcadas: new Set(ETIQUETAS_T48X.painel.map(e => e.nome)), buscadas: [], cal: null, datas: [] }
+        };
+        let viewTime48Atual = 'geral';
+
+        function t48xEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function mudarViewTime48(view) {
+            if (view !== 'geral' && !t48xEstado[view]) view = 'geral';
+            viewTime48Atual = view;
+            ['geral', '48h', 'painel'].forEach(v => {
+                const el = document.getElementById('t48-view-' + v);
+                const bt = document.getElementById('btn-t48v-' + v);
+                if (el) el.classList.toggle('hidden', v !== view);
+                if (bt) { bt.classList.toggle('btn-setor-ativo', v === view); bt.classList.toggle('btn-setor-inativo', v !== view); }
+            });
+            if (view !== 'geral' && !t48xEstado[view].montada) {
+                t48xMontarView(view);
+                carregarTime48Etiquetas(view);
+            }
+        }
+
+        function t48xMontarView(view) {
+            const cont = document.getElementById('t48-view-' + view);
+            if (!cont) return;
+            const st = t48xEstado[view];
+            const titulo = view === 'painel' ? '📦 Performance: Etiqueta Painel' : '🏷️ Performance: Etiqueta 48H';
+            const chips = ETIQUETAS_T48X[view].map(e => `
+                        <label class="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 cursor-pointer text-[11px] font-bold text-gray-700 dark:text-gray-200 select-none" title="${t48xEsc(e.desc || e.nome)}">
+                            <input type="checkbox" class="w-4 h-4 accent-gexBlue cursor-pointer align-middle" data-etq="${t48xEsc(e.nome)}" ${st.marcadas.has(e.nome) ? 'checked' : ''} onchange="t48xToggleEtiqueta('${view}', this)">
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${t48xEsc(e.cor)}"></span>
+                            ${t48xEsc(e.nome)}
+                        </label>`).join('');
+            cont.innerHTML = `
+                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 shadow-lg bg-white/50 dark:bg-black/20">
+                    <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                        <div>
+                            <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">🏷️ Etiquetas da busca</h3>
+                            <p class="text-[10px] font-bold text-gray-500 mt-1">Marque as etiquetas e clique em Buscar</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="t48xMarcarTodas('${view}', true)" class="btn-setor btn-setor-inativo">☑️ Marcar todas</button>
+                            <button onclick="t48xMarcarTodas('${view}', false)" class="btn-setor btn-setor-inativo">⬜ Limpar</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2" id="t48x-${view}-etiquetas">${chips}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-white/50 dark:bg-black/20">
+                        <h3 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 relative">Tickets Recebidos</h3>
+                        <span class="text-3xl font-black text-gray-800 dark:text-white font-mono relative" id="t48x-${view}-card-tickets">0</span>
+                        <span class="text-xs font-bold text-yellow-500 ml-2 bg-yellow-500/10 px-2 py-0.5 rounded-full relative align-middle" id="t48x-${view}-card-abertos" title="Dos tickets recebidos no período, quantos estão com status Aberta agora no Chatwoot">0 em aberto</span>
+                    </div>
+                    <div class="glass-panel border border-orange-500/30 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-orange-500/5">
+                        <div class="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent pointer-events-none"></div>
+                        <h3 class="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-1 relative" title="Tickets que o cliente respondeu de volta">Retornos</h3>
+                        <div class="flex items-end justify-between relative">
+                            <span class="text-3xl font-black text-orange-500 font-mono" id="t48x-${view}-card-retornos">0</span>
+                            <span class="text-xs font-bold text-orange-500/80 mb-1 bg-orange-500/10 px-2 py-0.5 rounded-full" id="t48x-${view}-card-tx-retorno">0%</span>
+                        </div>
+                    </div>
+                    <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-white/50 dark:bg-black/20">
+                        <h3 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 relative">Mensagens Enviadas</h3>
+                        <span class="text-3xl font-black text-gray-800 dark:text-white font-mono relative" id="t48x-${view}-card-msgs">0</span>
+                    </div>
+                    <div class="glass-panel border border-emerald-500/30 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-emerald-500/5">
+                        <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1 relative" title="Tempo do primeiro contato (TMC)">Média 1º Contato</h3>
+                        <span class="text-3xl font-black text-emerald-500 font-mono relative" id="t48x-${view}-card-tmc">-</span>
+                    </div>
+                    <div class="glass-panel border border-gexCyan/30 rounded-2xl p-5 shadow-lg relative overflow-hidden bg-gexCyan/5">
+                        <h3 class="text-[10px] font-black text-gexCyan uppercase tracking-widest mb-1 relative" title="Tempo médio de resposta (TMR)">Média de Resposta</h3>
+                        <span class="text-3xl font-black text-gexCyan font-mono relative" id="t48x-${view}-card-tmr">-</span>
+                    </div>
+                </div>
+
+                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl px-5 py-3 shadow-lg bg-white/50 dark:bg-black/20 flex flex-wrap items-center gap-x-6 gap-y-2" id="t48x-${view}-sla">
+                    <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">⏱️ SLA do Time 48H</span>
+                    <span class="text-[11px] font-bold text-gray-500">Carregando...</span>
+                </div>
+
+                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[500px] bg-white/50 dark:bg-black/20">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-4 shrink-0 bg-gray-50/50 dark:bg-transparent">
+                        <div>
+                            <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">${titulo}</h3>
+                            <p class="text-[10px] font-bold text-gray-500 mt-1" id="t48x-${view}-sub">Lendo conversas com as etiquetas marcadas</p>
+                            <p class="text-[10px] font-bold text-gray-400 mt-1" id="t48x-${view}-info-fora"></p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-xl border border-gray-300 dark:border-white/10 h-8 relative min-w-[240px]">
+                                <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                <input type="text" id="calendario-t48x-${view}" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wider">
+                                <button id="btn-aplicar-t48x-${view}" onclick="carregarTime48Etiquetas('${view}')" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Buscar</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
+                        <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                                <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
+                                    <th class="py-3 px-3 pl-4">Agente</th>
+                                    <th class="py-3 px-3 text-center">Tickets Recebidos</th>
+                                    <th class="py-3 px-3 text-center text-yellow-500" title="Dos tickets recebidos no período, quantos estão com status Aberta agora no Chatwoot">Em Aberto</th>
+                                    <th class="py-3 px-3 text-center text-orange-500" title="Tickets que o cliente precisou mandar mensagem novamente">Retornos</th>
+                                    <th class="py-3 px-3 text-center">Mensagens Enviadas</th>
+                                    <th class="py-3 px-3 text-center text-emerald-500">TMC (1º Contato)</th>
+                                    <th class="py-3 px-3 text-center text-gexCyan">TMR (Média de Retorno)</th>
+                                    <th class="py-3 px-3 text-center text-orange-400" title="Média do tempo que o cliente levou pra responder depois da mensagem do agente">↩️ Retorno do Cliente</th>
+                                    <th class="py-3 px-3 text-center text-red-400" title="Média de há quanto tempo os tickets em aberto estão abertos (SLA 48h)">⏱️ Tempo em Aberto</th>
+                                    <th class="py-3 px-3 text-center">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-t48x-${view}-body" class="text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>`;
+            const inp = document.getElementById('calendario-t48x-' + view);
+            if (inp && typeof flatpickr === 'function') {
+                st.cal = flatpickr(inp, {
+                    mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark",
+                    onChange: (selectedDates) => { st.datas = selectedDates; }
+                });
+            }
+            st.montada = true;
+        }
+
+        function t48xToggleEtiqueta(view, chk) {
+            const st = t48xEstado[view];
+            if (!st || !chk) return;
+            const nome = chk.getAttribute('data-etq');
+            if (chk.checked) st.marcadas.add(nome); else st.marcadas.delete(nome);
+        }
+
+        function t48xMarcarTodas(view, marcar) {
+            const st = t48xEstado[view];
+            if (!st) return;
+            st.marcadas = new Set(marcar ? ETIQUETAS_T48X[view].map(e => e.nome) : []);
+            document.querySelectorAll('#t48x-' + view + '-etiquetas input[type="checkbox"]').forEach(c => { c.checked = !!marcar; });
+        }
+
+        async function carregarTime48Etiquetas(view) {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            const st = t48xEstado[view];
+            if (!st) return;
+            const tb = document.getElementById('tabela-t48x-' + view + '-body');
+            const btnSync = document.getElementById('btn-aplicar-t48x-' + view);
+            const sub = document.getElementById('t48x-' + view + '-sub');
+            const etqs = ETIQUETAS_T48X[view].map(e => e.nome).filter(n => st.marcadas.has(n));
+            if (etqs.length === 0) {
+                st.dados = []; st.buscadas = [];
+                renderTabelaTime48Etiquetas(view);
+                if (tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Marque pelo menos 1 etiqueta e clique em Buscar.</td></tr>`;
+                if (sub) sub.innerText = 'Nenhuma etiqueta marcada';
+                return;
+            }
+            // Período: o do calendário (1 dia ou intervalo); sem data = mês atual (padrão do servidor, igual à Visão Geral)
+            const ds = (st.datas && st.datas.length) ? st.datas : (st.cal ? st.cal.selectedDates : []);
+            let params = '?etiquetas=' + encodeURIComponent(etqs.join(','));
+            if (ds && ds.length >= 1) {
+                const dI = new Date(ds[0]);
+                const dF = new Date(ds.length >= 2 ? ds[1] : ds[0]); dF.setHours(23, 59, 59);
+                params += `&since=${Math.floor(dI.getTime() / 1000)}&until=${Math.floor(dF.getTime() / 1000)}`;
+            }
+            try {
+                if (btnSync) btnSync.innerHTML = '⏳';
+                if (tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando métricas...</td></tr>`;
+                const response = await fetch('/api/time48-etiquetas' + params);
+                const data = await response.json();
+                if (data.success) {
+                    st.dados = data.dados || [];
+                    st.buscadas = (data.etiquetas && data.etiquetas.length) ? data.etiquetas : etqs;
+                    if (sub) {
+                        sub.innerText = st.buscadas.length <= 3 ? `Lendo conversas com: ${st.buscadas.join(', ')}` : `Lendo conversas com ${st.buscadas.length} etiquetas marcadas`;
+                        sub.title = st.buscadas.join(', ');
+                    }
+                    renderTabelaTime48Etiquetas(view);
+                } else {
+                    if (tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${t48xEsc(data.error)}</td></tr>`;
+                }
+                if (btnSync) btnSync.innerHTML = 'Buscar';
+            } catch (error) {
+                if (tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de API.</td></tr>`;
+                if (btnSync) btnSync.innerHTML = 'Buscar';
+            }
+        }
+
+        function renderTabelaTime48Etiquetas(view) {
+            const st = t48xEstado[view];
+            const tb = document.getElementById('tabela-t48x-' + view + '-body');
+            if (!st || !tb) return;
+            const setCard = (suf, val) => { const el = document.getElementById('t48x-' + view + '-card-' + suf); if (el) el.innerText = val; };
+
+            if (st.dados.length === 0) {
+                tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum ticket com as etiquetas marcadas no período.</td></tr>`;
+                setCard('tickets', '0'); setCard('retornos', '0'); setCard('tx-retorno', '0%');
+                setCard('abertos', '0 em aberto');
+                const elSlaZero = document.getElementById('t48x-' + view + '-sla'); if (elSlaZero) elSlaZero.innerHTML = t48SlaResumo([]);
+                const elInfoZero = document.getElementById('t48x-' + view + '-info-fora'); if (elInfoZero) elInfoZero.innerText = '';
+                setCard('msgs', '0'); setCard('tmc', '-'); setCard('tmr', '-');
+                return;
+            }
+
+            let sumTickets = 0, sumRetornos = 0, sumMsgs = 0, sumTmcWeighted = 0, sumTmrWeighted = 0;
+            let sumAbertos = 0;
+
+            tb.innerHTML = st.dados.map((d, i) => {
+                const tks = parseInt(d.tickets);
+                const rets = parseInt(d.retornos);
+
+                sumTickets += tks;
+                sumAbertos += parseInt(d.em_aberto) || 0;
+                sumRetornos += rets;
+                sumMsgs += parseInt(d.mensagens);
+                sumTmcWeighted += parseFloat(d.tmc_medio_minutos) * tks;
+                sumTmrWeighted += parseFloat(d.tmr_medio_minutos) * tks;
+                if (!t48EhDoTime(d.agente)) return '';   // agente de outro time: entra nos totais, mas não vira linha da tabela
+
+                const taxaRetornoAgente = tks > 0 ? ((rets / tks) * 100).toFixed(1) : 0;
+
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">👤 ${t48xEsc(d.agente)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${tks}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] font-black text-yellow-500">${parseInt(d.em_aberto) || 0}</td>
+                    <td class="py-4 px-3 text-center">
+                        <span class="font-mono text-[16px] font-black text-orange-500">${rets}</span>
+                        <span class="text-[10px] text-gray-500 ml-1 font-bold">(${taxaRetornoAgente}%)</span>
+                    </td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${t48xEsc(d.mensagens)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-emerald-500">${formatarTempo(d.tmc_medio_minutos)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-gexCyan">${formatarTempo(d.tmr_medio_minutos)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-orange-400">${t48Dur(d.sla_retorno_medio_min)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-gray-800 dark:text-white">${t48Dur(d.sla_aberto_medio_min)}${d.sla_aberto_fora ? `<span class="block text-[10px] font-bold text-red-500">🔴 ${d.sla_aberto_fora} fora do SLA</span>` : ''}</td>
+                    <td class="py-4 px-3 text-center">
+                        <button onclick="abrirModalT48x('${view}', ${i})" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap border border-white/5">Ver Tickets</button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            setCard('tickets', sumTickets);
+            setCard('abertos', sumAbertos + ' em aberto');
+            const elSla = document.getElementById('t48x-' + view + '-sla'); if (elSla) elSla.innerHTML = t48SlaResumo(st.dados);
+            const elInfo = document.getElementById('t48x-' + view + '-info-fora'); if (elInfo) elInfo.innerText = t48InfoFora(st.dados);
+            setCard('retornos', sumRetornos);
+            setCard('tx-retorno', sumTickets > 0 ? ((sumRetornos / sumTickets) * 100).toFixed(1) + '%' : '0%');
+            setCard('msgs', sumMsgs);
+            setCard('tmc', formatarTempo(sumTmcWeighted / (sumTickets || 1)));
+            setCard('tmr', formatarTempo(sumTmrWeighted / (sumTickets || 1)));
+        }
+
+        // "Ver Tickets" das abas por etiqueta — mesma lógica/visual do Time 48h (lista os tickets e abre a conversa no Chatwoot)
+        function abrirModalT48x(view, idx) {
+            const st = t48xEstado[view];
+            const d = st && st.dados ? st.dados[idx] : null;
+            if (!d) return;
+            document.getElementById('modal-t48x-titulo').innerText = `${view === 'painel' ? 'Etiqueta Painel' : 'Time 48h'}: ${d.agente}`;
+            document.getElementById('modal-t48x-sub').innerText = `Etiquetas: ${(st.buscadas || []).join(', ')}`;
+            let html = '<div class="space-y-3">';
+            html += t48DetResumo(d);
+            if (d.detalhes && d.detalhes.length > 0) {
+                d.detalhes.forEach(tk => {
+                    const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
+                    html += `
+                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                            <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente)}</p>
+                            <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${t48xEsc(tk.id)}</p>
+                            ${t48DetBadges(tk)}
+                        </div>
+                        <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                            Abrir Conversa ↗️
+                        </a>
+                    </div>`;
+                });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket encontrado neste período.</p>';
+            }
+            html += '</div>';
+            document.getElementById('modal-t48x-conteudo').innerHTML = html;
+            document.getElementById('modal-t48x').classList.remove('hidden');
+        }
+        function fecharModalT48x() { document.getElementById('modal-t48x').classList.add('hidden'); }
+
+        // ===== "Ver Tickets" do Time 48h (3 abas): detalhe de cada ticket — situação no Chatwoot, retorno do cliente, mensagens do agente e etiquetas =====
+        const T48_STATUS = {
+            0: ['🟡 Em aberto', 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'],
+            1: ['✅ Resolvido', 'bg-gray-500/10 text-gray-500 border-gray-500/30'],
+            2: ['⏸️ Pendente',  'bg-purple-500/10 text-purple-500 border-purple-500/30'],
+            3: ['💤 Adiado',    'bg-sky-500/10 text-sky-500 border-sky-500/30']
+        };
+        function t48DataBR(v) {
+            if (!v) return '—';
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? '—' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+        function t48DetBadges(tk) {
+            if (!tk || tk.status === undefined || tk.status === null) return '';
+            const st = T48_STATUS[tk.status] || ['❔ Status ' + t48xEsc(tk.status), 'bg-gray-500/10 text-gray-500 border-gray-500/30'];
+            const pill = (txt, cls) => `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${cls}">${txt}</span>`;
+            const ret = tk.teve_retorno
+                ? pill('↩️ Teve retorno · ' + t48DataBR(tk.ultimo_retorno), 'bg-orange-500/10 text-orange-500 border-orange-500/30')
+                : pill('Sem retorno', 'bg-gray-500/10 text-gray-400 border-gray-500/20');
+            const sla = [];   // SLA do ticket: há quanto tempo está aberto, quanto o cliente levou pra retornar e há quanto tempo o agente espera o cliente
+            if (tk.fora_periodo) sla.push(pill('📌 Aberto de fora do período escolhido', 'bg-purple-500/10 text-purple-400 border-purple-500/30'));
+            if (tk.aberto_ha_min != null) sla.push(pill('⏱️ Aberto há ' + t48Dur(tk.aberto_ha_min), 'bg-gray-500/10 text-gray-400 border-gray-500/30'));   // só informa a idade do ticket
+            if (tk.cliente_esperando_min != null) {   // SLA: o cliente mandou a última mensagem e o agente ainda não respondeu
+                const hE = tk.cliente_esperando_min / 60;
+                const corE = hE > 48 ? 'bg-red-500/10 text-red-500 border-red-500/30' : (hE >= 24 ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30');
+                sla.push(pill('💬 Cliente sem resposta há ' + t48Dur(tk.cliente_esperando_min) + (hE > 48 ? ' · fora do SLA' : ''), corE));
+            }
+            if (tk.retorno_cliente_min != null) sla.push(pill('⏳ Cliente retornou em ' + t48Dur(tk.retorno_cliente_min), 'bg-orange-500/10 text-orange-400 border-orange-500/30'));
+            if (tk.aguardando_cliente_min != null) sla.push(pill('⌛ Aguardando o cliente há ' + t48Dur(tk.aguardando_cliente_min), 'bg-sky-500/10 text-sky-500 border-sky-500/30'));
+            const meta = `<span class="hidden t48-tk-meta" data-rec="${tk.fora_periodo ? 0 : 1}" data-st="${t48xEsc(tk.status)}" data-ret="${tk.teve_retorno ? 1 : 0}" data-msgs="${parseInt(tk.msgs_agente) || 0}" data-fora="${tk.cliente_esperando_min != null && tk.cliente_esperando_min > 2880 ? 1 : 0}" data-txt="${t48xEsc(String((tk.cliente || '') + ' ' + tk.id).toLowerCase())}"></span>`;
+            return `<div class="flex flex-wrap items-center gap-1.5 mt-2">${pill(st[0], st[1])}${ret}${pill('✉️ ' + (parseInt(tk.msgs_agente) || 0) + ' msg do agente', 'bg-gexBlue/10 text-gexCyan border-gexBlue/30')}${pill('📅 Criado ' + t48DataBR(tk.criado_em), 'bg-gray-500/10 text-gray-500 border-gray-500/20')}</div>`
+                + (sla.length ? `<div class="flex flex-wrap items-center gap-1.5 mt-1.5">${sla.join('')}</div>` : '')
+                + (tk.etiquetas ? `<p class="text-[10px] text-gray-400 mt-1.5">🏷️ ${t48xEsc(tk.etiquetas)}</p>` : '') + meta;
+        }
+        function t48DetResumo(d) {
+            const dets = (d && d.detalhes) || [];
+            if (!dets.length || dets[0].status === undefined) return '';
+            const rec = dets.filter(t => !t.fora_periodo);   // recebidos no período (os abertos de fora do período só entram em "Em aberto" e "Fora do SLA")
+            const ini = rec.length ? 'todos' : 'abertos';   // agente sem ticket recebido no período já abre mostrando os em aberto
+            const abertos = dets.filter(t => t.status === 0).length;
+            const comRetorno = rec.filter(t => t.teve_retorno).length;
+            const msgs = rec.reduce((s, t) => s + (parseInt(t.msgs_agente) || 0), 0);
+            const comMsg = rec.filter(t => (parseInt(t.msgs_agente) || 0) > 0).length;
+            const ab = dets.filter(t => t.aberto_ha_min != null), rt = rec.filter(t => t.retorno_cliente_min != null);
+            const fora = dets.filter(t => t.cliente_esperando_min != null && t.cliente_esperando_min > 2880).length;
+            const media = (arr, k) => arr.length ? arr.reduce((s, t) => s + t[k], 0) / arr.length : null;
+            const card = (filtro, rot, val, cls, dica) => `<button type="button" onclick="t48DetFiltrar(this, '${filtro}')" data-t48f="${filtro}" title="${dica}" class="t48-card-filtro text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-black/30 px-3 py-2 hover:border-gexCyan transition-colors cursor-pointer ${filtro === ini ? 'ring-2 ring-gexCyan' : ''}"><p class="text-[9px] font-black uppercase tracking-widest text-gray-500">${rot}</p><p class="text-lg font-black font-mono ${cls}">${val}</p></button>`;
+            const info = (rot, val, cls, dica) => `<div title="${dica}" class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white/40 dark:bg-black/20 px-3 py-2"><p class="text-[9px] font-black uppercase tracking-widest text-gray-500">${rot}</p><p class="text-base font-black font-mono ${cls}">${val}</p></div>`;
+            return `<div class="t48-det-painel space-y-2" data-t48filtro="${ini}" data-t48busca="">`
+                + `<div class="grid grid-cols-2 md:grid-cols-4 gap-2">`
+                + card('todos', 'Tickets', rec.length, 'text-gray-800 dark:text-white', 'Mostrar todos')
+                + card('abertos', 'Em aberto', abertos, 'text-yellow-500', 'Mostrar só os em aberto')
+                + card('retorno', 'Com retorno', comRetorno, 'text-orange-500', 'Mostrar só os que o cliente retornou')
+                + card('msgs', 'Msgs do agente', msgs, 'text-gexCyan', 'Mostrar os ' + comMsg + ' tickets com mensagem do agente (mais mensagens primeiro)')
+                + `</div><div class="grid grid-cols-1 md:grid-cols-3 gap-2">`
+                + info('↩️ Retorno do cliente (média)', t48Dur(media(rt, 'retorno_cliente_min')), 'text-orange-400', 'Tempo médio que o cliente levou pra responder depois da mensagem do agente')
+                + info('⏱️ Em aberto há (média)', t48Dur(media(ab, 'aberto_ha_min')), 'text-gray-800 dark:text-white', 'Média de há quanto tempo os tickets em aberto estão abertos')
+                + card('fora', '🔴 Fora do SLA (cliente +48h sem resposta)', fora, 'text-red-500', 'Mostrar só os em aberto em que o cliente mandou a última mensagem há mais de 48h e o agente não respondeu')
+                + `</div><div class="flex items-center gap-2">`
+                + `<input type="text" oninput="t48DetBuscar(this)" placeholder="🔎 Buscar por cliente ou nº do ticket..." class="flex-1 bg-gray-100 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-gexCyan">`
+                + `<span class="t48-det-contagem text-[10px] font-bold text-gray-500 whitespace-nowrap">Mostrando ${dets.length} de ${dets.length}</span>`
+                + `</div></div>`;
+        }
+        function t48Dur(min) {
+            if (min === null || min === undefined || isNaN(min)) return '—';
+            const m = Math.max(0, Math.round(Number(min)));
+            if (m < 60) return m + ' min';
+            if (m < 1440) return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+            return Math.floor(m / 1440) + 'd ' + Math.floor((m % 1440) / 60) + 'h';
+        }
+        // Faixa "SLA do Time 48H" da aba: média do retorno do cliente, média do tempo em aberto e abertos por faixa (até 24h / 24–48h / +48h)
+        function t48SlaResumo(lista) {
+            const dets = [];
+            (lista || []).forEach(d => (d.detalhes || []).forEach(t => dets.push(t)));
+            const rt = dets.filter(t => !t.fora_periodo && t.retorno_cliente_min != null), ab = dets.filter(t => t.aberto_ha_min != null);
+            const media = (arr, k) => arr.length ? arr.reduce((s, t) => s + t[k], 0) / arr.length : null;
+            const esp = t => t.cliente_esperando_min != null ? t.cliente_esperando_min : 0;   // SLA = tempo do cliente sem resposta do agente (0 quando o agente mandou a última mensagem)
+            const ate24 = ab.filter(t => esp(t) < 1440).length;
+            const de24a48 = ab.filter(t => esp(t) >= 1440 && esp(t) <= 2880).length;
+            const fora = ab.filter(t => esp(t) > 2880).length;
+            const item = (rot, val, cls) => `<span class="text-[11px] font-bold text-gray-500">${rot} <b class="font-mono ${cls}">${val}</b></span>`;
+            return `<span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">⏱️ SLA do Time 48H</span>`
+                + item('↩️ Retorno do cliente (média):', t48Dur(media(rt, 'retorno_cliente_min')), 'text-orange-400')
+                + item('⏱️ Em aberto há (média):', t48Dur(media(ab, 'aberto_ha_min')), 'text-gray-800 dark:text-white')
+                + item('🟢 Em dia:', ate24, 'text-emerald-500')
+                + item('🟡 Cliente sem resposta 24–48h:', de24a48, 'text-yellow-500')
+                + item('🔴 Fora do SLA (cliente +48h sem resposta):', fora, 'text-red-500');
+        }
+        // "Ver Tickets": cartões clicáveis (filtro) + busca por cliente/nº do ticket
+        function t48DetAplicar(painel, cont) {
+            if (!painel || !cont) return;
+            const filtro = painel.dataset.t48filtro || 'todos';
+            const busca = (painel.dataset.t48busca || '').trim().toLowerCase();
+            const pill = painel.dataset.t48pill || '';   // filtro pelos botões do ticket (lista "Todos os casos em aberto")
+            const metas = Array.from(cont.querySelectorAll('.t48-tk-meta'));
+            metas.forEach((m, i) => { if (m.dataset.ordem === undefined) m.dataset.ordem = i; });
+            let vis = 0;
+            metas.forEach(m => {
+                const card = m.closest('.rounded-xl.p-4');
+                if (!card) return;
+                let ok = m.dataset.rec !== '0';   // "Tickets", "Com retorno" e "Msgs do agente" = só os recebidos no período
+                if (filtro === 'abertos') ok = m.dataset.st === '0';
+                else if (filtro === 'retorno') ok = ok && m.dataset.ret === '1';
+                else if (filtro === 'msgs') ok = ok && (parseInt(m.dataset.msgs) || 0) > 0;
+                else if (filtro === 'fora') ok = m.dataset.fora === '1';
+                if (ok && busca) ok = (m.dataset.txt || '').includes(busca);
+                if (ok && pill) { const i = pill.indexOf(':'); ok = m.dataset['p' + pill.slice(0, i)] === pill.slice(i + 1); }
+                card.classList.toggle('hidden', !ok);
+                if (ok) vis++;
+            });
+            // "Msgs do agente": mais mensagens primeiro; nos outros filtros volta a ordem original
+            const itens = metas.map(m => ({ el: m.closest('.rounded-xl.p-4'), o: parseInt(m.dataset.ordem) || 0, n: parseInt(m.dataset.msgs) || 0 })).filter(x => x.el);
+            if (itens.length && itens[0].el.parentElement) {
+                const pai = itens[0].el.parentElement;
+                itens.sort((a, b) => filtro === 'msgs' ? ((b.n - a.n) || (a.o - b.o)) : (a.o - b.o)).forEach(x => pai.appendChild(x.el));
+            }
+            const contagem = painel.querySelector('.t48-det-contagem');
+            if (contagem) contagem.textContent = `Mostrando ${vis} de ${metas.length}`;
+            painel.querySelectorAll('.t48-card-filtro').forEach(b => {
+                const ativo = b.dataset.t48f === filtro;
+                b.classList.toggle('ring-2', ativo);
+                b.classList.toggle('ring-gexCyan', ativo);
+            });
+        }
+        function t48DetFiltrar(el, filtro) {
+            const painel = el.closest('.t48-det-painel'), cont = el.closest('#modal-t48-conteudo, #modal-t48x-conteudo');
+            if (!painel || !cont) return;
+            painel.dataset.t48filtro = (painel.dataset.t48filtro === filtro && filtro !== 'todos') ? (painel.dataset.t48base || 'todos') : filtro;   // clicar de novo no mesmo cartão volta pra visão inicial ("todos", ou "em aberto" na lista de todos os casos em aberto)
+            t48DetAplicar(painel, cont);
+        }
+        function t48DetBuscar(el) {
+            const painel = el.closest('.t48-det-painel'), cont = el.closest('#modal-t48-conteudo, #modal-t48x-conteudo');
+            if (!painel || !cont) return;
+            painel.dataset.t48busca = el.value || '';
+            t48DetAplicar(painel, cont);
+        }
+        // Time 48H: nas tabelas só aparecem agentes com "48H" no nome do Chatwoot (e SEM ATRIBUIR); os outros entram só nos totais
+        function t48EhDoTime(nome) { return nome === 'SEM ATRIBUIR' || /[\s\-]48H\b/i.test(String(nome || '')); }
+        function t48InfoFora(lista) {
+            const fora = (lista || []).filter(d => !t48EhDoTime(d.agente));
+            if (!fora.length) return '';
+            const tks = fora.reduce((s, d) => s + (parseInt(d.tickets) || 0), 0), ab = fora.reduce((s, d) => s + (parseInt(d.em_aberto) || 0), 0);
+            const quem = fora.length === 1 ? '1 agente de outro time que pegou' : fora.length + ' agentes de outros times que pegaram';
+            return `ℹ️ Só aparecem agentes do Time 48H. Ficaram de fora ${quem} casos do time em algum momento (${tks} ticket${tks === 1 ? '' : 's'} · ${ab} em aberto) — eles entram nos totais acima.`;
         }
 
         window.addEventListener('keydown', function(e) {
