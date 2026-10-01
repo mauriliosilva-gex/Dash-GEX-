@@ -591,7 +591,6 @@
                                 <button onclick="exportarStatusCasos()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
-                        <button onclick="refreshManual(carregarDistribuicao)" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
                     </div>
                     <div class="flex-1 min-h-0 overflow-hidden p-6 space-y-6">
                         <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-full bg-white/50 dark:bg-black/20">
@@ -634,7 +633,6 @@
                                 <button onclick="exportarDistribuicao()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm ml-2">📥 Excel</button>
                             </div>
                         </div>
-                        <button onclick="refreshManual(carregarDistribuicao)" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-2">🔄 Recarregar</button>
                     </div>
                     <div class="flex-1 min-h-0 overflow-hidden p-6 space-y-6">
                         <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-full bg-white/50 dark:bg-black/20">
@@ -882,7 +880,6 @@
                     <button onclick="mudarViewQ3('celulas')" id="q3btn-celulas" class="btn-setor btn-setor-inativo">🏢 Células</button>
                     <button onclick="mudarViewQ3('analistas')" id="q3btn-analistas" class="btn-setor btn-setor-inativo">👥 Analistas</button>
                     <button onclick="mudarViewQ3('produtos')" id="q3btn-produtos" class="btn-setor btn-setor-inativo">📦 Produtos</button>
-                    <button onclick="refreshManual(carregarQ3)" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm ml-auto">🔄 Recarregar</button>
                 </div>
                 <div id="q3-container" class="space-y-6">
                     <div class="text-center py-16 text-gray-500 font-bold">Carregando relatório Q3...</div>
@@ -1192,7 +1189,6 @@
                         <div class="flex items-center gap-2">
                             <button onclick="exportarAdiar()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm">📥 Excel</button>
                             <button id="btn-acao-adiar" onclick="abrirOpcoesAdiar()" class="bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-black px-4 py-1.5 rounded-lg transition-all shadow-sm">🌙 Adiar casos</button>
-                            <button onclick="refreshManual(carregarAdiar)" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm">🔄 Recarregar</button>
                         </div>
                     </div>
                     <div class="px-6 py-2 shrink-0 border-b border-gray-100 dark:border-white/5">
@@ -1795,31 +1791,35 @@
                 const poolCor = p.fila > 0 ? 'text-red-500' : 'text-emerald-500';
                 const poolHtml = card('<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Pool de conexões</div>',
                     `<div class="text-sm space-y-1"><div>Em uso: <b>${p.em_uso}</b> / ${p.max}</div><div>Livres: <b>${p.livres}</b></div><div>Na fila: <b class="${poolCor}">${p.fila}</b> ${p.fila > 0 ? '(banco ocupado!)' : '(saudável)'}</div></div>`);
+                const f = d.freio || {}, pr = d.protecao || {};
+                const fBadge = f.pausado ? `<span class="text-red-500 font-black">🔴 PAUSADO até ${new Date(f.ate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>` : '<span class="text-emerald-500 font-black">🟢 LIBERADO</span>';
+                const freioHtml = card('<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Proteção do Chatwoot</div>',
+                    `<div class="text-sm space-y-1"><div>Freio do banco: ${fBadge}</div><div>Acionado: <b>${f.acionamentos || 0}</b> vez(es) · falhas seguidas: <b>${f.falhas_seguidas || 0}</b></div><div>Consultas iguais aproveitadas: <b>${pr.consultas_aproveitadas || 0}</b></div><div>Dados guardados entregues (banco falhou): <b>${pr.dados_guardados_servidos || 0}</b></div>${f.ultimo_erro ? `<div class="text-[11px] text-gray-500">Último erro: ${String(f.ultimo_erro).replace(/</g, '&lt;')}</div>` : ''}</div>`);
                 let linhas = d.cache.map(c => `<tr class="border-t border-gray-200 dark:border-gray-800"><td class="py-2 px-3 font-mono text-[11px]">${c.rota}</td><td class="py-2 px-3 text-center font-mono">${c.idade_min} min</td><td class="py-2 px-3 text-center font-mono ${c.tempo_ms != null && c.tempo_ms > 3000 ? 'text-red-500 font-bold' : 'text-gray-600 dark:text-gray-300'}">${c.tempo_ms == null ? '—' : c.tempo_ms + ' ms'}</td></tr>`).join('');
                 if (!linhas) linhas = '<tr><td colspan="3" class="py-4 text-center text-gray-500 text-sm">Cache vazio (ninguém acessou ainda).</td></tr>';
                 const cacheHtml = card('<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Cache por rota (idade e tempo da última consulta)</div>',
                     `<table class="w-full text-sm"><thead><tr class="text-[10px] text-gray-500 uppercase"><th class="py-1 px-3 text-left">Rota</th><th class="py-1 px-3 text-center">Idade do cache</th><th class="py-1 px-3 text-center">Tempo da consulta</th></tr></thead><tbody>${linhas}</tbody></table>`);
-                cont.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${warmerHtml}${poolHtml}</div>${cacheHtml}<p class="text-[10px] text-gray-400">Atualizado em ${new Date(d.gerado_em).toLocaleString('pt-BR')} · atualiza sozinho a cada 15s</p>`;
+                cont.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${warmerHtml}${poolHtml}${freioHtml}</div>${cacheHtml}<p class="text-[10px] text-gray-400">Atualizado em ${new Date(d.gerado_em).toLocaleString('pt-BR')} · atualiza sozinho a cada 15s</p>`;
             } catch (e) { cont.innerHTML = '<p class="text-red-500 font-bold text-sm">Falha ao carregar o Raio-X.</p>'; }
         }
         // Auto-refresh POR TELA ABERTA: cada visao so recarrega quando esta na tela (nao recarrega abas fechadas).
-        // Admin: Status de Casos / Caixas / Tickets Atual so pelo botao Atualizar · Agente: Tickets Atual 15min · Demais: 20min · so com o navegador visivel.
+        // Admin: toda tela carrega 1x (carga inicial ou ao abrir) e depois só pelo 🔄 Atualizar, só a tela aberta · Agente: Tickets Atual a cada 15 min · demais a cada 30 min · só com o navegador visível.
         const REFRESH_POR_TELA = [
             ['tela-tk-atual',          () => carregarTickets(''),        900000],
-            ['tela-tk-casos',          () => carregarDistribuicao(),     900000],
-            ['tela-tk-distribuicao',   () => carregarDistribuicao(),     900000],
-            ['aba-retencao',           () => carregarDadosReais(''),     1200000],
-            ['tela-tk-semanal',        () => carregarTicketsSemanal(window._perVisaoMensal || '', diasFiltroSemanal || 7), 1200000],
-            ['tela-tk-geral',          () => carregarTicketsGeral(window._perTkGeral || ''), 1200000],
-            ['tela-tk-prod',           () => carregarProdutividade(''),  1200000],
-            ['tela-cw-recorrencia',    () => carregarRecorrencia(),      1200000],
-            ['tela-cw-tabulacao',      () => carregarProdutosMetricas(), 1200000],
-            ['tela-cw-mencoes',        () => carregarMencoesAbertos(),   1200000],
-            ['tela-cw-reembolsos',     () => { carregarPagAmerican(''); carregarBuyGoods(''); carregarCartPanda(''); }, 1200000],
-            ['tela-cw-time48',         () => carregarTime48(''),         1200000],
-            ['tela-qual-monitoria',    () => carregarQualidade(''),      1200000],
-            ['tela-qual-sinalizacoes', () => carregarSinalizacoes(''),   1200000],
-            ['tela-qual-monitoriatk',  () => carregarMonitoriaTk(''),    1200000]
+            ['tela-tk-casos',          () => carregarDistribuicao(),     1800000],
+            ['tela-tk-distribuicao',   () => carregarDistribuicao(),     1800000],
+            ['aba-retencao',           () => carregarDadosReais(''),     1800000],
+            ['tela-tk-semanal',        () => carregarTicketsSemanal(window._perVisaoMensal || '', diasFiltroSemanal || 7), 1800000],
+            ['tela-tk-geral',          () => carregarTicketsGeral(window._perTkGeral || ''), 1800000],
+            ['tela-tk-prod',           () => carregarProdutividade(''),  1800000],
+            ['tela-cw-recorrencia',    () => carregarRecorrencia(),      1800000],
+            ['tela-cw-tabulacao',      () => carregarProdutosMetricas(), 1800000],
+            ['tela-cw-mencoes',        () => carregarMencoesAbertos(),   1800000],
+            ['tela-cw-reembolsos',     () => { if (plataformaAtual === 'buygoods') carregarBuyGoods(''); else if (plataformaAtual === 'cartpanda') carregarCartPanda(''); else carregarPagAmerican(''); }, 1800000],   // só a plataforma aberta
+            ['tela-cw-time48',         () => carregarTime48(''),         1800000],
+            ['tela-qual-monitoria',    () => carregarQualidade(''),      1800000],
+            ['tela-qual-sinalizacoes', () => carregarSinalizacoes(''),   1800000],
+            ['tela-qual-monitoriatk',  () => carregarMonitoriaTk(''),    1800000]
         ];
         const _ultRefreshTela = {};
         function tocarTelaAberta() {
@@ -1828,8 +1828,8 @@
             for (const [id, fn, ms] of REFRESH_POR_TELA) {
                 const el = document.getElementById(id);
                 if (!el || el.offsetParent === null) continue;
-                // Admin: Tickets Atual / Status de Casos / Caixas so atualizam pelo botao Atualizar (carregam 1x ao entrar); Tickets Atual do agente reatualiza a cada 15min
-                if (['tela-tk-atual', 'tela-tk-casos', 'tela-tk-distribuicao'].includes(id) && _ehAdmin && _ultRefreshTela[id] !== undefined) continue;
+                // Admin: nenhuma tela recarrega sozinha — carrega 1x e depois só pelo 🔄 Atualizar · Agente: Tickets Atual a cada 15 min, demais a cada 30 min
+                if (_ehAdmin && _ultRefreshTela[id] !== undefined) continue;
                 if (_ultRefreshTela[id] === undefined || agora - _ultRefreshTela[id] >= ms) {
                     _ultRefreshTela[id] = agora;
                     try { fn(); } catch (e) {}
@@ -1855,13 +1855,15 @@
                     () => carregarPagAmerican(''),
                     () => carregarTime48(''),
                     () => carregarDistribuicao(),
-                    () => carregarProdutividade(''),
-                    () => carregarBuyGoods(''),
-                    () => carregarCartPanda('')
+                    () => carregarProdutividade('')   // BuyGoods e CartPanda carregam quando a plataforma é aberta (1x)
                 );
             }
             // B: escalona 1 rota a cada 300ms pra nao disparar tudo de uma vez (sem rajada no Postgres do Chatwoot)
             fila.forEach((fn, i) => setTimeout(() => { try { fn(); } catch (e) {} }, i * 300));
+            // Telas carregadas aqui contam como já carregadas: não recarregam ao abrir (admin: só pelo 🔄 Atualizar · agente: no intervalo da tela)
+            const _jaCarregadas = ['aba-retencao', 'tela-qual-monitoria', 'tela-tk-atual', 'tela-tk-geral'];
+            if (usuarioAtual && usuarioAtual.role === 'admin') _jaCarregadas.push('tela-qual-sinalizacoes', 'tela-cw-recorrencia', 'tela-cw-tabulacao', 'tela-cw-mencoes', 'tela-qual-monitoriatk', 'tela-cw-reembolsos', 'tela-cw-time48', 'tela-tk-casos', 'tela-tk-distribuicao', 'tela-tk-prod');
+            const _agoraCarga = Date.now(); _jaCarregadas.forEach(id => { _ultRefreshTela[id] = _agoraCarga; });
         }
 
         // 🔄 Atualiza SOMENTE a aba/visão aberta agora (dados ao vivo). Admin-only.
@@ -1880,8 +1882,16 @@
                 ['tela-cw-recorrencia',  () => carregarRecorrencia()],
                 ['tela-cw-tabulacao',    () => carregarProdutosMetricas()],
                 ['tela-cw-mencoes',      () => carregarMencoesAbertos()],
-                ['tela-cw-reembolsos',   () => { carregarPagAmerican(''); carregarBuyGoods(''); carregarCartPanda(''); }],
-                ['tela-cw-time48',       () => carregarTime48('')],
+                ['tela-cw-reembolsos',   () => { if (plataformaAtual === 'buygoods') carregarBuyGoods(''); else if (plataformaAtual === 'cartpanda') carregarCartPanda(''); else carregarPagAmerican(''); }],   // só a plataforma aberta
+                ['tela-cw-time48',       () => {   // só a sub-aba aberta; a Visão Geral mantém o período do calendário
+                    if (viewTime48Atual !== 'geral') return carregarTime48Etiquetas(viewTime48Atual);
+                    const ds48 = (calTime48 && calTime48.selectedDates) || [];
+                    if (!ds48.length) return carregarTime48('');
+                    const fim48 = new Date(ds48[ds48.length - 1]); fim48.setHours(23, 59, 59);
+                    carregarTime48(`?since=${Math.floor(ds48[0].getTime() / 1000)}&until=${Math.floor(fim48.getTime() / 1000)}`);
+                }],
+                ['tela-qual-q3',         () => carregarQ3()],
+                ['tela-cw-adiar',        () => carregarAdiar()],
             ];
             let fez = false;
             mapa.forEach(([id, fn]) => {
@@ -3997,20 +4007,20 @@
             
             const tb = document.getElementById('tabela-pagamerican-body');
             try {
-                if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados do servidor...</td></tr>`;
+                if(tb && plataformaAtual === 'pagamerican') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados do servidor...</td></tr>`;
                 
                 const response = await fetch('/api/reembolsos-pagamerican' + parametrosUrl);
                 const data = await response.json();
                 
                 if (data.success) {
                     dadosPagAmerican = data.dados || [];
-                    renderTabelaPagAmerican();
+                    if (plataformaAtual === 'pagamerican') renderTabelaPagAmerican();
                 } else {
-                    if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro no Banco de Dados: ${data.error}</td></tr>`;
+                    if(tb && plataformaAtual === 'pagamerican') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro no Banco de Dados: ${data.error}</td></tr>`;
                 }
             } catch (error) { 
                 console.error(error); 
-                if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
+                if(tb && plataformaAtual === 'pagamerican') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
             }
         }
 
@@ -4276,13 +4286,13 @@ function mudarAbaPlataforma(plataforma) {
 
     if (plataforma === 'pagamerican') {
         if(btnExportar) btnExportar.onclick = exportarExcelPagAmerican;
-        carregarPagAmerican();
+        if (dadosPagAmerican.length) renderTabelaPagAmerican(); else carregarPagAmerican();   // já carregou: só mostra (pra buscar de novo, 🔄 Atualizar)
     } else if (plataforma === 'buygoods') {
         if(btnExportar) btnExportar.onclick = exportarExcelBuyGoods;
-        carregarBuyGoods();
+        if (dadosBuyGoods.length) renderTabelaBuyGoods(); else carregarBuyGoods();   // já carregou: só mostra (pra buscar de novo, 🔄 Atualizar)
     } else if (plataforma === 'cartpanda') {
         if(btnExportar) btnExportar.onclick = exportarExcelCartPanda;
-        carregarCartPanda();
+        if (dadosCartPanda.length) renderTabelaCartPanda(); else carregarCartPanda();   // já carregou: só mostra (pra buscar de novo, 🔄 Atualizar)
     }
 }
 
@@ -4293,20 +4303,20 @@ async function carregarBuyGoods(parametrosUrl = '') {
     // Reutilizamos a MESMA tabela da PagAmerican no HTML para não precisar recriar nada
     const tb = document.getElementById('tabela-pagamerican-body'); 
     try {
-        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados da BuyGoods...</td></tr>`;
+        if(tb && plataformaAtual === 'buygoods') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados da BuyGoods...</td></tr>`;
         
         const response = await fetch('/api/reembolsos-buygoods' + parametrosUrl);
         const data = await response.json();
         
         if (data.success) {
             dadosBuyGoods = data.dados || [];
-            renderTabelaBuyGoods();
+            if (plataformaAtual === 'buygoods') renderTabelaBuyGoods();
         } else {
-            if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
+            if(tb && plataformaAtual === 'buygoods') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
         }
     } catch (error) { 
         console.error(error); 
-        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
+        if(tb && plataformaAtual === 'buygoods') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
     }
 }
 
@@ -4511,20 +4521,20 @@ async function carregarCartPanda(parametrosUrl = '') {
     // Reutilizamos a MESMA tabela da PagAmerican no HTML para não precisar recriar nada
     const tb = document.getElementById('tabela-pagamerican-body'); 
     try {
-        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados da CartPanda...</td></tr>`;
+        if(tb && plataformaAtual === 'cartpanda') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando dados da CartPanda...</td></tr>`;
         
         const response = await fetch('/api/reembolsos-cartpanda' + parametrosUrl);
         const data = await response.json();
         
         if (data.success) {
             dadosCartPanda = data.dados || [];
-            renderTabelaCartPanda();
+            if (plataformaAtual === 'cartpanda') renderTabelaCartPanda();
         } else {
-            if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
+            if(tb && plataformaAtual === 'cartpanda') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
         }
     } catch (error) { 
         console.error(error); 
-        if(tb) tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
+        if(tb && plataformaAtual === 'cartpanda') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de conexão com a API.</td></tr>`;
     }
 }
 
@@ -5304,6 +5314,7 @@ async function exportarExcelCartPanda() {
                     mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark",
                     onChange: (selectedDates) => { st.datas = selectedDates; }
                 });
+                const hj48 = new Date(); st.cal.setDate([new Date(hj48.getFullYear(), hj48.getMonth(), 1), hj48], false);   // já abre no mês atual (o padrão)
             }
             st.montada = true;
         }
@@ -5693,6 +5704,7 @@ async function exportarExcelCartPanda() {
                 else carregarCartPanda(parametrosUrl);
             }, true);
             calTime48       = criarCalendario('calendario-time48',        'btn-aplicar-time48', carregarTime48,      true);
+            if (calTime48) { const hj48 = new Date(); calTime48.setDate([new Date(hj48.getFullYear(), hj48.getMonth(), 1), hj48], false); }   // Time 48H: o calendário já abre no mês atual (o padrão); pra outro período, escolhe a data e clica em Buscar
 
             document.getElementById('filtro-mes-qualidade')?.addEventListener('change', (e) => carregarQualidade(e.target.value));
             document.getElementById('filtro-mes-sinalizacoes')?.addEventListener('change', (e) => carregarSinalizacoes(e.target.value));
