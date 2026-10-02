@@ -1898,13 +1898,14 @@ app.get('/api/time48', async (req, res) => {
                 EXISTS (SELECT 1 FROM messages mt WHERE mt.conversation_id = cf.conv_id AND mt.private = FALSE AND mt.message_type = 0 AND mt.created_at > cf.primeira_resp_agente) AS teve_retorno,
                 (SELECT COUNT(*) FROM messages me WHERE me.conversation_id = cf.conv_id AND me.private = FALSE AND me.message_type = 1 AND me.sender_type = 'User' AND (me.content_attributes->>'deleted')::boolean IS NOT TRUE) AS msgs_enviadas,
                 EXTRACT(EPOCH FROM (
-                    (SELECT MIN(m1.created_at) FROM messages m1 WHERE m1.conversation_id = cf.conv_id AND m1.message_type = 1 AND m1.private = FALSE) - cf.created_at
+                    (SELECT MIN(m1.created_at) FROM messages m1 WHERE m1.conversation_id = cf.conv_id AND m1.message_type = 1 AND m1.private = FALSE AND m1.sender_type = 'User') - cf.created_at   -- TMC: 1ª mensagem do AGENTE (bot e automação não contam)
                 )::interval) AS tmc_seg,
                 (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
                     FROM messages msg
                     JOIN messages resp ON resp.conversation_id = msg.conversation_id
                                       AND resp.message_type = 1
                                       AND resp.private = FALSE
+                                      AND resp.sender_type = 'User'   -- TMR: só resposta do AGENTE
                                       AND resp.created_at > msg.created_at
                     WHERE msg.conversation_id = cf.conv_id
                       AND msg.message_type = 0
@@ -1914,6 +1915,7 @@ app.get('/api/time48', async (req, res) => {
                           WHERE m_mid.conversation_id = msg.conversation_id
                             AND m_mid.created_at > msg.created_at
                             AND m_mid.created_at < resp.created_at
+                            AND NOT (m_mid.message_type IN (1, 3) AND m_mid.private = FALSE AND m_mid.sender_type IS DISTINCT FROM 'User')   -- bot/automação no meio não conta
                       )
                 ) AS tmr_seg
             FROM CasosFiltrados cf
@@ -2150,13 +2152,14 @@ app.get('/api/time48-etiquetas', async (req, res) => {
                 EXISTS (SELECT 1 FROM messages mt WHERE mt.conversation_id = cf.conv_id AND mt.private = FALSE AND mt.message_type = 0 AND mt.created_at > cf.primeira_resp_agente) AS teve_retorno,
                 (SELECT COUNT(*) FROM messages me WHERE me.conversation_id = cf.conv_id AND me.private = FALSE AND me.message_type = 1 AND me.sender_type = 'User' AND (me.content_attributes->>'deleted')::boolean IS NOT TRUE) AS msgs_enviadas,
                 EXTRACT(EPOCH FROM (
-                    (SELECT MIN(m1.created_at) FROM messages m1 WHERE m1.conversation_id = cf.conv_id AND m1.message_type = 1 AND m1.private = FALSE) - cf.created_at
+                    (SELECT MIN(m1.created_at) FROM messages m1 WHERE m1.conversation_id = cf.conv_id AND m1.message_type = 1 AND m1.private = FALSE AND m1.sender_type = 'User') - cf.created_at   -- TMC: 1ª mensagem do AGENTE (bot e automação não contam)
                 )::interval) AS tmc_seg,
                 (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
                     FROM messages msg
                     JOIN messages resp ON resp.conversation_id = msg.conversation_id
                                       AND resp.message_type = 1
                                       AND resp.private = FALSE
+                                      AND resp.sender_type = 'User'   -- TMR: só resposta do AGENTE
                                       AND resp.created_at > msg.created_at
                     WHERE msg.conversation_id = cf.conv_id
                       AND msg.message_type = 0
@@ -2166,6 +2169,7 @@ app.get('/api/time48-etiquetas', async (req, res) => {
                           WHERE m_mid.conversation_id = msg.conversation_id
                             AND m_mid.created_at > msg.created_at
                             AND m_mid.created_at < resp.created_at
+                            AND NOT (m_mid.message_type IN (1, 3) AND m_mid.private = FALSE AND m_mid.sender_type IS DISTINCT FROM 'User')   -- bot/automação no meio não conta
                       )
                 ) AS tmr_seg
             FROM CasosFiltrados cf
