@@ -602,6 +602,7 @@
                                     <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                         <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                             <th class="py-3 px-3 pl-4">Agente</th>
+                                            <th class="py-3 px-3 text-center" title="Em aberto com a última mensagem do agente (não conta no SLA)">🔵 Em aberto</th>
                                             <th class="py-3 px-3 text-center" title="Casos com menos de 24h">🟢 Retornos</th>
                                             <th class="py-3 px-3 text-center" title="Casos entre 24h e 48h">🟡 Aguardando</th>
                                             <th class="py-3 px-3 text-center" title="Mais de 48h sem resposta">🔴 Fora do SLA</th>
@@ -2666,14 +2667,16 @@
                 : dadosDistribuicao.casos.filter(a => a.nome.toUpperCase().includes(`- ${filtroCasosSetor}`));
 
             if(lista.length === 0){ 
-                tb.innerHTML=`<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhum caso pendente neste setor.</td></tr>`; 
+                tb.innerHTML=`<tr><td colspan="7" class="py-6 text-center text-gray-500 font-bold">Nenhum caso pendente neste setor.</td></tr>`; 
                 tf.innerHTML='';
                 return;
             }
             
             let tRetornos = 0, tAguardando = 0, tForaSLA = 0, tGeral = 0;
+            let tEmAberto = 0;
 
             tb.innerHTML = lista.map(a => {
+                tEmAberto += a.em_aberto || 0;
                 tRetornos += a.retornos || 0; 
                 tAguardando += a.aguardando || 0; 
                 tForaSLA += a.fora_sla || 0; 
@@ -2681,6 +2684,7 @@
                 return `
                 <tr class="ranking-row row-normal linha-animada">
                     <td class="py-3 px-3 pl-4 font-bold texto-contraste text-xs whitespace-nowrap">${a.nome}</td>
+                    <td class="py-3 px-3 text-center font-mono ${(a.em_aberto||0)>0?'text-sky-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.em_aberto || 0}</td>
                     <td class="py-3 px-3 text-center font-mono ${a.retornos>0?'text-emerald-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.retornos || 0}</td>
                     <td class="py-3 px-3 text-center font-mono ${a.aguardando>0?'text-yellow-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.aguardando || 0}</td>
                     <td class="py-3 px-3 text-center font-mono ${a.fora_sla>0?'text-red-500 font-bold':'text-gray-400 dark:text-gray-600 opacity-50'}">${a.fora_sla || 0}</td>
@@ -2696,6 +2700,7 @@
             tf.innerHTML = `
                 <tr>
                     <td class="py-4 px-3 pl-4 font-black text-gray-800 dark:text-white uppercase tracking-widest text-xs bg-transparent">Total Filtrado</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-sky-500 text-[15px] bg-transparent">${tEmAberto}</td>
                     <td class="py-4 px-3 text-center font-mono font-black text-emerald-500 text-[15px] bg-transparent">${tRetornos}</td>
                     <td class="py-4 px-3 text-center font-mono font-black text-yellow-500 text-[15px] bg-transparent">${tAguardando}</td>
                     <td class="py-4 px-3 text-center font-mono font-black text-red-500 text-[15px] bg-transparent">${tForaSLA}</td>
@@ -2723,6 +2728,7 @@
                     if(tk.status.includes('Retornos')) corStatus = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30';
                     if(tk.status.includes('Aguardando')) corStatus = 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30';
                     if(tk.status.includes('Fora do SLA')) corStatus = 'bg-red-500/10 text-red-500 border border-red-500/30';
+                    if(tk.status.includes('Em aberto')) corStatus = 'bg-sky-500/10 text-sky-500 border border-sky-500/30';
 
                     html += `
                     <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
@@ -3347,6 +3353,7 @@
             // Define as colunas (atualizadas)
             const colunasDef = [
                 { header: 'AGENTE', key: 'nome', width: 35 },
+                { header: 'EM ABERTO', key: 'em_aberto', width: 15 },
                 { header: 'RETORNOS', key: 'retornos', width: 15 },
                 { header: 'AGUARDANDO', key: 'aguardando', width: 15 },
                 { header: 'FORA DO SLA', key: 'fora_sla', width: 18 },
@@ -3373,15 +3380,20 @@
 
                 // Insere os dados usando o fallback inteligente
                 lista.forEach((a, ai) => {
+                    const emA = parseInt(a.em_aberto || 0);
                     const ret = parseInt(a.retornos || a.ignorado || 0);
                     const agu = parseInt(a.aguardando || 0);
                     const fsla = parseInt(a.fora_sla || a.parado || 0);
-                    let row = sheet.addRow({ nome: a.nome, retornos: ret, aguardando: agu, fora_sla: fsla, total: parseInt(a.total || 0) });
+                    let row = sheet.addRow({ nome: a.nome, em_aberto: emA, retornos: ret, aguardando: agu, fora_sla: fsla, total: parseInt(a.total || 0) });
                     row.alignment = { vertical: 'middle', horizontal: 'center' };
                     const cN = row.getCell('nome');
                     cN.alignment = { vertical: 'middle', horizontal: 'left' };
                     cN.font = { bold: true, color: { argb: 'FF1E293B' } };
                     if (ai % 2 === 1) cN.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF4F7FB'} };
+                    // 🔵 Em aberto
+                    const cE = row.getCell('em_aberto');
+                    cE.fill = { type:'pattern', pattern:'solid', fgColor:{argb: emA>0 ? 'FFE0F2FE' : 'FFF8FAFC'} };
+                    cE.font = { bold: emA>0, color:{argb: emA>0 ? 'FF0369A1' : 'FFCBD5E1'} };
                     // 🟢 Retornos
                     const cR = row.getCell('retornos');
                     cR.fill = { type:'pattern', pattern:'solid', fgColor:{argb: ret>0 ? 'FFDCFCE7' : 'FFF8FAFC'} };
