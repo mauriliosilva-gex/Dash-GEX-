@@ -1028,10 +1028,22 @@ app.get('/api/distribuicao', async (req, res) => {
                 oc.first_reply_created_at,
                 oc.last_activity_at,
                 oc.created_at,
-                oc.so_48h
+                oc.so_48h,
+                lm.message_type AS last_msg_type, lm.created_at AS last_msg_at
             FROM OpenConversations oc
             LEFT JOIN users u ON u.id = oc.assignee_id
             LEFT JOIN contacts ct ON ct.id = oc.contact_id
+            LEFT JOIN LATERAL (   -- última mensagem do cliente ou do agente (nota privada, bot, atividade e apagada não contam)
+                SELECT m.message_type, m.created_at
+                FROM messages m
+                WHERE m.conversation_id = oc.id
+                  AND m.account_id = 1
+                  AND m.private = FALSE
+                  AND (m.message_type = 0 OR (m.message_type IN (1, 3) AND m.sender_type = 'User'))
+                  AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+                ORDER BY m.created_at DESC
+                LIMIT 1
+            ) lm ON TRUE
         `;
         const resultCasos = await pool.query(qCasos);
         const resCasosMap = {};
@@ -1056,15 +1068,19 @@ app.get('/api/distribuicao', async (req, res) => {
             }
             
             if (r.so_48h && !nome.endsWith(' - 48H')) return;   // caixa "Atendimento | Brasil": só conta no Time 48H; nos outros times continua fora, como antes
-            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
+            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, em_aberto: 0, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
             
-            const dataBaseParaSLA = r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at);
+            const dataBaseParaSLA = r.last_msg_at ? new Date(r.last_msg_at) : (r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at));   // conta da última mensagem
             const diffHoras = (agora - dataBaseParaSLA) / (1000 * 60 * 60);
             
-            // REMOVIDA A TRAVA isClientLast! Agora TUDO que está aberto é contado e exposto.
+            // SLA só conta quando a última mensagem é do cliente. Última mensagem do agente (ou sem mensagem) vai para "Em aberto".
             let statusLabel, ordem;
             
-            if (diffHoras > 48) {
+            if (r.last_msg_type !== 0) {
+                resCasosMap[nome].em_aberto += 1;
+                statusLabel = '🔵 Em aberto';
+                ordem = 4;
+            } else if (diffHoras > 48) {
                 resCasosMap[nome].fora_sla += 1;
                 statusLabel = '🔴 Fora do SLA';
                 ordem = 1;
