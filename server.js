@@ -2348,27 +2348,28 @@ app.get('/api/time48-agentes', async (req, res) => {
             dataFimSQL = formatarDataSQL(agora);
         }
 
-        // Mesmas etiquetas e mesmo período da Visão Geral (time-48h* e painel-do-pedido*, ticket recebido no período)
+        // Mesmas etiquetas da Visão Geral (time-48h* e painel-do-pedido*). O PERÍODO aqui é a data em que o agente ENVIOU a mensagem (o ticket pode ser de qualquer data)
         const idsSel = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')`)).rows.map(r => r.id);
 
         // 1 linha por agente × ticket: só entra quem mandou mensagem pública (não apagada) no ticket — de qualquer time, sem filtro por " - RET", " - SMS" etc.
         const q = `
-        WITH Casos AS (
+        WITH AgenteTicket AS (
+            -- mensagens que cada agente ENVIOU no período, nos tickets com etiqueta 48H/Painel (de qualquer data)
+            SELECT m.conversation_id AS conv_id, m.sender_id AS user_id, COUNT(*) AS msgs, MIN(m.created_at) AS primeira_msg
+            FROM messages m
+            WHERE m.conversation_id = ANY($3::bigint[])
+              AND m.message_type = 1 AND m.private = FALSE AND m.sender_type = 'User' AND m.sender_id IS NOT NULL   -- só agente identificado
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+              AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND m.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+            GROUP BY m.conversation_id, m.sender_id
+        ),
+        Casos AS (
             SELECT c.id AS conv_id, c.display_id, c.created_at, c.status, ct.name AS cliente
             FROM conversations c
             LEFT JOIN contacts ct ON ct.id = c.contact_id
             WHERE c.account_id = 1
-              AND c.id = ANY($3::bigint[])
-              AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
-              AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
-        ),
-        AgenteTicket AS (
-            SELECT m.conversation_id AS conv_id, m.sender_id AS user_id, COUNT(*) AS msgs, MIN(m.created_at) AS primeira_msg
-            FROM messages m
-            JOIN Casos k ON k.conv_id = m.conversation_id
-            WHERE m.message_type = 1 AND m.private = FALSE AND m.sender_type = 'User' AND m.sender_id IS NOT NULL   -- só agente identificado
-              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
-            GROUP BY m.conversation_id, m.sender_id
+              AND c.id IN (SELECT DISTINCT conv_id FROM AgenteTicket)
         ),
         PrimeiroContato AS (
             -- 1º contato do ticket = 1ª mensagem pública de agente (mesma regra do TMC da Visão Geral); o TMC fica com quem mandou essa mensagem
@@ -2384,7 +2385,10 @@ app.get('/api/time48-agentes', async (req, res) => {
             COALESCE(u.name, 'Agente #' || agt.user_id) AS agente,
             GREATEST((SELECT COUNT(*) FROM messages mp WHERE mp.conversation_id = agt.conv_id AND mp.private = FALSE), 1) AS peso,
             (SELECT MAX(mt.created_at) FROM messages mt WHERE mt.conversation_id = agt.conv_id AND mt.private = FALSE AND mt.message_type = 0 AND mt.created_at > agt.primeira_msg) AS ultimo_retorno,
-            CASE WHEN pc.user_id = agt.user_id THEN EXTRACT(EPOCH FROM (pc.created_at - k.created_at)::interval) END AS tmc_seg,
+            CASE WHEN pc.user_id = agt.user_id
+                  AND pc.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+                  AND pc.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+                 THEN EXTRACT(EPOCH FROM (pc.created_at - k.created_at)::interval) END AS tmc_seg,   -- TMC: 1º contato do ticket feito por este agente DENTRO do período
             (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
                 FROM messages msg
                 JOIN messages resp ON resp.conversation_id = msg.conversation_id
@@ -2393,6 +2397,8 @@ app.get('/api/time48-agentes', async (req, res) => {
                                   AND resp.sender_type = 'User'
                                   AND resp.sender_id = agt.user_id   -- TMR: só as respostas DESTE agente
                                   AND resp.created_at > msg.created_at
+                                  AND resp.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+                                  AND resp.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'   -- ... enviadas no período
                 WHERE msg.conversation_id = agt.conv_id
                   AND msg.message_type = 0
                   AND msg.private = FALSE
@@ -2444,16 +2450,14 @@ app.get('/api/time48-agentes', async (req, res) => {
                         (SELECT MAX(mc.created_at) FROM messages mc WHERE mc.conversation_id = c.id AND mc.message_type = 0 AND mc.private = FALSE) AS ultima_msg_cliente
                     FROM conversations c
                     WHERE c.account_id = 1
-                      AND c.id = ANY($3::bigint[])
-                      AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
-                      AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
-                      AND EXISTS (SELECT 1 FROM messages mu WHERE mu.conversation_id = c.id AND mu.message_type = 1 AND mu.private = FALSE AND mu.sender_type = 'User')
+                      AND c.id = ANY($1::bigint[])
                   ) w
                 ) z
             ) y;
         `;
         const porTicket = {};
-        (await pool.query(qTicket, [dataInicioSQL, dataFimSQL, idsSel])).rows.forEach(r => { porTicket[String(r.conv_id)] = r; });
+        const idsAtendidos = [...new Set(linhas.map(r => r.conv_id))];
+        if (idsAtendidos.length) (await pool.query(qTicket, [idsAtendidos])).rows.forEach(r => { porTicket[String(r.conv_id)] = r; });
 
         // Junta por agente: mesmos números da Visão Geral, mas contando para quem ENVIOU a mensagem
         const porAgente = {};
@@ -2479,9 +2483,9 @@ app.get('/api/time48-agentes', async (req, res) => {
                 id: r.display_id || r.conv_id,
                 cliente: r.cliente || 'Cliente sem nome',
                 status: status,
-                teve_retorno: !!r.ultimo_retorno,                 // cliente voltou a escrever depois da 1ª mensagem DESTE agente
+                teve_retorno: !!r.ultimo_retorno,                 // cliente voltou a escrever depois da 1ª mensagem DESTE agente no período
                 ultimo_retorno: r.ultimo_retorno || null,
-                msgs_agente: msgs,                                // mensagens DESTE agente no ticket
+                msgs_agente: msgs,                                // mensagens DESTE agente no ticket, enviadas no período
                 etiquetas: tk.etiquetas || '',
                 criado_em: r.created_at,
                 aberto_ha_min: tk.aberto_ha_min ?? null,
