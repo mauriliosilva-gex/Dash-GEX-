@@ -2328,6 +2328,199 @@ app.get('/api/time48-etiquetas', async (req, res) => {
 });
 
 // ==========================================
+// 15.2 TIME 48H — TODOS OS AGENTES (sub-aba "👥 Todos os Agentes"): quem ENVIOU mensagem nos tickets com etiqueta 48H/Painel, de qualquer time
+// ==========================================
+app.get('/api/time48-agentes', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+
+    if (!adms.includes(emailUser)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+
+    try {
+        let dataInicioSQL, dataFimSQL;
+        if (req.query.since && req.query.until) {
+            dataInicioSQL = unixParaYYYYMMDD(req.query.since);
+            dataFimSQL = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dataInicioSQL = formatarDataSQL(dInicio);
+            dataFimSQL = formatarDataSQL(agora);
+        }
+
+        // Mesmas etiquetas e mesmo período da Visão Geral (time-48h* e painel-do-pedido*, ticket recebido no período)
+        const idsSel = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')`)).rows.map(r => r.id);
+
+        // 1 linha por agente × ticket: só entra quem mandou mensagem pública (não apagada) no ticket — de qualquer time, sem filtro por " - RET", " - SMS" etc.
+        const q = `
+        WITH Casos AS (
+            SELECT c.id AS conv_id, c.display_id, c.created_at, c.status, ct.name AS cliente
+            FROM conversations c
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            WHERE c.account_id = 1
+              AND c.id = ANY($3::bigint[])
+              AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+        ),
+        AgenteTicket AS (
+            SELECT m.conversation_id AS conv_id, m.sender_id AS user_id, COUNT(*) AS msgs, MIN(m.created_at) AS primeira_msg
+            FROM messages m
+            JOIN Casos k ON k.conv_id = m.conversation_id
+            WHERE m.message_type = 1 AND m.private = FALSE AND m.sender_type = 'User' AND m.sender_id IS NOT NULL   -- só agente identificado
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+            GROUP BY m.conversation_id, m.sender_id
+        ),
+        PrimeiroContato AS (
+            -- 1º contato do ticket = 1ª mensagem pública de agente (mesma regra do TMC da Visão Geral); o TMC fica com quem mandou essa mensagem
+            SELECT DISTINCT ON (m.conversation_id) m.conversation_id AS conv_id, m.sender_id AS user_id, m.created_at
+            FROM messages m
+            JOIN Casos k ON k.conv_id = m.conversation_id
+            WHERE m.message_type = 1 AND m.private = FALSE AND m.sender_type = 'User'
+            ORDER BY m.conversation_id, m.created_at, m.id
+        )
+        SELECT
+            agt.conv_id, agt.user_id, agt.msgs, agt.primeira_msg,
+            k.display_id, k.created_at, k.status, k.cliente,
+            COALESCE(u.name, 'Agente #' || agt.user_id) AS agente,
+            GREATEST((SELECT COUNT(*) FROM messages mp WHERE mp.conversation_id = agt.conv_id AND mp.private = FALSE), 1) AS peso,
+            (SELECT MAX(mt.created_at) FROM messages mt WHERE mt.conversation_id = agt.conv_id AND mt.private = FALSE AND mt.message_type = 0 AND mt.created_at > agt.primeira_msg) AS ultimo_retorno,
+            CASE WHEN pc.user_id = agt.user_id THEN EXTRACT(EPOCH FROM (pc.created_at - k.created_at)::interval) END AS tmc_seg,
+            (SELECT AVG(EXTRACT(EPOCH FROM (resp.created_at - msg.created_at)::interval))
+                FROM messages msg
+                JOIN messages resp ON resp.conversation_id = msg.conversation_id
+                                  AND resp.message_type = 1
+                                  AND resp.private = FALSE
+                                  AND resp.sender_type = 'User'
+                                  AND resp.sender_id = agt.user_id   -- TMR: só as respostas DESTE agente
+                                  AND resp.created_at > msg.created_at
+                WHERE msg.conversation_id = agt.conv_id
+                  AND msg.message_type = 0
+                  AND msg.private = FALSE
+                  AND NOT EXISTS (
+                      SELECT 1 FROM messages m_mid
+                      WHERE m_mid.conversation_id = msg.conversation_id
+                        AND m_mid.created_at > msg.created_at
+                        AND m_mid.created_at < resp.created_at
+                        AND NOT (m_mid.message_type IN (1, 3) AND m_mid.private = FALSE AND m_mid.sender_type IS DISTINCT FROM 'User')   -- bot/automação no meio não conta
+                  )
+            ) AS tmr_seg
+        FROM AgenteTicket agt
+        JOIN Casos k ON k.conv_id = agt.conv_id
+        LEFT JOIN PrimeiroContato pc ON pc.conv_id = agt.conv_id
+        LEFT JOIN users u ON u.id = agt.user_id
+        ORDER BY k.display_id DESC;
+        `;
+        const linhas = (await pool.query(q, [dataInicioSQL, dataFimSQL, idsSel])).rows;
+
+        // Por ticket (mesmas regras do "Ver Tickets" das outras abas): etiquetas do time e SLA (aberto há, retorno do cliente, aguardando, cliente sem resposta)
+        const qTicket = `
+            SELECT
+                y.conv_id,
+                y.etiquetas,
+                CASE WHEN y.status = 0 THEN (EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - y.created_at)) / 60)::float8 END AS aberto_ha_min,
+                CASE WHEN y.primeiro_retorno_em IS NOT NULL AND y.resp_antes_retorno IS NOT NULL
+                     THEN (EXTRACT(EPOCH FROM (y.primeiro_retorno_em - y.resp_antes_retorno)) / 60)::float8 END AS retorno_cliente_min,
+                CASE WHEN y.status = 0 AND y.ultima_resp_agente IS NOT NULL AND (y.ultima_msg_cliente IS NULL OR y.ultima_resp_agente > y.ultima_msg_cliente)
+                     THEN (EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - y.ultima_resp_agente)) / 60)::float8 END AS aguardando_cliente_min,
+                CASE WHEN y.status = 0 AND y.ultima_msg_cliente IS NOT NULL AND (y.ultima_resp_agente IS NULL OR y.ultima_msg_cliente > y.ultima_resp_agente)
+                     THEN (EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - y.ultima_msg_cliente)) / 60)::float8 END AS cliente_esperando_min
+            FROM (
+                SELECT z.*,
+                    (SELECT MAX(mr.created_at) FROM messages mr WHERE mr.conversation_id = z.conv_id AND mr.message_type = 1 AND mr.private = FALSE
+                       AND mr.sender_type = 'User' AND mr.created_at < z.primeiro_retorno_em) AS resp_antes_retorno
+                FROM (
+                  SELECT w.*,
+                    (SELECT MIN(mc.created_at) FROM messages mc WHERE mc.conversation_id = w.conv_id AND mc.message_type = 0 AND mc.private = FALSE
+                       AND mc.created_at > w.primeira_resp_sla) AS primeiro_retorno_em
+                  FROM (
+                    SELECT
+                        c.id AS conv_id,
+                        c.status,
+                        c.created_at,
+                        (SELECT string_agg(DISTINCT tg2.name, ', ' ORDER BY tg2.name) FROM taggings t2 JOIN tags tg2 ON tg2.id = t2.tag_id
+                          WHERE t2.taggable_id = c.id AND t2.taggable_type = 'Conversation' AND (tg2.name ILIKE '%time-48h%' OR tg2.name ILIKE 'painel-do-pedido%')) AS etiquetas,
+                        (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS primeira_resp_sla,
+                        (SELECT MAX(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS ultima_resp_agente,
+                        (SELECT MAX(mc.created_at) FROM messages mc WHERE mc.conversation_id = c.id AND mc.message_type = 0 AND mc.private = FALSE) AS ultima_msg_cliente
+                    FROM conversations c
+                    WHERE c.account_id = 1
+                      AND c.id = ANY($3::bigint[])
+                      AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+                      AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+                      AND EXISTS (SELECT 1 FROM messages mu WHERE mu.conversation_id = c.id AND mu.message_type = 1 AND mu.private = FALSE AND mu.sender_type = 'User')
+                  ) w
+                ) z
+            ) y;
+        `;
+        const porTicket = {};
+        (await pool.query(qTicket, [dataInicioSQL, dataFimSQL, idsSel])).rows.forEach(r => { porTicket[String(r.conv_id)] = r; });
+
+        // Junta por agente: mesmos números da Visão Geral, mas contando para quem ENVIOU a mensagem
+        const porAgente = {};
+        const ticketsDistintos = new Set(), abertosDistintos = new Set();
+        let totalMsgs = 0;
+        linhas.forEach(r => {
+            const nome = r.agente;
+            if (!porAgente[nome]) porAgente[nome] = { agente: nome, tickets: 0, em_aberto: 0, retornos: 0, mensagens: 0, _tmcP: 0, _tmcS: 0, _tmrP: 0, _tmrS: 0, detalhes: [] };
+            const a = porAgente[nome];
+            const msgs = parseInt(r.msgs) || 0, peso = parseInt(r.peso) || 1;
+            const status = parseInt(r.status);
+            a.tickets += 1;
+            if (status === 0) a.em_aberto += 1;
+            if (r.ultimo_retorno) a.retornos += 1;
+            a.mensagens += msgs;
+            if (r.tmc_seg !== null && r.tmc_seg !== undefined) { a._tmcS += Number(r.tmc_seg) * peso; a._tmcP += peso; }
+            if (r.tmr_seg !== null && r.tmr_seg !== undefined) { a._tmrS += Number(r.tmr_seg) * peso; a._tmrP += peso; }
+            ticketsDistintos.add(String(r.conv_id));
+            if (status === 0) abertosDistintos.add(String(r.conv_id));
+            totalMsgs += msgs;
+            const tk = porTicket[String(r.conv_id)] || {};
+            a.detalhes.push({
+                id: r.display_id || r.conv_id,
+                cliente: r.cliente || 'Cliente sem nome',
+                status: status,
+                teve_retorno: !!r.ultimo_retorno,                 // cliente voltou a escrever depois da 1ª mensagem DESTE agente
+                ultimo_retorno: r.ultimo_retorno || null,
+                msgs_agente: msgs,                                // mensagens DESTE agente no ticket
+                etiquetas: tk.etiquetas || '',
+                criado_em: r.created_at,
+                aberto_ha_min: tk.aberto_ha_min ?? null,
+                retorno_cliente_min: tk.retorno_cliente_min ?? null,
+                aguardando_cliente_min: tk.aguardando_cliente_min ?? null,
+                cliente_esperando_min: tk.cliente_esperando_min ?? null
+            });
+        });
+        const dados = Object.values(porAgente).map(a => {
+            const dets = a.detalhes;
+            const ab = dets.filter(t => t.aberto_ha_min != null), rt = dets.filter(t => t.retorno_cliente_min != null);
+            return {
+                agente: a.agente,
+                tickets: a.tickets,
+                em_aberto: a.em_aberto,
+                retornos: a.retornos,
+                mensagens: a.mensagens,
+                tmc_medio_minutos: a._tmcP ? a._tmcS / a._tmcP / 60 : 0,
+                tmr_medio_minutos: a._tmrP ? a._tmrS / a._tmrP / 60 : 0,
+                sla_retorno_medio_min: rt.length ? rt.reduce((s, t) => s + t.retorno_cliente_min, 0) / rt.length : null,
+                sla_aberto_medio_min: ab.length ? ab.reduce((s, t) => s + t.aberto_ha_min, 0) / ab.length : null,
+                sla_aberto_fora: dets.filter(t => t.cliente_esperando_min != null && t.cliente_esperando_min > 48 * 60).length,
+                detalhes: dets
+            };
+        }).sort((x, y) => (y.tickets - x.tickets) || (y.mensagens - x.mensagens) || x.agente.localeCompare(y.agente));
+
+        res.json({
+            success: true,
+            dados: dados,
+            resumo: { agentes: dados.length, tickets: ticketsDistintos.size, em_aberto: abertosDistintos.size, mensagens: totalMsgs },
+            periodo: { inicio: dataInicioSQL, fim: dataFimSQL }
+        });
+    } catch (error) {
+        console.error("Erro Time 48h (todos os agentes):", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
 // 16.1 ROTA DE URGÊNCIA: REEMBOLSOS BUYGOODS (COM GOOGLE SHEETS)
 // ==========================================
 app.get('/api/reembolsos-buygoods', async (req, res) => {
