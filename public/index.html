@@ -1074,6 +1074,7 @@
                     <button id="btn-t48v-geral" onclick="mudarViewTime48('geral')" class="btn-setor btn-setor-ativo">⏳ Visão Geral</button>
                     <button id="btn-t48v-48h" onclick="mudarViewTime48('48h')" class="btn-setor btn-setor-inativo">🏷️ Etiqueta 48H</button>
                     <button id="btn-t48v-painel" onclick="mudarViewTime48('painel')" class="btn-setor btn-setor-inativo">📦 Etiqueta Painel</button>
+                    <button id="btn-t48v-todos" onclick="mudarViewTime48('todos')" class="btn-setor btn-setor-inativo">👥 Todos os Agentes</button>
                 </div>
                 <div id="t48-view-geral" class="space-y-6">
                 
@@ -1157,6 +1158,8 @@
                 <div id="t48-view-48h" class="hidden space-y-6"></div>
                 <!-- VIEW: ETIQUETA PAINEL (etiquetas painel-do-pedido*; o JS monta ao abrir) -->
                 <div id="t48-view-painel" class="hidden space-y-6"></div>
+                <!-- VIEW: TODOS OS AGENTES (quem enviou mensagem nos tickets com etiqueta 48H/Painel, de qualquer time; o JS monta ao abrir) -->
+                <div id="t48-view-todos" class="hidden space-y-6"></div>
             </div>
 
             <!-- TELA 6: ADIAR CASOS (ADMIN) -->
@@ -1885,6 +1888,7 @@
                 ['tela-cw-mencoes',      () => carregarMencoesAbertos()],
                 ['tela-cw-reembolsos',   () => { if (plataformaAtual === 'buygoods') carregarBuyGoods(''); else if (plataformaAtual === 'cartpanda') carregarCartPanda(''); else carregarPagAmerican(''); }],   // só a plataforma aberta
                 ['tela-cw-time48',       () => {   // só a sub-aba aberta; a Visão Geral mantém o período do calendário
+                    if (viewTime48Atual === 'todos') return carregarTime48Todos();   // 👥 Todos os Agentes: atualiza só ela
                     if (viewTime48Atual !== 'geral') return carregarTime48Etiquetas(viewTime48Atual);
                     const ds48 = (calTime48 && calTime48.selectedDates) || [];
                     if (!ds48.length) return carregarTime48('');
@@ -5215,14 +5219,15 @@ async function exportarExcelCartPanda() {
         }
 
         function mudarViewTime48(view) {
-            if (view !== 'geral' && !t48xEstado[view]) view = 'geral';
+            if (view !== 'geral' && view !== 'todos' && !t48xEstado[view]) view = 'geral';
             viewTime48Atual = view;
-            ['geral', '48h', 'painel'].forEach(v => {
+            ['geral', '48h', 'painel', 'todos'].forEach(v => {
                 const el = document.getElementById('t48-view-' + v);
                 const bt = document.getElementById('btn-t48v-' + v);
                 if (el) el.classList.toggle('hidden', v !== view);
                 if (bt) { bt.classList.toggle('btn-setor-ativo', v === view); bt.classList.toggle('btn-setor-inativo', v !== view); }
             });
+            if (view === 'todos') { if (!t48tEstado.montada) { t48tMontarView(); carregarTime48Todos(); } return; }   // 👥 Todos os Agentes: monta e carrega na 1ª vez que abre
             if (view !== 'geral' && !t48xEstado[view].montada) {
                 t48xMontarView(view);
                 carregarTime48Etiquetas(view);
@@ -5492,6 +5497,279 @@ async function exportarExcelCartPanda() {
             document.getElementById('modal-t48x').classList.remove('hidden');
         }
         function fecharModalT48x() { document.getElementById('modal-t48x').classList.add('hidden'); }
+
+        // ===== 👥 TODOS OS AGENTES (sub-aba do Time 48H): todo agente que ENVIOU mensagem em ticket com etiqueta 48H ou Painel, de qualquer time =====
+        const t48tEstado = { montada: false, dados: [], resumo: null, periodo: null, cal: null, datas: [] };
+
+        function t48tMontarView() {
+            const cont = document.getElementById('t48-view-todos');
+            if (!cont) return;
+            cont.innerHTML = `
+                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[600px] bg-white/50 dark:bg-black/20">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-4 shrink-0 bg-gray-50/50 dark:bg-transparent">
+                        <div>
+                            <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">👥 Performance: Todos os Agentes</h3>
+                            <p class="text-[10px] font-bold text-gray-500 mt-1">Todo agente que enviou mensagem em ticket com etiqueta 48H ou Painel (time-48h* e painel-do-pedido*), de qualquer time</p>
+                            <p class="text-[10px] font-bold text-gray-400 mt-1" id="t48t-resumo"></p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-xl border border-gray-300 dark:border-white/10 h-8 relative min-w-[240px]">
+                                <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                <input type="text" id="calendario-t48t" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wider">
+                                <button id="btn-aplicar-t48t" onclick="carregarTime48Todos()" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Buscar</button>
+                            </div>
+                            <button id="btn-exportar-t48t" onclick="exportarExcelTime48Todos()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-2">
+                                📥 Baixar Excel
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
+                        <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                                <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
+                                    <th class="py-3 px-3 pl-4">Agente</th>
+                                    <th class="py-3 px-3 text-center" title="Tickets recebidos no período em que o agente enviou pelo menos 1 mensagem">Tickets Atendidos</th>
+                                    <th class="py-3 px-3 text-center text-yellow-500" title="Desses tickets, quantos estão com status Aberta agora no Chatwoot">Em Aberto</th>
+                                    <th class="py-3 px-3 text-center text-orange-500" title="Tickets em que o cliente mandou mensagem de novo depois da 1ª mensagem deste agente">Retornos</th>
+                                    <th class="py-3 px-3 text-center" title="Mensagens que este agente enviou nesses tickets">Mensagens Enviadas</th>
+                                    <th class="py-3 px-3 text-center text-emerald-500" title="Tempo até a 1ª resposta do ticket, nos tickets em que este agente fez o 1º contato">TMC (1º Contato)</th>
+                                    <th class="py-3 px-3 text-center text-gexCyan" title="Tempo que este agente levou para responder cada mensagem do cliente">TMR (Média de Resposta)</th>
+                                    <th class="py-3 px-3 text-center text-orange-400" title="Média do tempo que o cliente levou pra responder depois da mensagem do agente">↩️ Retorno do Cliente</th>
+                                    <th class="py-3 px-3 text-center text-red-400" title="Média de há quanto tempo os tickets em aberto estão abertos (SLA 48h)">⏱️ Tempo em Aberto</th>
+                                    <th class="py-3 px-3 text-center">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-t48t-body" class="text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>`;
+            const inp = document.getElementById('calendario-t48t');
+            if (inp && typeof flatpickr === 'function') {
+                t48tEstado.cal = flatpickr(inp, {
+                    mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark",
+                    onChange: (selectedDates) => { t48tEstado.datas = selectedDates; }
+                });
+                const hj48t = new Date(); t48tEstado.cal.setDate([new Date(hj48t.getFullYear(), hj48t.getMonth(), 1), hj48t], false);   // já abre no mês atual (o padrão)
+            }
+            t48tEstado.montada = true;
+        }
+
+        async function carregarTime48Todos() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            const st = t48tEstado;
+            const tb = document.getElementById('tabela-t48t-body');
+            const btnSync = document.getElementById('btn-aplicar-t48t');
+            // Período: o do calendário (1 dia ou intervalo); sem data = mês atual (padrão do servidor, igual à Visão Geral)
+            const ds = (st.datas && st.datas.length) ? st.datas : (st.cal ? st.cal.selectedDates : []);
+            let params = '';
+            if (ds && ds.length >= 1) {
+                const dI = new Date(ds[0]);
+                const dF = new Date(ds.length >= 2 ? ds[1] : ds[0]); dF.setHours(23, 59, 59);
+                params = `?since=${Math.floor(dI.getTime() / 1000)}&until=${Math.floor(dF.getTime() / 1000)}`;
+            }
+            try {
+                if (btnSync) btnSync.innerHTML = '⏳';
+                if (tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gexCyan font-bold text-xs uppercase tracking-widest">⏳ Carregando métricas...</td></tr>`;
+                const response = await fetch('/api/time48-agentes' + params);
+                const data = await response.json();
+                if (data.success) {
+                    st.dados = data.dados || [];
+                    st.resumo = data.resumo || null;
+                    st.periodo = data.periodo || null;
+                    renderTabelaTime48Todos();
+                } else {
+                    if (tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${t48xEsc(data.error)}</td></tr>`;
+                }
+                if (btnSync) btnSync.innerHTML = 'Buscar';
+            } catch (error) {
+                if (tb) tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro de API.</td></tr>`;
+                if (btnSync) btnSync.innerHTML = 'Buscar';
+            }
+        }
+
+        function renderTabelaTime48Todos() {
+            const st = t48tEstado;
+            const tb = document.getElementById('tabela-t48t-body');
+            if (!tb) return;
+            const elRes = document.getElementById('t48t-resumo');
+            if (elRes) {
+                const r = st.resumo;
+                elRes.innerText = r ? `${r.agentes} agente${r.agentes === 1 ? '' : 's'} · ${r.tickets} ticket${r.tickets === 1 ? '' : 's'} diferente${r.tickets === 1 ? '' : 's'} (${r.em_aberto} em aberto) · ${r.mensagens} mensage${r.mensagens === 1 ? 'm enviada' : 'ns enviadas'} — ticket atendido por 2 agentes conta para os 2` : '';
+            }
+            if (st.dados.length === 0) {
+                tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum agente enviou mensagem em ticket com etiqueta 48H ou Painel no período.</td></tr>`;
+                return;
+            }
+            tb.innerHTML = st.dados.map((d, i) => {
+                const tks = parseInt(d.tickets) || 0;
+                const rets = parseInt(d.retornos) || 0;
+                const taxaRetornoAgente = tks > 0 ? ((rets / tks) * 100).toFixed(1) : 0;
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">👤 ${t48xEsc(d.agente)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${tks}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] font-black text-yellow-500">${parseInt(d.em_aberto) || 0}</td>
+                    <td class="py-4 px-3 text-center">
+                        <span class="font-mono text-[16px] font-black text-orange-500">${rets}</span>
+                        <span class="text-[10px] text-gray-500 ml-1 font-bold">(${taxaRetornoAgente}%)</span>
+                    </td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${parseInt(d.mensagens) || 0}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-emerald-500">${formatarTempo(d.tmc_medio_minutos)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-gexCyan">${formatarTempo(d.tmr_medio_minutos)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-orange-400">${t48Dur(d.sla_retorno_medio_min)}</td>
+                    <td class="py-4 px-3 text-center font-mono text-[14px] text-gray-800 dark:text-white">${t48Dur(d.sla_aberto_medio_min)}${d.sla_aberto_fora ? `<span class="block text-[10px] font-bold text-red-500">🔴 ${d.sla_aberto_fora} fora do SLA</span>` : ''}</td>
+                    <td class="py-4 px-3 text-center">
+                        <button onclick="abrirModalT48t(${i})" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors shadow-sm whitespace-nowrap border border-white/5">Ver Tickets</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        // "Ver Tickets" da aba Todos os Agentes: mesmo modal e mesmos filtros das abas de etiqueta (os números são os deste agente)
+        function abrirModalT48t(idx) {
+            const d = t48tEstado.dados ? t48tEstado.dados[idx] : null;
+            if (!d) return;
+            document.getElementById('modal-t48x-titulo').innerText = `Todos os Agentes: ${d.agente}`;
+            document.getElementById('modal-t48x-sub').innerText = 'Tickets com etiqueta 48H ou Painel em que o agente enviou mensagem';
+            let html = '<div class="space-y-3">';
+            html += t48DetResumo(d);
+            html += t48ChipFiltro();   // aviso do filtro pelos botões do ticket
+            if (d.detalhes && d.detalhes.length > 0) {
+                d.detalhes.forEach(tk => {
+                    const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
+                    html += `
+                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                            <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente)}</p>
+                            <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${t48xEsc(tk.id)}</p>
+                            ${t48DetBadges(tk)}
+                        </div>
+                        <a href="${urlChatwoot}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                            Abrir Conversa ↗️
+                        </a>
+                    </div>`;
+                });
+            } else {
+                html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket encontrado neste período.</p>';
+            }
+            html += '</div>';
+            document.getElementById('modal-t48x-conteudo').innerHTML = html;
+            const pn = document.querySelector('#modal-t48x-conteudo .t48-det-painel'); if (pn) t48DetAplicar(pn, document.getElementById('modal-t48x-conteudo'));
+            document.getElementById('modal-t48x').classList.remove('hidden');
+        }
+
+        // 📥 Excel da aba Todos os Agentes: resumo do período, desempenho por agente e a lista de tickets de cada agente
+        async function exportarExcelTime48Todos() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            const st = t48tEstado;
+            if (!st.dados || st.dados.length === 0) return alert("Não há dados para exportar.");
+            const btn = document.getElementById('btn-exportar-t48t');
+            const originalText = btn ? btn.innerHTML : '';
+            if (btn) btn.innerHTML = '⏳ Gerando...';
+            try {
+                const workbook = new ExcelJS.Workbook();
+                const cabecalho = (sheet) => sheet.getRow(1).eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B52AF' } };
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                });
+                const dataBR = (s) => { const p = String(s || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(s || ''); };
+                const r = st.resumo || { agentes: st.dados.length, tickets: 0, em_aberto: 0, mensagens: 0 };
+
+                const sheetResumo = workbook.addWorksheet('Resumo', {views: [{state: 'frozen', ySplit: 1}]});
+                sheetResumo.columns = [
+                    { header: 'MÉTRICA GERAL', key: 'metrica', width: 45 },
+                    { header: 'RESULTADO TOTAL', key: 'valor', width: 28 }
+                ];
+                cabecalho(sheetResumo);
+                sheetResumo.addRows([
+                    { metrica: 'Período (tickets recebidos)', valor: st.periodo ? `${dataBR(st.periodo.inicio)} a ${dataBR(st.periodo.fim)}` : '' },
+                    { metrica: 'Agentes que enviaram mensagem', valor: r.agentes },
+                    { metrica: 'Tickets diferentes com mensagem de agente', valor: r.tickets },
+                    { metrica: 'Desses, em aberto agora', valor: r.em_aberto },
+                    { metrica: 'Total de Mensagens Enviadas', valor: r.mensagens }
+                ]);
+                sheetResumo.eachRow((row, i) => { if (i > 1) row.alignment = { vertical: 'middle', horizontal: 'center' }; });
+
+                const sheetAgentes = workbook.addWorksheet('Desempenho por Agente', {views: [{state: 'frozen', ySplit: 1}]});
+                sheetAgentes.columns = [
+                    { header: 'AGENTE', key: 'agente', width: 35 },
+                    { header: 'TICKETS ATENDIDOS', key: 'tickets', width: 20 },
+                    { header: 'EM ABERTO', key: 'abertos', width: 14 },
+                    { header: 'RETORNOS', key: 'retornos', width: 14 },
+                    { header: 'TAXA DE RETORNO (%)', key: 'taxa', width: 22 },
+                    { header: 'MENSAGENS ENVIADAS', key: 'msgs', width: 22 },
+                    { header: 'TMC (1º CONTATO)', key: 'tmc', width: 20 },
+                    { header: 'TMR (MÉDIA RESPOSTA)', key: 'tmr', width: 22 },
+                    { header: 'RETORNO DO CLIENTE', key: 'retcli', width: 22 },
+                    { header: 'TEMPO EM ABERTO', key: 'aberto', width: 20 },
+                    { header: 'FORA DO SLA', key: 'fora', width: 14 }
+                ];
+                cabecalho(sheetAgentes);
+                st.dados.forEach(d => {
+                    const tks = parseInt(d.tickets) || 0, rets = parseInt(d.retornos) || 0;
+                    const row = sheetAgentes.addRow({
+                        agente: d.agente,
+                        tickets: tks,
+                        abertos: parseInt(d.em_aberto) || 0,
+                        retornos: rets,
+                        taxa: tks > 0 ? ((rets / tks) * 100).toFixed(1) + '%' : '0%',
+                        msgs: parseInt(d.mensagens) || 0,
+                        tmc: formatarTempo(d.tmc_medio_minutos),
+                        tmr: formatarTempo(d.tmr_medio_minutos),
+                        retcli: t48Dur(d.sla_retorno_medio_min),
+                        aberto: t48Dur(d.sla_aberto_medio_min),
+                        fora: parseInt(d.sla_aberto_fora) || 0
+                    });
+                    row.alignment = { vertical: 'middle', horizontal: 'center' };
+                    row.getCell('agente').alignment = { vertical: 'middle', horizontal: 'left' };
+                });
+
+                const STATUS_TXT = { 0: 'Em aberto', 1: 'Resolvido', 2: 'Pendente', 3: 'Adiado' };
+                const sheetTickets = workbook.addWorksheet('Tickets por Agente', {views: [{state: 'frozen', ySplit: 1}]});
+                sheetTickets.columns = [
+                    { header: 'AGENTE', key: 'agente', width: 35 },
+                    { header: 'TICKET', key: 'ticket', width: 12 },
+                    { header: 'CLIENTE', key: 'cliente', width: 32 },
+                    { header: 'STATUS', key: 'status', width: 14 },
+                    { header: 'TEVE RETORNO', key: 'retorno', width: 16 },
+                    { header: 'MSGS DO AGENTE', key: 'msgs', width: 16 },
+                    { header: 'RECEBIDO EM', key: 'criado', width: 18 },
+                    { header: 'ETIQUETAS', key: 'etiquetas', width: 40 },
+                    { header: 'LINK', key: 'link', width: 60 }
+                ];
+                cabecalho(sheetTickets);
+                st.dados.forEach(d => (d.detalhes || []).forEach(tk => {
+                    const row = sheetTickets.addRow({
+                        agente: d.agente,
+                        ticket: tk.id,
+                        cliente: tk.cliente,
+                        status: STATUS_TXT[tk.status] !== undefined ? STATUS_TXT[tk.status] : String(tk.status),
+                        retorno: tk.teve_retorno ? 'Sim' : 'Não',
+                        msgs: parseInt(tk.msgs_agente) || 0,
+                        criado: tk.criado_em ? new Date(tk.criado_em).toLocaleString('pt-BR') : '',
+                        etiquetas: tk.etiquetas || '',
+                        link: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`
+                    });
+                    row.alignment = { vertical: 'middle', horizontal: 'center' };
+                    ['agente', 'cliente', 'etiquetas', 'link'].forEach(k => { row.getCell(k).alignment = { vertical: 'middle', horizontal: 'left' }; });
+                }));
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Relatorio_Time48h_TodosAgentes_GEX_${new Date().toISOString().split('T')[0]}.xlsx`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error(e);
+                alert('Erro ao gerar o arquivo Excel.');
+            } finally {
+                if (btn) btn.innerHTML = originalText;
+            }
+        }
 
         // ===== "Ver Tickets" do Time 48h (3 abas): detalhe de cada ticket — situação no Chatwoot, retorno do cliente, mensagens do agente e etiquetas =====
         const T48_STATUS = {
