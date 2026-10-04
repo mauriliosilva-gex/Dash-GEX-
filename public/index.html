@@ -5509,7 +5509,7 @@ async function exportarExcelCartPanda() {
                     <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-4 shrink-0 bg-gray-50/50 dark:bg-transparent">
                         <div>
                             <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">👥 Performance: Todos os Agentes</h3>
-                            <p class="text-[10px] font-bold text-gray-500 mt-1">Todo agente que enviou mensagem em ticket com etiqueta 48H ou Painel (time-48h* e painel-do-pedido*), de qualquer time</p>
+                            <p class="text-[10px] font-bold text-gray-500 mt-1">Todo agente que enviou mensagem em ticket com etiqueta 48H ou Painel (time-48h* e painel-do-pedido*), de qualquer time · o período é o dia em que a mensagem foi enviada</p>
                             <p class="text-[10px] font-bold text-gray-400 mt-1" id="t48t-resumo"></p>
                         </div>
                         <div class="flex items-center gap-2">
@@ -5528,12 +5528,12 @@ async function exportarExcelCartPanda() {
                             <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Agente</th>
-                                    <th class="py-3 px-3 text-center" title="Tickets recebidos no período em que o agente enviou pelo menos 1 mensagem">Tickets Atendidos</th>
+                                    <th class="py-3 px-3 text-center" title="Tickets em que o agente enviou pelo menos 1 mensagem no período (o ticket pode ter chegado antes)">Tickets Atendidos</th>
                                     <th class="py-3 px-3 text-center text-yellow-500" title="Desses tickets, quantos estão com status Aberta agora no Chatwoot">Em Aberto</th>
-                                    <th class="py-3 px-3 text-center text-orange-500" title="Tickets em que o cliente mandou mensagem de novo depois da 1ª mensagem deste agente">Retornos</th>
-                                    <th class="py-3 px-3 text-center" title="Mensagens que este agente enviou nesses tickets">Mensagens Enviadas</th>
-                                    <th class="py-3 px-3 text-center text-emerald-500" title="Tempo até a 1ª resposta do ticket, nos tickets em que este agente fez o 1º contato">TMC (1º Contato)</th>
-                                    <th class="py-3 px-3 text-center text-gexCyan" title="Tempo que este agente levou para responder cada mensagem do cliente">TMR (Média de Resposta)</th>
+                                    <th class="py-3 px-3 text-center text-orange-500" title="Tickets em que o cliente mandou mensagem de novo depois da 1ª mensagem deste agente no período">Retornos</th>
+                                    <th class="py-3 px-3 text-center" title="Mensagens que este agente enviou no período">Mensagens Enviadas</th>
+                                    <th class="py-3 px-3 text-center text-emerald-500" title="Tempo até a 1ª resposta do ticket, quando este agente fez o 1º contato dentro do período">TMC (1º Contato)</th>
+                                    <th class="py-3 px-3 text-center text-gexCyan" title="Tempo que este agente levou para responder cada mensagem do cliente (respostas enviadas no período)">TMR (Média de Resposta)</th>
                                     <th class="py-3 px-3 text-center text-orange-400" title="Média do tempo que o cliente levou pra responder depois da mensagem do agente">↩️ Retorno do Cliente</th>
                                     <th class="py-3 px-3 text-center text-red-400" title="Média de há quanto tempo os tickets em aberto estão abertos (SLA 48h)">⏱️ Tempo em Aberto</th>
                                     <th class="py-3 px-3 text-center">Ação</th>
@@ -5594,7 +5594,7 @@ async function exportarExcelCartPanda() {
             const elRes = document.getElementById('t48t-resumo');
             if (elRes) {
                 const r = st.resumo;
-                elRes.innerText = r ? `${r.agentes} agente${r.agentes === 1 ? '' : 's'} · ${r.tickets} ticket${r.tickets === 1 ? '' : 's'} diferente${r.tickets === 1 ? '' : 's'} (${r.em_aberto} em aberto) · ${r.mensagens} mensage${r.mensagens === 1 ? 'm enviada' : 'ns enviadas'} — ticket atendido por 2 agentes conta para os 2` : '';
+                elRes.innerText = r ? `${r.agentes} agente${r.agentes === 1 ? '' : 's'} · ${r.tickets} ticket${r.tickets === 1 ? '' : 's'} diferente${r.tickets === 1 ? '' : 's'} (${r.em_aberto} em aberto) · ${r.mensagens} mensage${r.mensagens === 1 ? 'm enviada' : 'ns enviadas'} no período — ticket atendido por 2 agentes conta para os 2` : '';
             }
             if (st.dados.length === 0) {
                 tb.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum agente enviou mensagem em ticket com etiqueta 48H ou Painel no período.</td></tr>`;
@@ -5630,7 +5630,7 @@ async function exportarExcelCartPanda() {
             const d = t48tEstado.dados ? t48tEstado.dados[idx] : null;
             if (!d) return;
             document.getElementById('modal-t48x-titulo').innerText = `Todos os Agentes: ${d.agente}`;
-            document.getElementById('modal-t48x-sub').innerText = 'Tickets com etiqueta 48H ou Painel em que o agente enviou mensagem';
+            document.getElementById('modal-t48x-sub').innerText = 'Tickets com etiqueta 48H ou Painel em que o agente enviou mensagem no período';
             let html = '<div class="space-y-3">';
             html += t48DetResumo(d);
             html += t48ChipFiltro();   // aviso do filtro pelos botões do ticket
@@ -5683,9 +5683,9 @@ async function exportarExcelCartPanda() {
                 ];
                 cabecalho(sheetResumo);
                 sheetResumo.addRows([
-                    { metrica: 'Período (tickets recebidos)', valor: st.periodo ? `${dataBR(st.periodo.inicio)} a ${dataBR(st.periodo.fim)}` : '' },
+                    { metrica: 'Período (mensagens enviadas)', valor: st.periodo ? `${dataBR(st.periodo.inicio)} a ${dataBR(st.periodo.fim)}` : '' },
                     { metrica: 'Agentes que enviaram mensagem', valor: r.agentes },
-                    { metrica: 'Tickets diferentes com mensagem de agente', valor: r.tickets },
+                    { metrica: 'Tickets diferentes atendidos no período', valor: r.tickets },
                     { metrica: 'Desses, em aberto agora', valor: r.em_aberto },
                     { metrica: 'Total de Mensagens Enviadas', valor: r.mensagens }
                 ]);
@@ -5733,7 +5733,7 @@ async function exportarExcelCartPanda() {
                     { header: 'CLIENTE', key: 'cliente', width: 32 },
                     { header: 'STATUS', key: 'status', width: 14 },
                     { header: 'TEVE RETORNO', key: 'retorno', width: 16 },
-                    { header: 'MSGS DO AGENTE', key: 'msgs', width: 16 },
+                    { header: 'MSGS DO AGENTE NO PERÍODO', key: 'msgs', width: 26 },
                     { header: 'RECEBIDO EM', key: 'criado', width: 18 },
                     { header: 'ETIQUETAS', key: 'etiquetas', width: 40 },
                     { header: 'LINK', key: 'link', width: 60 }
