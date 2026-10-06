@@ -4139,7 +4139,8 @@ const tgPrimeiroNome = (v) => String((v && (v.agente_chatwoot || v.nome_telegram
 function tgEhAdmin(req) {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
     const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
-    return adms.includes(emailUser) ? emailUser : '';
+    const donosTg = (process.env.EMAILS_TELEGRAM || 'maurilio.silva@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());   // 🔒 painel do bot: só o(s) dono(s) (07/10/2026)
+    return (adms.includes(emailUser) && donosTg.includes(emailUser)) ? emailUser : '';
 }
 function tgGetInterno(caminho, timeoutMs) {   // chama uma rota do próprio Dash (como o aquecedor): mesma lógica, mesmos números
     return new Promise((resolve) => {
