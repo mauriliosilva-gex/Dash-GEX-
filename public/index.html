@@ -2046,6 +2046,8 @@
         // 🔒 Adiar Casos: aba exclusiva de um e-mail (mais ninguém vê nem acessa)
         const EMAILS_ADIAR = ['maurilio.silva@institutoexperience.com.br'];
         function podeVerAdiar() { return !!(usuarioAtual && EMAILS_ADIAR.includes(String(usuarioAtual.email || '').toLowerCase())); }
+        const EMAILS_TELEGRAM = ['maurilio.silva@institutoexperience.com.br'];   // 🔒 Bot Telegram: só esse(s) e-mail(s) vê(em) a pasta do bot (07/10/2026)
+        function podeVerTelegram() { return !!(usuarioAtual && EMAILS_TELEGRAM.includes(String(usuarioAtual.email || '').toLowerCase())); }
         const EMAILS_RAIOX = ['maurilio.silva@institutoexperience.com.br'];
         function podeVerRaioX() { return !!(usuarioAtual && EMAILS_RAIOX.includes(String(usuarioAtual.email || '').toLowerCase())); }
 
@@ -2125,6 +2127,12 @@
             if (!podeVerAdiar()) {
                 const _lnkAdiar = document.querySelector('[data-menu-id="cw-adiar"]');
                 if (_lnkAdiar) _lnkAdiar.style.display = 'none';
+            }
+
+            // 🔒 Bot Telegram: a pasta do bot sai do menu (e dos "mais usados") de todos, exceto o e-mail autorizado
+            if (!podeVerTelegram()) {
+                const _pastaTg = document.getElementById('pasta-tg');
+                if (_pastaTg && _pastaTg.parentElement) { _pastaTg.parentElement.remove(); atualizarHotMenu(); }
             }
 
             // 🔒 Raio-X de Desempenho: link da sidebar aparece so pro e-mail autorizado
