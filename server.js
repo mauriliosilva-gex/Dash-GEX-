@@ -448,7 +448,7 @@ app.get('/api/retencao', async (req, res) => {
         } catch (e) {}
 
         // --- Meses selecionados: ?aba= (1 ou vários), validados; padrão Setembro ---
-        const PADRAO_ABA = "📊 Análise | Metas | Outubro";
+        const PADRAO_ABA = "📊 Análise | Metas | Setembro";
         let selecionadas = req.query.aba;
         if (typeof selecionadas === 'string') selecionadas = [selecionadas];
         if (!Array.isArray(selecionadas)) selecionadas = [];
