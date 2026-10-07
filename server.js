@@ -1497,6 +1497,63 @@ app.get('/api/produtos-metricas', async (req, res) => {
 });
 
 // ==========================================
+// 🔎 PRODUTOS CITADOS — lista de produtos atualizada (07/10/2026)
+// Produtos atuais das contas BuyGoods (conta 1: 185 · conta 2: 104) que a busca ainda não pegava:
+// produtos novos e outras grafias de produtos que já estavam na lista (ex.: "SugarReset" e "Sugar Reset").
+// As outras grafias aparecem na MESMA linha do produto (MENCOES_APELIDOS), sem contar o caso 2 vezes.
+// ==========================================
+const MENCOES_PRODUTOS_NOVOS = [
+    'SugarReset', 'GlycoHarmony', 'CleanEye', 'HorseBoost', 'AlphaHoney', 'SlimRise', 'SonusZen', 'DermaEssential',
+    'ManForceX', 'GlucoControl', 'Sodarmin', 'SugarControl', 'Memogut', 'SodaBoost', 'Denta Guard', 'ProstaRenew',
+    'VigorPrime', 'Metabo Slim', 'NeuroCinammon', 'HorsePulse', 'Honey Balance', 'IronBoost', 'SodaHorsePro', 'SodaStallionPeak',
+    'Oiltaro', 'Olicept', 'Breathi Zen', 'Blood Pril', 'Alpha Steel', 'Men Growth', 'Trim X', 'BreathEaseX',
+    'RevitalGluco', 'NeuroCinamon'
+];
+const MENCOES_APELIDOS = {
+    'SugarReset': 'Sugar Reset',
+    'GlycoHarmony': 'Glyco Harmony',
+    'CleanEye': 'Clean Eye',
+    'HorseBoost': 'Horse Boost',
+    'AlphaHoney': 'Alpha Honey',
+    'SlimRise': 'Slim Rise',
+    'SonusZen': 'Sonus Zen',
+    'DermaEssential': 'Derma Essential',
+    'ManForceX': 'Man ForceX',
+    'GlucoControl': 'Gluco Control',
+    'SugarControl': 'Sugar Control',
+    'Denta Guard': 'DentaGuard',
+    'ProstaRenew': 'Prosta Renew',
+    'VigorPrime': 'Vigor Prime',
+    'Metabo Slim': 'MetaboSlim',
+    'NeuroCinammon': 'Neuro Cinnamon',
+    'HorsePulse': 'Horse Pulse',
+    'Honey Balance': 'HoneyBalance',
+    'IronBoost': 'Iron Boost',
+    'Breathi Zen': 'BreathiZen',
+    'Blood Pril': 'BloodPril',
+    'Alpha Steel': 'AlphaSteel',
+    'Men Growth': "Men's Growth",
+    'Trim X': 'TrimX',
+    'RevitalGluco': 'Revital Gluco',
+    'NeuroCinamon': 'Neuro Cinnamon'
+};
+const MENCOES_NOVOS_SQL = MENCOES_PRODUTOS_NOVOS.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
+// Junta as linhas do mesmo produto escrito de jeitos diferentes (conta cada caso 1 vez); sem grafia nova, devolve igual ao que veio do banco
+function mencoesUnificar(linhas) {
+    const lista = linhas || [];
+    const apelidoDe = (p) => MENCOES_APELIDOS[p] || p;
+    if (!lista.some(r => apelidoDe(r.produto_mencionado) !== r.produto_mencionado)) return lista;
+    const mapa = new Map();
+    for (const r of lista) {
+        const produto = apelidoDe(r.produto_mencionado), chave = r.equipe + '|' + produto;
+        if (!mapa.has(chave)) mapa.set(chave, { ...r, produto_mencionado: produto, detalhes: [], ids: new Set() });
+        const alvo = mapa.get(chave);
+        (r.detalhes || []).forEach(d => { if (!alvo.ids.has(d.id)) { alvo.ids.add(d.id); alvo.detalhes.push(d); } });
+    }
+    return Array.from(mapa.values()).map(({ ids, ...r }) => ({ ...r, qtd_casos: String(ids.size) })).sort((a, b) => Number(b.qtd_casos) - Number(a.qtd_casos));
+}
+
+// ==========================================
 // 14. ROTA DE PRODUTOS CITADOS (MINERAÇÃO DE TEXTO NA FILA)
 // ==========================================
 app.get('/api/mencoes-abertos', async (req, res) => {
@@ -1567,7 +1624,7 @@ app.get('/api/mencoes-abertos', async (req, res) => {
                 'HoneyFlush', 'GiantMax', 'Vinetaro', 'Cardiopril', 'Cardiocept', 'MeltCore', 'SodaPeak', 
                 'MatchaSlim', 'MatchaTide', 'CardioHarmony', 'SugarClear', 'SodaPower', 'Goldtin', 'Melonex', 
                 'AlkaFit', 'NerveHoney', 'Roscept', 'Payarmin', 'Lympnex', 'GlycoGenesis', 'Nervactil', 
-                'NeuroGolden', 'Marycept', 'YogTide', 'Rosedil', 'Retride', 'Olivaro', 'Lasiberry', 'USBREX'
+                'NeuroGolden', 'Marycept', 'YogTide', 'Rosedil', 'Retride', 'Olivaro', 'Lasiberry', 'USBREX', ${MENCOES_NOVOS_SQL}   -- + produtos atuais que faltavam (07/10/2026)
             ]) AS kw
         ),
         MatchedTickets AS (
@@ -1599,10 +1656,255 @@ app.get('/api/mencoes-abertos', async (req, res) => {
         ORDER BY qtd_casos DESC;
         `;
         const result = await pool.query(q);
-        res.json({ success: true, dados: result.rows });
+        res.json({ success: true, dados: mencoesUnificar(result.rows) });
     } catch (error) { 
         console.error("Erro Rota Menções:", error);
         res.status(500).json({ success: false, error: error.message }); 
+    }
+});
+
+// ==========================================
+// 14b. PRODUTOS CITADOS — ABA "TODOS" (07/10/2026 · regra do período e retornos ajustados no mesmo dia)
+// Tickets de qualquer status (aberto, pendente, adiado ou resolvido), não importa quem mandou a última mensagem.
+// Período: só entra o ticket cuja 1ª MENSAGEM é do período, e o produto tem que ser citado pelo cliente DENTRO do período
+// (em qualquer mensagem dele, ou no assunto do e-mail). Mesmas equipes da aba Abertos, sem a caixa "Atendimento | Brasil".
+// Retorno (regra do Time 48H): o cliente escreveu de novo depois da 1ª resposta do agente; o tempo conta da última resposta do agente antes disso.
+// Tabulação (ajuste seguinte): o ticket também entra se o agente marcou o produto no atributo "produto" da conversa (a mesma tabulação dos Produtos Tabulados),
+// mesmo sem o cliente citar. Cada ticket vem com como entrou (citado / tabulado / os dois) e se tem a etiqueta "duplicado".
+// ==========================================
+const MENCOES_PRODUTOS_LISTA_ABERTOS = [   // cópia da lista da rota /api/mencoes-abertos (a mesma busca nas duas abas)
+    'Alpha Max', 'BoostBurn', 'Clean Eye', 'Coffee Burn', 'DentaGuard', 'BioGutix', 'Dream Night', 'Eros Lift',
+    'Fit Burn', 'Flash Burn', 'Flexi Move', 'FloraZen', 'FocusVibe', 'Giant Max', 'Gluco Control', 'Gluco Pure',
+    'GlycoNaturals', 'Glycotide', 'Lipo Flow', 'Lipo Rise', 'Liver Revive', 'Manergy', 'Memo Revive', 'Memory Lift',
+    "Men's Growth", 'Metarise', 'Mindora', 'Nerve Alive', 'Nerve Zen', 'Nerve Vital', 'Nervion', 'NeuroPezil',
+    'Neuro Silence', 'Oral Defense', 'Prime Age', 'Prostate Max', 'Red Burn', 'Relax Pure', 'Revital Gluco', 'SkinFlex Collagen',
+    'Slim Rise', 'Sonus Zen', 'Sugar Control', 'Sugar Drop', 'Vigor Boost', 'VirileForce', 'Vital Blood', 'Vital Green',
+    'VitaLust', 'Vivid Essence', 'VoluMax', 'Lipotide', 'HairLift', 'NailPure', 'BreathiZen', 'GoldenVita Pure',
+    'NeuronGold', 'Honey Sharp', 'Lipo Advance', 'Nervify', 'Power HoneyX', 'Neuro Drops', 'Sleep Protocol', 'Retikora',
+    'Gelatide', 'GelaBurn', 'Nervontix', 'Mentho Flow', 'OtoHear Drops', 'TrimX', 'Nervory', 'Man ForceX',
+    'Brainergy', 'Vision Vance', 'Braincept', 'Prosta Renew', 'GlycoPezil', 'Prosta Defender', 'CoffeeLean', 'Nerve Defender',
+    'Barisalt', 'VertiBalance', 'Derma Essential', 'Hearing Harmony', 'MemoPezil', 'Gelatine Sculpt', 'Memocept', 'Sleepem',
+    'JointBrex', 'VapoFil', 'HoneyCept', 'BloodPril', 'Longevant', 'Sleepidem', 'Alpha Honey', 'Blueberry GLP',
+    'Chocotide', 'HunterPower', 'Gluco Master', 'Slim Jelly', 'HunterPowerX', 'Leanrise', 'GlucoEnergy', 'Gelatide-1',
+    'NeuroSalt', 'Derma Clean', 'Skin Revive', 'Lean Jaro', 'Erefil', 'Honetide31', 'FlaxBurn', 'Liver Balance',
+    'Respiratory Support', 'PressureGuard', 'MetaboSlim', 'NeuroFlux', 'GlucoForce', 'MaxiDure', 'NeuroVix', 'Arthmira',
+    'Cutide', 'NeuroSharp', 'Neurozen', 'Prime Age Caps', 'BrainLive', 'Glyco Harmony', 'Cinna Harmony', 'Javatide',
+    'Mens Power', 'SlimTide', 'LeanBurn', 'Cognicept', 'Memo+50', 'LeanBurn Drops', 'Sugar Reset', 'Mojatide',
+    'GlucoVive', 'SugarVita Gummies', 'GlucoSteady', 'Memo Rise', 'Neuro Sharp Caps', 'NeuroBlast', 'Erecmax', 'Vigor Prime',
+    'GelaSlim', 'PeptiBurn Gummies', 'Lipotutide', 'Glucotide', 'JellyTide', 'MemoVance', 'TestoMax', 'Dermapure',
+    'Gumitide', 'Eronix', 'PowerZenX', 'PowerNox', 'Glyvoryn', 'Sugarzen', 'Sugarflex', 'SugarCalm',
+    'Glucovex', 'SugarPure', 'NerveHarmony', 'NeuroHarmony', 'Nerveyn', 'NerveMax', 'Nervetide', 'MindCervy',
+    'Mindoryx', 'FocusSnap', 'Leantide', 'TorchFat', 'MomBurn', 'Slim40', 'TestoHorse', 'Vigor40',
+    'NeuroOil', 'Horse Boost', 'Neuro Cinnamon', 'FocusLock', 'MemoGuard', 'Renew31', 'Tinizen', 'Slimpeak',
+    'SleepGood', 'FastBurn', 'Javacept', 'NeuroVex', 'Lipolean', 'TadaGummies', 'AlphaPulse', 'Eresurge',
+    'GlucoBliss', 'GlycoBalance', 'Sodatide', 'VigorRise', 'Horse Pulse', 'MindCept', 'MemoClear', 'HoneyHarmony',
+    'Glycoformin', 'OzemPeak', 'OzemSlim', 'SodaSlim', 'SodaBurn', 'Gumiflow', 'AlphaSteel', 'VigorFil',
+    'SodaFil', 'Sugarjaro', 'Sugariance', 'JellyFil', 'Memodyne', 'HoneyPezil', 'MemoHoney', 'Neuroflow',
+    'Gabaflow Mix', 'LyriBalm', 'JelloBurn', 'GlucoAloha', 'HorseFil', 'GelaFil', 'VapoCept', 'NerveHarmonny',
+    'SodaLean', 'Neurapezil', 'PrimeHoney', 'HoneyBalance', 'GlycoBloom', 'JellyBoost', 'Hydrofil', 'SteelPulse',
+    'Sugartide', 'Gumipic', 'Nervecept', 'Neuradyne', 'HorseSteel', 'Hydroryn', 'Honeyfil', 'Cognidyne',
+    'AlkaPic', 'AlkaBurn', 'GelaLean', 'AlkaTide', 'Gelacept', 'Gelanic', 'Gumipezil', 'Glycopic',
+    'SodaFit', 'Sweetide', 'Sodaryn', 'RoyalFil', 'Gelagen', 'Turmeric Harmony', 'Jellyblue', 'HoneyBoost',
+    'Iron Boost', 'HearBetter', 'Gelafen', 'Gelataro', 'OliveBrain', 'CartiVex', 'Glycofit', 'HoneyFlush',
+    'GiantMax', 'Vinetaro', 'Cardiopril', 'Cardiocept', 'MeltCore', 'SodaPeak', 'MatchaSlim', 'MatchaTide',
+    'CardioHarmony', 'SugarClear', 'SodaPower', 'Goldtin', 'Melonex', 'AlkaFit', 'NerveHoney', 'Roscept',
+    'Payarmin', 'Lympnex', 'GlycoGenesis', 'Nervactil', 'NeuroGolden', 'Marycept', 'YogTide', 'Rosedil',
+    'Retride', 'Olivaro', 'Lasiberry', 'USBREX'
+];
+const MENCOES_PRODUTOS_LISTA = Array.from(new Set([...MENCOES_PRODUTOS_LISTA_ABERTOS, ...MENCOES_PRODUTOS_NOVOS]));
+// 1º filtro rápido (busca de texto do Postgres): só olha de perto as mensagens que têm o nome de algum produto como palavra (ou frase, ex.: "sugar reset")
+const MENCOES_TSQUERY = Array.from(new Set(MENCOES_PRODUTOS_LISTA
+    .map(p => p.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean))
+    .filter(t => t.length)
+    .map(t => t.length === 1 ? t[0] : '(' + t.join(' <-> ') + ')'))).join(' | ');
+// Faixa do retorno de cada ticket e os totais da linha (cada ticket conta 1 vez)
+function mencoesFaixaRetorno(d) {
+    if (!d.primeira_resp) return 'Sem resposta do agente';
+    if (!d.retorno_em || d.retorno_horas == null) return 'Sem retorno';
+    return d.retorno_horas <= 24 ? '< 24h' : (d.retorno_horas <= 48 ? '24-48h' : '> 48h');
+}
+// Aba Todos: junta as grafias do mesmo produto (igual ao mencoesUnificar) e, se o mesmo ticket vier pelas 2 grafias, soma como ele entrou (citado e/ou tabulado)
+function mencoesUnificarTodos(linhas) {
+    const mapa = new Map();
+    for (const r of (linhas || [])) {
+        const produto = MENCOES_APELIDOS[r.produto_mencionado] || r.produto_mencionado, chave = r.equipe + '|' + produto;
+        if (!mapa.has(chave)) mapa.set(chave, { ...r, produto_mencionado: produto, detalhes: [], porId: new Map() });
+        const alvo = mapa.get(chave);
+        (r.detalhes || []).forEach(d => {
+            const ja = alvo.porId.get(d.id);
+            if (!ja) { const novo = { ...d }; alvo.porId.set(d.id, novo); alvo.detalhes.push(novo); }
+            else { ja.por_texto = ja.por_texto || d.por_texto; ja.por_tab = ja.por_tab || d.por_tab; }
+        });
+    }
+    return Array.from(mapa.values()).map(({ porId, ...r }) => ({
+        ...r, qtd_casos: String(porId.size),
+        detalhes: r.detalhes.map(d => ({ ...d, origem: d.por_texto && d.por_tab ? 'Citado e tabulado' : (d.por_tab ? 'Tabulado pelo agente' : 'Citado pelo cliente') }))
+    })).sort((a, b) => Number(b.qtd_casos) - Number(a.qtd_casos));
+}
+function mencoesTotaisTodos(linhas) {
+    return (linhas || []).map(r => {
+        const detalhes = (r.detalhes || []).map(d => ({ ...d, faixa_retorno: mencoesFaixaRetorno(d) }));
+        const conta = (f) => detalhes.filter(d => d.faixa_retorno === f).length;
+        const r24 = conta('< 24h'), r48 = conta('24-48h'), rMais = conta('> 48h');
+        return { ...r, detalhes, total_retornos: r24 + r48 + rMais, retornos_24h: r24, retornos_48h: r48, retornos_mais_48h: rMais };
+    });
+}
+app.get('/api/mencoes-todos', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+
+    if (!adms.includes(emailUser)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+
+    try {
+        let dataInicioSQL, dataFimSQL;
+        if (req.query.since && req.query.until) {
+            dataInicioSQL = unixParaYYYYMMDD(req.query.since);
+            dataFimSQL = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dataInicioSQL = formatarDataSQL(dInicio);
+            dataFimSQL = formatarDataSQL(agora);
+        }
+
+        const q = `
+        WITH Palavras AS MATERIALIZED (
+            SELECT kw, lower(kw) AS kwl FROM unnest($4::text[]) AS u(kw)
+        ),
+        Textos AS MATERIALIZED (
+            SELECT m.conversation_id AS conv_id, lower(m.content) AS txt   -- texto do cliente no período
+            FROM messages m
+            WHERE m.account_id = 1
+              AND m.message_type = 0
+              AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND m.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND to_tsvector('simple', left(COALESCE(m.content, ''), 50000)) @@ to_tsquery('simple', $3)
+            UNION ALL
+            SELECT c.id AS conv_id, lower(COALESCE(c.additional_attributes->>'subject', '')) AS txt   -- assunto do e-mail dos casos criados no período
+            FROM conversations c
+            WHERE c.account_id = 1
+              AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND to_tsvector('simple', COALESCE(c.additional_attributes->>'subject', '')) @@ to_tsquery('simple', $3)
+        ),
+        Tabulados AS MATERIALIZED (   -- produto marcado pelo agente no atributo "produto" da conversa (a tabulação dos Produtos Tabulados), nos casos criados no período
+            SELECT c.id AS conv_id,
+                lower(TRIM(COALESCE(c.custom_attributes->>'produtos', c.custom_attributes->>'produto', c.custom_attributes->>'Produto'))) AS tab
+            FROM conversations c
+            WHERE c.account_id = 1
+              AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND TRIM(COALESCE(c.custom_attributes->>'produtos', c.custom_attributes->>'produto', c.custom_attributes->>'Produto')) != ''
+        ),
+        Citacoes AS (   -- por_texto: o cliente citou (texto ou assunto) · por_tab: o agente tabulou o produto
+            SELECT conv_id, kw, bool_or(por_texto) AS por_texto, bool_or(por_tab) AS por_tab
+            FROM (
+                SELECT tx.conv_id, p.kw, TRUE AS por_texto, FALSE AS por_tab
+                FROM Textos tx
+                JOIN Palavras p ON strpos(tx.txt, p.kwl) > 0   -- mesma regra da aba Abertos: o nome aparece no texto
+                UNION ALL
+                SELECT tb.conv_id, p.kw, FALSE, TRUE
+                FROM Tabulados tb
+                JOIN Palavras p ON strpos(tb.tab, p.kwl) > 0   -- tabulação com o nome de um produto da lista
+                UNION ALL
+                SELECT tb.conv_id, TRIM(BOTH '.' FROM INITCAP(tb.tab)), FALSE, TRUE   -- tabulação de produto que não está na lista: entra com o nome tabulado
+                FROM Tabulados tb
+                WHERE NOT EXISTS (SELECT 1 FROM Palavras p WHERE strpos(tb.tab, p.kwl) > 0)
+            ) x
+            GROUP BY conv_id, kw
+        ),
+        Tickets AS MATERIALIZED (   -- 1 linha por ticket citado: a 1ª mensagem do ticket e a 1ª resposta do agente
+            SELECT
+                c.id AS conv_id,
+                (SELECT MIN(m0.created_at) FROM messages m0 WHERE m0.conversation_id = c.id AND m0.message_type IN (0, 1) AND m0.private = FALSE) AS primeira_msg,
+                (SELECT MIN(mr.created_at) FROM messages mr WHERE mr.conversation_id = c.id AND mr.message_type = 1 AND mr.private = FALSE AND mr.sender_type = 'User') AS primeira_resp
+            FROM conversations c
+            WHERE c.id IN (SELECT conv_id FROM Citacoes)
+        ),
+        NoPeriodo AS (   -- só vale o ticket cuja 1ª mensagem é do período (ticket antigo com mensagem nova fica de fora)
+            SELECT tk.*,
+                (SELECT MIN(mc.created_at) FROM messages mc WHERE mc.conversation_id = tk.conv_id AND mc.message_type = 0 AND mc.private = FALSE
+                   AND mc.created_at > tk.primeira_resp) AS retorno_em
+            FROM Tickets tk
+            WHERE tk.primeira_msg >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND tk.primeira_msg <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+        ),
+        ComRetorno AS (   -- retorno do cliente (regra do Time 48H) e a última resposta do agente antes dele
+            SELECT np.*,
+                (SELECT MAX(ma.created_at) FROM messages ma WHERE ma.conversation_id = np.conv_id AND ma.message_type = 1 AND ma.private = FALSE
+                   AND ma.sender_type = 'User' AND ma.created_at < np.retorno_em) AS resp_antes_retorno
+            FROM NoPeriodo np
+        ),
+        Casos AS (
+            SELECT
+                CASE
+                    WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
+                    WHEN t.name ILIKE '%retenção%' THEN 'RET'
+                    WHEN t.name ILIKE '%sac%' THEN 'SAC'
+                    WHEN t.name ILIKE '%back office%' THEN 'BKO'
+                    WHEN c.team_id IS NULL THEN 'SEM ATRIBUIR'
+                    ELSE 'OUTROS'
+                END AS equipe,
+                ci.kw AS produto_mencionado,
+                c.id AS conv_id,
+                c.display_id,
+                CASE c.status WHEN 0 THEN 'Aberto' WHEN 1 THEN 'Resolvido' WHEN 2 THEN 'Pendente' WHEN 3 THEN 'Adiado' ELSE 'Outro' END AS situacao,
+                ct.name AS contato_nome,
+                ct.email AS contato_email,
+                to_char((cr.primeira_msg AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI') AS primeira_msg,
+                to_char((cr.primeira_resp AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI') AS primeira_resp,
+                to_char((cr.retorno_em AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI') AS retorno_em,
+                CASE WHEN cr.retorno_em IS NOT NULL AND cr.resp_antes_retorno IS NOT NULL
+                     THEN ROUND((EXTRACT(EPOCH FROM (cr.retorno_em - cr.resp_antes_retorno)) / 3600)::numeric, 1)::float8 END AS retorno_horas,
+                ci.por_texto,
+                ci.por_tab,
+                EXISTS (SELECT 1 FROM taggings tgd JOIN tags tdd ON tdd.id = tgd.tag_id   -- etiqueta "duplicado" (cliente abriu 2 tickets e um foi fechado como duplicado)
+                        WHERE tgd.taggable_type = 'Conversation' AND tgd.taggable_id = c.id AND lower(tdd.name) = 'duplicado') AS duplicado
+            FROM Citacoes ci
+            JOIN ComRetorno cr ON cr.conv_id = ci.conv_id
+            JOIN conversations c ON c.id = ci.conv_id
+            LEFT JOIN teams t ON t.id = c.team_id
+            LEFT JOIN inboxes i ON i.id = c.inbox_id
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            WHERE (i.name IS NULL OR i.name != 'Atendimento | Brasil')
+        )
+        SELECT
+            equipe,
+            produto_mencionado,
+            COUNT(conv_id) as qtd_casos,
+            json_agg(json_build_object(
+                'id', display_id,
+                'nome', COALESCE(contato_nome, 'Sem Nome'),
+                'email', COALESCE(contato_email, 'Sem Email'),
+                'status', situacao,
+                'primeira_msg', primeira_msg,
+                'primeira_resp', primeira_resp,
+                'retorno_em', retorno_em,
+                'retorno_horas', retorno_horas,
+                'por_texto', por_texto,
+                'por_tab', por_tab,
+                'duplicado', duplicado
+            ) ORDER BY display_id DESC) AS detalhes
+        FROM Casos
+        WHERE equipe != 'OUTROS'
+        GROUP BY equipe, produto_mencionado
+        ORDER BY qtd_casos DESC;
+        `;
+        // Sem o JIT do Postgres: a compilação dele gastava ~3,5 s nesta consulta (em 1 dia, quase todo o tempo). Desligado SÓ aqui:
+        // SET + consulta + RESET vão juntos no mesmo pedido (mesma conexão e mesmo freio do pool.query); se der erro, o banco desfaz o SET sozinho.
+        const lit = (v) => "'" + String(v).replace(/'/g, "''") + "'";
+        let result;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dataInicioSQL) && /^\d{4}-\d{2}-\d{2}$/.test(dataFimSQL)) {
+            const qSemJit = q.replace(/\$1/g, lit(dataInicioSQL)).replace(/\$2/g, lit(dataFimSQL)).replace(/\$3/g, lit(MENCOES_TSQUERY))
+                .replace('$4::text[]', 'ARRAY[' + MENCOES_PRODUTOS_LISTA.map(lit).join(', ') + ']::text[]');
+            try { result = (await pool.query('SET jit = off; ' + qSemJit + '; RESET jit;'))[1]; }
+            catch (e) { if (!/jit/i.test(String(e && e.message))) throw e; }   // banco sem a opção jit: roda do jeito normal abaixo
+        }
+        if (!result) result = await pool.query(q, [dataInicioSQL, dataFimSQL, MENCOES_TSQUERY, MENCOES_PRODUTOS_LISTA]);
+        res.json({ success: true, dados: mencoesTotaisTodos(mencoesUnificarTodos(result.rows)), periodo: { inicio: dataInicioSQL, fim: dataFimSQL } });
+    } catch (error) {
+        console.error("Erro Rota Menções (Todos):", error);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
