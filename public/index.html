@@ -1617,6 +1617,21 @@
                             </button>
                         </div>
                     </div>
+                    <!-- 🔎 Abas Abertos / Todos (07/10/2026): Abertos = a fila de agora (como sempre) · Todos = todos os casos que citam o produto no período -->
+                    <div id="mencoes-barra-abas" class="px-6 py-3 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-3 shrink-0">
+                        <div class="flex items-center gap-2">
+                            <button id="btn-mencoes-aba-abertos" onclick="mencoesMudarAba('abertos')" class="btn-setor btn-setor-ativo">🟢 Abertos (fila agora)</button>
+                            <button id="btn-mencoes-aba-todos" onclick="mencoesMudarAba('todos')" class="btn-setor btn-setor-inativo">📋 Todos os casos</button>
+                        </div>
+                        <div id="mencoes-todos-filtro" class="hidden flex flex-wrap items-center gap-2">
+                            <span id="mencoes-todos-info" class="text-[10px] font-bold text-gray-500"></span>
+                            <div class="flex items-center gap-2 bg-gray-200 dark:bg-black/50 px-3 rounded-xl border border-gray-300 dark:border-white/10 h-8 relative min-w-[330px]">
+                                <svg class="w-4 h-4 text-gexCyan absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                <input type="text" id="calendario-mencoes-todos" placeholder="Selecione o período..." class="bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer w-full text-center border-none pl-6 font-bold tracking-wide" readonly>
+                                <button id="btn-aplicar-mencoes-todos" onclick="carregarMencoesTodos()" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shadow-sm ml-1 shrink-0">Buscar</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[1000px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
                             <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
@@ -1636,6 +1651,24 @@
                                 </tr>
                             </thead>
                             <tbody id="tabela-mencoes-body" class="text-sm"></tbody>
+                        </table>
+                    </div>
+                    <!-- 🔎 Tabela da aba Todos (07/10/2026): tickets que começaram no período; retornos pela regra do Time 48H -->
+                    <div id="mencoes-todos-tabela-wrap" class="hidden p-0 overflow-y-auto flex-1 custom-scrollbar">
+                        <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                                <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
+                                    <th class="py-3 px-3 pl-4">Produto Citado no Texto</th>
+                                    <th class="py-3 px-3 text-center">Fila / Equipe</th>
+                                    <th class="py-3 px-3 text-center" title="Tickets que começaram no período (1ª mensagem) em que o cliente citou o produto (dentro do período) ou o agente tabulou o produto">🎫 Total de Tickets</th>
+                                    <th class="py-3 px-3 text-center text-orange-500" title="O cliente escreveu de novo depois da 1ª resposta do agente (regra do Time 48H)">🔄 Total Retornos</th>
+                                    <th class="py-3 px-3 text-center" title="O cliente voltou em até 24h depois da resposta do agente">⏱️ Retornos < 24h</th>
+                                    <th class="py-3 px-3 text-center" title="O cliente voltou entre 24h e 48h depois da resposta do agente">⏳ Retornos 24-48h</th>
+                                    <th class="py-3 px-3 text-center" title="O cliente voltou mais de 48h depois da resposta do agente">📅 Retornos > 48h</th>
+                                    <th class="py-3 px-3 text-center pr-4">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-mencoes-todos-body" class="text-sm"></tbody>
                         </table>
                     </div>
                 </div>
@@ -4577,6 +4610,337 @@
 
         function fecharModalMencoes() {
             document.getElementById('modal-mencoes-detalhes').classList.add('hidden');
+        }
+
+        // ==========================================
+        // 🔎 PRODUTOS CITADOS — ABAS ABERTOS / TODOS (07/10/2026 · aba Todos ajustada no mesmo dia)
+        // Abertos: a busca de sempre (fila de agora), com a tabela, o "Ver E-mails" e o Excel de sempre.
+        // Todos: tickets cuja 1ª mensagem é do período do calendário e que citam o produto dentro do período (rota /api/mencoes-todos),
+        // com tabela, "Ver Tickets" e Excel próprios: data da 1ª mensagem e retorno do cliente (regra do Time 48H).
+        // ==========================================
+        const mencoesEstado = { aba: 'abertos', cal: null, datas: [], abertos: null, todos: null, periodo: null, grupos: {}, seq: 0, titulos: null };
+        const _mencoesCarregarAbertosOriginal = window.carregarMencoesAbertos;
+        const _mencoesRenderOriginal = window.renderTabelaMencoes;
+        const _mencoesExcelOriginal = window.exportarExcelMencoes;
+        window.carregarMencoesAbertos = async function () {   // o 🔄 Atualizar e a atualização automática recarregam a aba que estiver aberta
+            if (mencoesEstado.aba === 'todos') return carregarMencoesTodos();
+            await _mencoesCarregarAbertosOriginal();
+            mencoesEstado.abertos = dadosMencoesBrutos;
+        };
+        window.renderTabelaMencoes = function () {   // filtro de equipe: na aba Todos, monta a tabela da aba Todos
+            if (mencoesEstado.aba === 'todos') return renderTabelaMencoesTodos();
+            return _mencoesRenderOriginal();
+        };
+        window.exportarExcelMencoes = function () {   // botão Baixar Excel: na aba Todos, baixa o Excel da aba Todos
+            if (mencoesEstado.aba === 'todos') return exportarExcelMencoesTodos();
+            return _mencoesExcelOriginal();
+        };
+        function mencoesMontarCalendario() {
+            if (mencoesEstado.cal) return;
+            const inp = document.getElementById('calendario-mencoes-todos');
+            if (!inp || typeof flatpickr !== 'function') return;
+            mencoesEstado.cal = flatpickr(inp, { mode: "range", locale: "pt", dateFormat: "d/m/Y", showMonths: 2, theme: "dark", onChange: (sel) => { mencoesEstado.datas = sel; } });
+            const hj = new Date(); const ini = new Date(hj.getFullYear(), hj.getMonth(), hj.getDate() - 6);
+            mencoesEstado.cal.setDate([ini, hj], false);   // já abre nos últimos 7 dias
+            mencoesEstado.datas = [ini, hj];
+        }
+        function mencoesTitulos(aba) {
+            const h3 = document.querySelector('#tela-cw-mencoes h3'), sub = h3 ? h3.nextElementSibling : null;
+            if (!h3 || !sub) return;
+            if (!mencoesEstado.titulos) mencoesEstado.titulos = { h3: h3.innerHTML, sub: sub.innerHTML };
+            if (aba === 'todos') {
+                h3.innerHTML = '🔎 Produtos Citados (Todos os Casos)';
+                sub.innerHTML = 'Tickets que começaram no período (1ª mensagem) em que o cliente citou o produto ou o agente tabulou, abertos ou fechados';
+            } else { h3.innerHTML = mencoesEstado.titulos.h3; sub.innerHTML = mencoesEstado.titulos.sub; }
+        }
+        function mencoesMostrarTabela(aba) {   // cada aba tem a sua tabela
+            const tbA = document.getElementById('tabela-mencoes-body'), contA = tbA ? tbA.closest('.custom-scrollbar') : null;
+            const contT = document.getElementById('mencoes-todos-tabela-wrap');
+            if (contA) contA.classList.toggle('hidden', aba === 'todos');
+            if (contT) contT.classList.toggle('hidden', aba !== 'todos');
+        }
+        function mencoesMudarAba(aba) {
+            mencoesEstado.aba = aba;
+            [['abertos', 'btn-mencoes-aba-abertos'], ['todos', 'btn-mencoes-aba-todos']].forEach(([a, id]) => {
+                const b = document.getElementById(id);
+                if (b) b.className = 'btn-setor ' + (a === aba ? 'btn-setor-ativo' : 'btn-setor-inativo');
+            });
+            const filtro = document.getElementById('mencoes-todos-filtro');
+            if (filtro) filtro.classList.toggle('hidden', aba !== 'todos');
+            mencoesTitulos(aba);
+            mencoesMostrarTabela(aba);
+            if (aba === 'todos') {
+                mencoesMontarCalendario();
+                if (mencoesEstado.todos) renderTabelaMencoesTodos();
+                else carregarMencoesTodos();
+            } else if (mencoesEstado.abertos) { dadosMencoesBrutos = mencoesEstado.abertos; renderTabelaMencoes(); }
+            else carregarMencoesAbertos();
+        }
+        async function carregarMencoesTodos() {
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            mencoesMontarCalendario();
+            const seq = ++mencoesEstado.seq;
+            const tb = document.getElementById('tabela-mencoes-todos-body'), info = document.getElementById('mencoes-todos-info');
+            if (tb) tb.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">⏳ Lendo os tickets do período...</td></tr>';
+            if (info) info.innerText = '';
+            try {
+                const response = await fetch('/api/mencoes-todos' + tkParamsPeriodo(mencoesEstado));
+                const data = await response.json();
+                if (seq !== mencoesEstado.seq) return;   // chegou depois de outra busca
+                if (!data.success) throw new Error(data.error || 'erro');
+                mencoesEstado.todos = data.dados;
+                mencoesEstado.periodo = data.periodo;
+                if (mencoesEstado.aba === 'todos') renderTabelaMencoesTodos();
+                if (info) info.innerText = 'Mostrando: ' + tkPeriodoTxt(data.periodo);
+            } catch (error) {
+                console.error(error);
+                if (seq === mencoesEstado.seq && tb) tb.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">❌ Não consegui buscar os tickets do período. Tente de novo.</td></tr>';
+            }
+        }
+        function mencoesTodosGrupos() {   // igual à tabela de sempre: "Todos" junta as equipes por produto; uma equipe = só os tickets dela. Cada ticket conta 1 vez.
+            const filtro = filtroMencaoSetor, mapa = {};
+            (mencoesEstado.todos || []).filter(r => filtro === 'TODOS' || r.equipe === filtro).forEach(r => {
+                const chave = filtro === 'TODOS' ? r.produto_mencionado : `${r.produto_mencionado}-${r.equipe}`;
+                if (!mapa[chave]) mapa[chave] = { chave, produto: r.produto_mencionado, equipe: filtro === 'TODOS' ? 'TODOS' : r.equipe, porId: new Map() };
+                (r.detalhes || []).forEach(d => { if (!mapa[chave].porId.has(d.id)) mapa[chave].porId.set(d.id, { ...d, equipe: r.equipe }); });
+            });
+            const grupos = Object.values(mapa).map(g => {
+                const tickets = Array.from(g.porId.values());
+                const conta = (f) => tickets.filter(t => t.faixa_retorno === f).length;
+                const r24 = conta('< 24h'), r48 = conta('24-48h'), rMais = conta('> 48h');
+                return { chave: g.chave, produto: g.produto, equipe: g.equipe, tickets, qtd: tickets.length, retornos: r24 + r48 + rMais, r24, r48, rMais };
+            }).sort((a, b) => b.qtd - a.qtd || b.retornos - a.retornos);
+            mencoesEstado.grupos = {};
+            grupos.forEach(g => { mencoesEstado.grupos[g.chave] = g; });
+            return grupos;
+        }
+        function renderTabelaMencoesTodos() {
+            const tb = document.getElementById('tabela-mencoes-todos-body');
+            if (!tb) return;
+            if (!mencoesEstado.todos) { tb.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">⏳ Lendo os tickets do período...</td></tr>'; return; }
+            const grupos = mencoesTodosGrupos();
+            if (!grupos.length) {
+                tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum produto citado nos tickets que começaram neste período${filtroMencaoSetor !== 'TODOS' ? ' (' + filtroMencaoSetor + ')' : ''}.</td></tr>`;
+                return;
+            }
+            tb.innerHTML = grupos.map(g => {
+                const alerta = g.qtd > 50 ? 'text-red-500 font-black' : (g.qtd > 20 ? 'text-yellow-500 font-bold' : 'text-emerald-500 font-bold');
+                const taxa = g.qtd > 0 ? ((g.retornos / g.qtd) * 100).toFixed(1) : '0.0';
+                return `
+                <tr class="ranking-row row-normal linha-animada">
+                    <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">💬 ${t48xEsc(g.produto)}</td>
+                    <td class="py-4 px-3 text-center"><span class="badge-setor">${g.equipe}</span></td>
+                    <td class="py-4 px-3 text-center font-mono text-[16px] ${alerta}">${g.qtd}</td>
+                    <td class="py-4 px-3 text-center">
+                        <span class="font-mono text-[16px] font-black text-orange-500">${g.retornos}</span>
+                        <span class="text-[10px] text-gray-500 ml-1 font-bold">(${taxa}%)</span>
+                    </td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-emerald-500 text-[15px]">${g.r24}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-yellow-500 text-[15px]">${g.r48}</td>
+                    <td class="py-4 px-3 text-center font-mono font-black text-orange-500 text-[15px]">${g.rMais}</td>
+                    <td class="py-4 px-3 text-center pr-4">
+                        <button onclick="abrirModalMencoesTodos('${encodeURIComponent(g.chave)}')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors">
+                            👁️ Ver Tickets
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+        function mencoesDataBR(s) {   // "2026-10-03 14:20" → "03/10/2026 14:20"
+            if (!s) return '';
+            const [d, h] = String(s).split(' '), p = d.split('-');
+            return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}${h ? ' ' + h : ''}` : String(s);
+        }
+        function mencoesTempo(h) {   // horas até o retorno, do jeito que se fala
+            if (h == null || h === '') return '';
+            const v = Number(h);
+            if (v < 1) return Math.max(1, Math.round(v * 60)) + ' min';
+            if (v < 48) return v.toFixed(1).replace('.', ',') + ' h';
+            return (v / 24).toFixed(1).replace('.', ',') + ' dias';
+        }
+        const MENCOES_COR_FAIXA = {
+            '< 24h': 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30',
+            '24-48h': 'bg-yellow-500/10 text-yellow-600 border border-yellow-500/30',
+            '> 48h': 'bg-red-500/10 text-red-500 border border-red-500/30'
+        };
+        // Ver Tickets da aba Todos: filtros clicáveis (retorno, equipe e, nos sem resposta do agente, a etiqueta "duplicado") e como cada ticket entrou
+        function abrirModalMencoesTodos(chaveCod) {
+            const chave = decodeURIComponent(chaveCod);
+            if (!mencoesEstado.grupos[chave]) return;
+            mencoesEstado.modal = { chave, ret: 'todos', equipe: 'todas', dup: 'todos' };
+            renderModalMencoesTodos();
+            document.getElementById('modal-mencoes-detalhes').classList.remove('hidden');
+        }
+        function mencoesFiltrarModal(tipo, valor) {   // clique num filtro (ou num selo do ticket)
+            const m = mencoesEstado.modal;
+            if (!m) return;
+            if (tipo === 'dup') { m.dup = valor; if (valor !== 'todos') m.ret = 'Sem resposta do agente'; }
+            else { m[tipo] = valor; if (tipo === 'ret' && valor !== 'Sem resposta do agente') m.dup = 'todos'; }
+            renderModalMencoesTodos();
+        }
+        function renderModalMencoesTodos() {
+            const m = mencoesEstado.modal, g = m ? mencoesEstado.grupos[m.chave] : null;
+            if (!g) return;
+            document.getElementById('modal-mencoes-titulo').innerText = `Tickets do produto: ${g.produto} (${g.equipe})`;
+            const SEM_RESP = 'Sem resposta do agente';
+            const faixaDe = (tk) => tk.faixa_retorno || 'Sem retorno';
+            const passa = (tk, ...ignorar) =>
+                (ignorar.includes('ret') || m.ret === 'todos' || faixaDe(tk) === m.ret) &&
+                (ignorar.includes('equipe') || m.equipe === 'todas' || tk.equipe === m.equipe) &&
+                (ignorar.includes('dup') || m.dup === 'todos' || (faixaDe(tk) === SEM_RESP && (m.dup === 'sim') === !!tk.duplicado));
+            const conta = (cond, ...ignorar) => g.tickets.filter(tk => passa(tk, ...ignorar) && cond(tk)).length;
+            const neutro = 'bg-gray-500/10 text-gray-600 dark:text-gray-300 border border-gray-500/30';
+            const corDup = 'bg-red-500/10 text-red-500 border border-red-500/30';
+            const corFaixa = { '< 24h': MENCOES_COR_FAIXA['< 24h'], '24-48h': MENCOES_COR_FAIXA['24-48h'], '> 48h': MENCOES_COR_FAIXA['> 48h'], 'Sem retorno': neutro, [SEM_RESP]: 'bg-slate-500/10 text-slate-500 border border-slate-500/30' };
+            const chip = (tipo, valor, rotulo, n, cores) => `<button onclick="mencoesFiltrarModal('${tipo}', '${valor}')" class="px-3 py-1 rounded-full text-[11px] font-bold transition-all ${m[tipo] === valor ? 'ring-2 ring-gexCyan shadow-sm ' : 'opacity-75 hover:opacity-100 '}${cores}">${rotulo} <span class="font-mono ml-0.5">${n}</span></button>`;
+            const rotuloFiltro = (txt) => `<span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mr-1">${txt}</span>`;
+            const faixas = ['< 24h', '24-48h', '> 48h', 'Sem retorno', SEM_RESP];
+            const linhaRet = chip('ret', 'todos', 'Todos', conta(() => true, 'ret'), neutro)
+                + faixas.map(f => chip('ret', f, MENCOES_COR_FAIXA[f] ? 'Retorno ' + f : f, conta(tk => faixaDe(tk) === f, 'ret'), corFaixa[f])).join('');
+            const equipes = Array.from(new Set(g.tickets.map(tk => tk.equipe))).sort();
+            const linhaEq = chip('equipe', 'todas', 'Todas', conta(() => true, 'equipe'), neutro)
+                + equipes.map(e => chip('equipe', e, e, conta(tk => tk.equipe === e, 'equipe'), neutro)).join('');
+            const nSemResp = conta(tk => faixaDe(tk) === SEM_RESP, 'ret', 'dup');
+            const linhaDup = nSemResp ? (chip('dup', 'todos', 'Todos', nSemResp, neutro)
+                + chip('dup', 'sim', '🏷️ Duplicado', conta(tk => faixaDe(tk) === SEM_RESP && !!tk.duplicado, 'ret', 'dup'), corDup)
+                + chip('dup', 'nao', 'Não é duplicado', conta(tk => faixaDe(tk) === SEM_RESP && !tk.duplicado, 'ret', 'dup'), neutro)) : '';
+            const lista = g.tickets.filter(tk => passa(tk)).sort((a, b) => String(b.primeira_msg || '').localeCompare(String(a.primeira_msg || '')));
+            const nCit = lista.filter(tk => tk.origem !== 'Tabulado pelo agente').length, nTab = lista.filter(tk => tk.origem !== 'Citado pelo cliente').length;
+            let html = `<div class="space-y-2 mb-4">
+                <div class="flex flex-wrap items-center gap-2">${rotuloFiltro('🔄 Retorno')}${linhaRet}</div>
+                <div class="flex flex-wrap items-center gap-2">${rotuloFiltro('👥 Equipe')}${linhaEq}</div>
+                ${linhaDup ? `<div class="flex flex-wrap items-center gap-2">${rotuloFiltro('💬 Sem resposta do agente')}${linhaDup}</div>` : ''}
+                <p class="text-[11px] font-bold text-gray-500 pt-1">Mostrando ${lista.length} de ${g.qtd} ticket${g.qtd === 1 ? '' : 's'} · 💬 citados pelo cliente: ${nCit} · 🏷️ tabulados pelo agente: ${nTab}</p>
+            </div><div class="space-y-3">`;
+            if (!lista.length) html += '<p class="text-gray-500 text-center py-6 font-bold text-sm">Nenhum ticket com esses filtros.</p>';
+            lista.forEach(tk => {
+                const url = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
+                const faixa = faixaDe(tk);
+                const temRetorno = !!MENCOES_COR_FAIXA[faixa];
+                const resp = tk.primeira_resp ? mencoesDataBR(tk.primeira_resp) : SEM_RESP;
+                const ret = temRetorno ? `${mencoesDataBR(tk.retorno_em)} · ${mencoesTempo(tk.retorno_horas)} depois da resposta do agente` : (tk.primeira_resp ? 'O cliente não voltou depois da resposta' : '—');
+                const origem = tk.origem === 'Tabulado pelo agente' ? '🏷️ Tabulado pelo agente' : (tk.origem === 'Citado e tabulado' ? '💬 Citado pelo cliente e 🏷️ tabulado pelo agente' : '💬 Citado pelo cliente');
+                const dup = faixa !== SEM_RESP ? '' : (tk.duplicado
+                    ? `<button onclick="mencoesFiltrarModal('dup', 'sim')" class="text-[10px] px-2 py-0.5 rounded font-bold ${corDup}" title="Tem a etiqueta duplicado: o cliente abriu outro ticket e este foi fechado como duplicado">🏷️ Duplicado</button>`
+                    : `<button onclick="mencoesFiltrarModal('dup', 'nao')" class="text-[10px] px-2 py-0.5 rounded font-bold ${neutro}" title="Sem a etiqueta duplicado">Não é duplicado</button>`);
+                html += `
+                <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="min-w-0">
+                        <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.nome || 'Sem Nome')}</p>
+                        <p class="text-xs font-bold text-gray-500 mt-1">📧 ${t48xEsc(tk.email || 'Sem Email')}</p>
+                        <div class="flex flex-wrap items-center gap-2 mt-2">
+                            <p class="text-[10px] text-gray-400 font-mono">Ticket #${tk.id}</p>
+                            <span class="text-[10px] px-2 py-0.5 rounded font-bold bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300">${t48xEsc(tk.status || '')}</span>
+                            <button onclick="mencoesFiltrarModal('equipe', '${t48xEsc(tk.equipe)}')" class="badge-setor" title="Ver só esta equipe">${tk.equipe}</button>
+                            <button onclick="mencoesFiltrarModal('ret', '${faixa}')" class="text-[10px] px-2 py-0.5 rounded font-bold ${corFaixa[faixa] || neutro}" title="Ver só esta faixa">${temRetorno ? 'Retorno ' + faixa : faixa}</button>
+                            ${dup}
+                        </div>
+                        <div class="mt-2 space-y-0.5 text-[11px] text-gray-500 font-bold">
+                            <p>${origem}</p>
+                            <p>📅 1ª mensagem: <span class="text-gray-700 dark:text-gray-300">${mencoesDataBR(tk.primeira_msg) || '—'}</span></p>
+                            <p>💬 1ª resposta do agente: <span class="text-gray-700 dark:text-gray-300">${resp}</span></p>
+                            <p>🔄 Retorno do cliente: <span class="text-gray-700 dark:text-gray-300">${ret}</span></p>
+                        </div>
+                    </div>
+                    <a href="${url}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">
+                        Abrir Conversa ↗️
+                    </a>
+                </div>`;
+            });
+            html += '</div>';
+            document.getElementById('modal-mencoes-conteudo').innerHTML = html;
+        }
+        async function exportarExcelMencoesTodos() {   // Excel no padrão moderno do Tickets: resumo por produto + 1 linha por ticket
+            if (usuarioAtual && usuarioAtual.role !== 'admin') return;
+            const grupos = mencoesTodosGrupos();
+            if (!grupos.length) return alert('Sem dados para exportar.');
+            const btn = document.getElementById('btn-exportar-mencoes'), original = btn ? btn.innerHTML : '';
+            if (btn) btn.innerHTML = '⏳ Gerando...';
+            try {
+                const NAVY = 'FF0A2540', BRANCO = 'FFFFFFFF', BANDA = 'FFF4F7FB', GRAND = 'FFFFF2CC';
+                const COR = { tickets: 'FF1B52AF', ret: 'FFC2410C', r24: 'FF059669', r48: 'FFB45309', rMais: 'FFDC2626' };
+                const FUNDO_FAIXA = { '< 24h': 'FFD1FAE5', '24-48h': 'FFFEF3C7', '> 48h': 'FFFEE2E2' };
+                const per = mencoesEstado.periodo || {};
+                const filtro = filtroMencaoSetor === 'TODOS' ? 'Todas as equipes' : filtroMencaoSetor;
+                const agora = new Date();
+                const subtitulo = `Período (1ª mensagem do ticket): ${tkPeriodoTxt(per)}   ·   Filtro: ${filtro}   ·   Gerado em ${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                const dataExcel = (s) => {   // texto do banco (hora de Brasília) → data de verdade no Excel, com a mesma hora
+                    const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+                    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])) : null;
+                };
+                const fundo = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+                const cabecalho = (ws, titulo, cols) => {
+                    cols.forEach((c, i) => { ws.getColumn(i + 1).width = c[1]; });
+                    ws.mergeCells(1, 1, 1, cols.length); const t = ws.getCell(1, 1); t.value = titulo; estiloTitulo(t, NAVY, BRANCO); ws.getRow(1).height = 30;
+                    ws.mergeCells(2, 1, 2, cols.length); const s = ws.getCell(2, 1); s.value = subtitulo;
+                    s.font = { italic: true, size: 10, color: { argb: 'FF64748B' } }; s.alignment = { indent: 1, vertical: 'middle' }; ws.getRow(2).height = 18;
+                    cols.forEach((c, i) => { const h = ws.getCell(3, i + 1); h.value = c[0]; estiloHeaderCel(h, c[2] || NAVY, BRANCO); });
+                    ws.getRow(3).height = 32;
+                };
+                const wb = new ExcelJS.Workbook();
+
+                // ── Aba 1: Resumo por produto (as mesmas colunas da tela)
+                const ws = wb.addWorksheet('Resumo por Produto', { views: [{ state: 'frozen', ySplit: 3 }] });
+                const colsR = [['Produto citado', 30], ['Fila / Equipe', 16], ['Total de Tickets', 15, COR.tickets], ['Total Retornos', 15, COR.ret], ['% de Retorno', 13, COR.ret], ['Retornos < 24h', 15, COR.r24], ['Retornos 24-48h', 16, COR.r48], ['Retornos > 48h', 15, COR.rMais]];
+                cabecalho(ws, 'DASH GEX  ·  PRODUTOS CITADOS — TODOS OS CASOS', colsR);
+                let r = 4;
+                grupos.forEach((g, gi) => {
+                    [g.produto, g.equipe, g.qtd, g.retornos, g.qtd ? g.retornos / g.qtd : 0, g.r24, g.r48, g.rMais].forEach((v, ci) => {
+                        const c = ws.getCell(r, ci + 1); c.value = v;
+                        c.alignment = { horizontal: ci === 0 ? 'left' : 'center', vertical: 'middle', indent: ci === 0 ? 1 : 0 };
+                        c.font = { bold: ci === 0 || ci === 3, size: 11, color: { argb: [null, null, null, COR.ret, null, COR.r24, COR.r48, COR.rMais][ci] || 'FF1E293B' } };
+                        if (gi % 2 === 1) c.fill = fundo(BANDA);
+                    });
+                    ws.getCell(r, 5).numFmt = '0.0%';
+                    ws.getRow(r).height = 20; r++;
+                });
+                const unicos = new Map(); grupos.forEach(g => g.tickets.forEach(tk => unicos.set(tk.id, tk)));
+                const todosTk = Array.from(unicos.values()), contaF = (f) => todosTk.filter(tk => tk.faixa_retorno === f).length;
+                const t24 = contaF('< 24h'), t48 = contaF('24-48h'), tMais = contaF('> 48h'), tRet = t24 + t48 + tMais;
+                ['TOTAL (cada ticket conta 1 vez)', '', todosTk.length, tRet, todosTk.length ? tRet / todosTk.length : 0, t24, t48, tMais].forEach((v, ci) => {
+                    const c = ws.getCell(r, ci + 1); c.value = v; c.fill = fundo(GRAND);
+                    c.font = { bold: true, size: 12, color: { argb: 'FF7C2D12' } };
+                    c.alignment = { horizontal: ci === 0 ? 'left' : 'center', vertical: 'middle', indent: ci === 0 ? 1 : 0 };
+                });
+                ws.getCell(r, 5).numFmt = '0.0%'; ws.getRow(r).height = 22;
+                aplicarBordas(ws, 3, 1, r, colsR.length);
+                ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, r - 1), column: colsR.length } };
+
+                // ── Aba 2: Tickets (data da 1ª mensagem, 1ª resposta do agente e o retorno do cliente)
+                const wt = wb.addWorksheet('Tickets', { views: [{ state: 'frozen', ySplit: 3 }] });
+                const colsT = [['Produto citado', 26], ['Fila / Equipe', 14], ['Ticket', 11], ['Cliente', 26], ['E-mail', 32], ['Situação', 12], ['1ª mensagem', 17, COR.tickets], ['1ª resposta do agente', 20, COR.tickets], ['Retorno do cliente', 18, COR.ret], ['Horas até o retorno', 14, COR.ret], ['Faixa do retorno', 22, COR.ret], ['Como entrou', 24], ['Etiqueta duplicado', 13], ['Link', 12]];
+                cabecalho(wt, 'DASH GEX  ·  PRODUTOS CITADOS — TICKETS', colsT);
+                let rt = 4, banda = false;
+                grupos.forEach(g => {
+                    g.tickets.slice().sort((a, b) => String(b.primeira_msg || '').localeCompare(String(a.primeira_msg || ''))).forEach(tk => {
+                        const faixa = tk.faixa_retorno || 'Sem retorno';
+                        const vals = [g.produto, tk.equipe, tk.id, tk.nome || 'Sem Nome', tk.email || 'Sem Email', tk.status || '', dataExcel(tk.primeira_msg), tk.primeira_resp ? dataExcel(tk.primeira_resp) : 'Sem resposta', tk.retorno_em ? dataExcel(tk.retorno_em) : '—', tk.retorno_horas != null ? Number(tk.retorno_horas) : '—', FUNDO_FAIXA[faixa] ? 'Retorno ' + faixa : faixa, tk.origem || 'Citado pelo cliente', tk.duplicado ? 'Sim' : 'Não', { text: 'Abrir ↗', hyperlink: `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}` }];
+                        vals.forEach((v, ci) => {
+                            const c = wt.getCell(rt, ci + 1); c.value = v;
+                            c.alignment = { horizontal: [0, 3, 4].includes(ci) ? 'left' : 'center', vertical: 'middle', indent: [0, 3, 4].includes(ci) ? 1 : 0 };
+                            c.font = { size: 10, bold: ci === 0, color: { argb: 'FF1E293B' } };
+                            if (banda) c.fill = fundo(BANDA);
+                        });
+                        [7, 8, 9].forEach(ci => { if (wt.getCell(rt, ci).value instanceof Date) wt.getCell(rt, ci).numFmt = 'dd/mm/yyyy hh:mm'; });
+                        if (typeof wt.getCell(rt, 10).value === 'number') wt.getCell(rt, 10).numFmt = '0.0';
+                        const cf = wt.getCell(rt, 11);
+                        if (FUNDO_FAIXA[faixa]) { cf.fill = fundo(FUNDO_FAIXA[faixa]); cf.font = { size: 10, bold: true, color: { argb: COR[{ '< 24h': 'r24', '24-48h': 'r48', '> 48h': 'rMais' }[faixa]] } }; }
+                        else cf.font = { size: 10, italic: true, color: { argb: 'FF64748B' } };
+                        if (tk.duplicado) wt.getCell(rt, 13).font = { size: 10, bold: true, color: { argb: COR.rMais } };
+                        wt.getCell(rt, 14).font = { size: 10, underline: true, color: { argb: COR.tickets } };
+                        rt++; banda = !banda;
+                    });
+                });
+                aplicarBordas(wt, 3, 1, Math.max(3, rt - 1), colsT.length);
+                wt.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rt - 1), column: colsT.length } };
+
+                await baixarWB(wb, `Produtos_Citados_Todos_${per.inicio || ''}_a_${per.fim || ''}.xlsx`);
+            } catch (e) {
+                console.error(e);
+                alert('Não consegui gerar o Excel. Tente de novo.');
+            } finally {
+                if (btn) btn.innerHTML = original;
+            }
         }
 
         async function exportarExcelMencoes() {
