@@ -1715,6 +1715,8 @@
                                 </button>
                             </div>
                         </div>
+                    <!-- ⚠️ Aviso do log de reembolso (08/10/2026): só aparece quando o log do Google falhou ou está desatualizado -->
+                    <div id="aviso-log-reembolso" class="hidden"></div>
                     <div class="p-0 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
                             <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
@@ -5067,6 +5069,7 @@
                 
                 if (data.success) {
                     dadosPagAmerican = data.dados || [];
+                    registrarLogReembolso('pagamerican', data.log, parametrosUrl);   // 08/10/2026: aviso do log de reembolso
                     if (plataformaAtual === 'pagamerican') renderTabelaPagAmerican();
                 } else {
                     if(tb && plataformaAtual === 'pagamerican') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro no Banco de Dados: ${data.error}</td></tr>`;
@@ -5166,6 +5169,7 @@
         async function exportarExcelPagAmerican() {
             if (usuarioAtual && usuarioAtual.role !== 'admin') return;
             if (!dadosPagAmerican || dadosPagAmerican.length === 0) return alert("Sem dados para exportar.");
+            if (!confirmarExportacaoLogReembolso('pagamerican')) return;   // 08/10/2026: log de reembolso falho → confirma antes de baixar
             
             const btn = document.getElementById('btn-exportar-pagamerican');
             const originalText = btn.innerHTML;
@@ -5256,7 +5260,7 @@
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `PagAmerican_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}.xlsx`;
+                a.download = `PagAmerican_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}${sufixoArquivoLogReembolso('pagamerican')}.xlsx`;
                 a.click();
                 window.URL.revokeObjectURL(url);
                 
@@ -5322,6 +5326,52 @@ let plataformaAtual = 'pagamerican';
 let dadosBuyGoods = [];
 let dadosCartPanda = [];
 
+// ⚠️ LOG DE REEMBOLSO (08/10/2026): o servidor diz se o log do Google carregou (log.situacao: 'ok', 'copia' ou 'sem_log').
+// Quando falha: faixa de aviso na tela, confirmação antes de baixar o Excel e o aviso no nome do arquivo.
+const logReembolsoEstado = { pagamerican: null, buygoods: null, cartpanda: null };
+const logReembolsoParams = { pagamerican: '', buygoods: '', cartpanda: '' };
+function registrarLogReembolso(plataforma, log, parametrosUrl) {
+    logReembolsoEstado[plataforma] = log || null;
+    logReembolsoParams[plataforma] = parametrosUrl || '';
+    if (plataformaAtual === plataforma) mostrarAvisoLogReembolso();
+}
+function logReembolsoHora(iso) {
+    const d = iso ? new Date(iso) : null;
+    return d && !isNaN(d) ? d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+}
+function logReembolsoProblema(plataforma) {   // '' quando o log está certo; senão, o texto do problema
+    const log = logReembolsoEstado[plataforma];
+    if (!log || log.situacao === 'ok') return '';
+    if (log.situacao === 'copia') return `O log de reembolso do Google não respondeu agora e estou usando a cópia de ${logReembolsoHora(log.lido_em)}: tickets registrados depois disso aparecem como "Conversa", com a data da última movimentação da conversa.`;
+    return 'O log de reembolso do Google não carregou: todos os tickets estão como "Conversa", com a data da última movimentação da conversa, e não com a data da retenção.';
+}
+function mostrarAvisoLogReembolso() {
+    const el = document.getElementById('aviso-log-reembolso');
+    if (!el) return;
+    const problema = logReembolsoProblema(plataformaAtual);
+    if (!problema) { el.className = 'hidden'; el.innerHTML = ''; return; }
+    const log = logReembolsoEstado[plataformaAtual], copia = log.situacao === 'copia';
+    el.className = 'shrink-0 mx-4 mt-3 px-4 py-2.5 rounded-xl border text-[11px] font-bold flex flex-wrap items-center gap-3 ' +
+        (copia ? 'bg-yellow-500/10 border-yellow-500/40 text-yellow-700 dark:text-yellow-400' : 'bg-red-500/10 border-red-500/40 text-red-600 dark:text-red-400');
+    const motivo = String(log.erro || '').replace(/[<>&"]/g, '');
+    el.innerHTML = `<span class="flex-1 min-w-[260px]" title="${motivo}">${copia ? '⚠️' : '🛑'} ${problema} Não baixe o Excel assim.</span>` +
+        `<button onclick="tentarLogReembolsoDeNovo()" class="bg-gexBlue hover:bg-gexCyan text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm shrink-0">🔄 Tentar de novo</button>`;
+}
+function tentarLogReembolsoDeNovo() {   // busca de novo a plataforma aberta, no mesmo período, com o log lido na hora
+    const p = plataformaAtual, params = logReembolsoParams[p] || '';
+    refreshManual(() => { if (p === 'buygoods') carregarBuyGoods(params); else if (p === 'cartpanda') carregarCartPanda(params); else carregarPagAmerican(params); });
+}
+function confirmarExportacaoLogReembolso(plataforma) {   // true = pode baixar
+    const problema = logReembolsoProblema(plataforma);
+    if (!problema) return true;
+    return confirm(`⚠️ ${problema}\n\nO certo é clicar em "🔄 Tentar de novo" antes de baixar.\n\nBaixar o Excel assim mesmo?`);
+}
+function sufixoArquivoLogReembolso(plataforma) {   // marca o arquivo baixado com o log falho
+    const log = logReembolsoEstado[plataforma];
+    if (!log || log.situacao === 'ok') return '';
+    return log.situacao === 'copia' ? '_LOG-DESATUALIZADO' : '_SEM-LOG';
+}
+
 // 1. Função que alterna entre as abas
 function mudarAbaPlataforma(plataforma) {
     plataformaAtual = plataforma;
@@ -5347,6 +5397,7 @@ function mudarAbaPlataforma(plataforma) {
         if(btnExportar) btnExportar.onclick = exportarExcelCartPanda;
         if (dadosCartPanda.length) renderTabelaCartPanda(); else carregarCartPanda();   // já carregou: só mostra (pra buscar de novo, 🔄 Atualizar)
     }
+    mostrarAvisoLogReembolso();   // 08/10/2026: aviso do log da plataforma aberta
 }
 
 // 2. Busca os dados da BuyGoods no Node.js
@@ -5363,6 +5414,7 @@ async function carregarBuyGoods(parametrosUrl = '') {
         
         if (data.success) {
             dadosBuyGoods = data.dados || [];
+            registrarLogReembolso('buygoods', data.log, parametrosUrl);   // 08/10/2026: aviso do log de reembolso
             if (plataformaAtual === 'buygoods') renderTabelaBuyGoods();
         } else {
             if(tb && plataformaAtual === 'buygoods') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
@@ -5462,6 +5514,7 @@ function abrirModalBuyGoods(index) {
 async function exportarExcelBuyGoods() {
     if (usuarioAtual && usuarioAtual.role !== 'admin') return;
     if (!dadosBuyGoods || dadosBuyGoods.length === 0) return alert("Sem dados para exportar.");
+    if (!confirmarExportacaoLogReembolso('buygoods')) return;   // 08/10/2026: log de reembolso falho → confirma antes de baixar
     
     const btn = document.getElementById('btn-exportar-pagamerican');
     const originalText = btn.innerHTML;
@@ -5555,7 +5608,7 @@ async function exportarExcelBuyGoods() {
         const a = document.createElement('a');
         a.href = url;
         // Nome do arquivo salvo no computador altera para BuyGoods
-        a.download = `BuyGoods_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}.xlsx`; 
+        a.download = `BuyGoods_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}${sufixoArquivoLogReembolso('buygoods')}.xlsx`; 
         a.click();
         window.URL.revokeObjectURL(url);
         
@@ -5581,6 +5634,7 @@ async function carregarCartPanda(parametrosUrl = '') {
         
         if (data.success) {
             dadosCartPanda = data.dados || [];
+            registrarLogReembolso('cartpanda', data.log, parametrosUrl);   // 08/10/2026: aviso do log de reembolso
             if (plataformaAtual === 'cartpanda') renderTabelaCartPanda();
         } else {
             if(tb && plataformaAtual === 'cartpanda') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
@@ -5680,6 +5734,7 @@ function abrirModalCartPanda(index) {
 async function exportarExcelCartPanda() {
     if (usuarioAtual && usuarioAtual.role !== 'admin') return;
     if (!dadosCartPanda || dadosCartPanda.length === 0) return alert("Sem dados para exportar.");
+    if (!confirmarExportacaoLogReembolso('cartpanda')) return;   // 08/10/2026: log de reembolso falho → confirma antes de baixar
     
     const btn = document.getElementById('btn-exportar-pagamerican');
     const originalText = btn.innerHTML;
@@ -5773,7 +5828,7 @@ async function exportarExcelCartPanda() {
         const a = document.createElement('a');
         a.href = url;
         // Nome do arquivo salvo no computador altera para CartPanda
-        a.download = `CartPanda_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}.xlsx`; 
+        a.download = `CartPanda_Reembolsos_GEX_${new Date().toISOString().split('T')[0]}${sufixoArquivoLogReembolso('cartpanda')}.xlsx`; 
         a.click();
         window.URL.revokeObjectURL(url);
         
