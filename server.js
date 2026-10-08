@@ -279,7 +279,7 @@ const cacheMiddleware = (req, res, next) => {
 
     const sendJsonOriginal = res.json;
     res.json = function(dados) {
-        if (dados && dados.success) {
+        if (dados && dados.success && !(this.locals && this.locals.naoGuardarCache)) {   // 08/10/2026: resposta marcada pela rota (ex.: log de reembolso falhou) não fica guardada
             cacheMemoria[chaveUrl] = { tempo: agora, data: dados };
             tempoRotas[chaveUrl] = Date.now() - agora;
             console.log(`🔄 Dados Atualizados e Cache Salvo (${tempoCacheMinutos}m): ${chaveUrl}`);
@@ -2049,6 +2049,114 @@ app.get('/api/qualidade-tickets', async (req, res) => {
 });
 
 // ==========================================
+// 16.0 LOG DE REEMBOLSO DO GOOGLE — LEITURA PROTEGIDA (08/10/2026)
+// O mesmo log (Apps Script) serve as 3 rotas de reembolso: PagAmerican, BuyGoods e CartPanda. O Google leva de 2 a 68 s
+// para rodar o script e às vezes devolve uma página de erro ("Page Not Found") no lugar da lista. Antes, essa página
+// virava "log vazio" em silêncio e todos os tickets saíam como "Conversa", com a data da última movimentação (07/10/2026).
+// Agora: só aceita a lista; repete o download do resultado (a página de erro costuma sumir na 2ª vez) e depois a leitura
+// inteira; 1 leitura vale 5 min para as 3 rotas (o 🔄 Atualizar lê de novo); guarda a última cópia boa para usar se o
+// Google falhar; registra o motivo no log do Render; e devolve a situação do log para a tela avisar.
+// ==========================================
+const LOG_REEMB_VALIDADE_MS = 5 * 60 * 1000;   // uma leitura serve às 3 rotas por 5 min
+const LOG_REEMB_RODADAS = 3;                   // leituras completas (o Google roda o script e devolve o endereço do resultado)
+const LOG_REEMB_DOWNLOADS = 3;                 // downloads do resultado por rodada
+const LOG_REEMB_ESPERA_MS = 90 * 1000;         // cada pedido ao Google espera até 90 s
+const LOG_REEMB_PRAZO_MS = 150 * 1000;         // e a leitura inteira, até 2,5 min
+const logReembPorUrl = {};                     // por link do log: { mapa, lidoEm, registros, lendo }
+
+function logReembMontarMapa(lista) {   // a mesma montagem de antes: 1 registro por ticket (mantém o mais antigo), ignora "sem reembolso"
+    const logMap = {};
+    lista.forEach(l => {
+        if (!l) return;
+        const tk = String(l.ticket || l[0] || '').trim();
+        if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
+        const dl = new Date(l.data_hora || l[1]);
+        logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+    });
+    return logMap;
+}
+
+async function logReembPedir(alvo, espera, seguir) {   // 1 pedido ao Google: devolve { lista } ou { proximo } (o endereço do resultado)
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), espera);
+    try {
+        const r = await fetch(alvo, { redirect: seguir ? 'follow' : 'manual', signal: ctrl.signal });
+        const destino = r.headers.get('location');
+        if (r.status >= 300 && r.status < 400 && destino) {
+            try { await r.arrayBuffer(); } catch (e) {}
+            return { proximo: new URL(destino, alvo).toString() };
+        }
+        const txt = (await r.text()).trim();
+        if (!txt.startsWith('[')) {
+            const titulo = (txt.match(/<title>([^<]*)<\/title>/i) || [])[1];
+            throw new Error(`o Google respondeu ${r.status} sem a lista${titulo ? ' ("' + titulo.trim() + '")' : ''}`);
+        }
+        const lista = JSON.parse(txt);
+        if (!Array.isArray(lista) || !lista.length) throw new Error('a lista do log veio vazia');
+        return { lista };
+    } catch (e) {
+        if (e && e.name === 'AbortError') throw new Error(`o Google não respondeu em ${Math.round(espera / 1000)} s`);
+        throw e;
+    } finally { clearTimeout(timer); }
+}
+
+async function logReembBaixar(url) {   // rodada: o Google roda o script (etapa 1) e a gente baixa o resultado (etapa 2)
+    const inicio = Date.now(), resta = () => LOG_REEMB_PRAZO_MS - (Date.now() - inicio);
+    const pausa = (ms) => new Promise(ok => setTimeout(ok, ms));
+    let erro = '';
+    for (let rodada = 1; rodada <= LOG_REEMB_RODADAS && resta() > 5000; rodada++) {
+        try {
+            const r = await logReembPedir(url, Math.min(LOG_REEMB_ESPERA_MS, resta()), false);
+            if (r.lista) return r.lista;
+            for (let d = 1; d <= LOG_REEMB_DOWNLOADS && resta() > 3000; d++) {
+                try {
+                    const r2 = await logReembPedir(r.proximo, Math.min(LOG_REEMB_ESPERA_MS, resta()), true);
+                    if (r2.lista) return r2.lista;
+                } catch (e) {
+                    erro = e.message;
+                    console.log(`⚠️ Log de reembolso: download ${d}/${LOG_REEMB_DOWNLOADS} da rodada ${rodada} falhou — ${erro}`);
+                    if (d < LOG_REEMB_DOWNLOADS) await pausa(1500);
+                }
+            }
+        } catch (e) {
+            erro = e.message;
+            console.log(`⚠️ Log de reembolso: rodada ${rodada}/${LOG_REEMB_RODADAS} falhou — ${erro}`);
+        }
+        if (rodada < LOG_REEMB_RODADAS) await pausa(2000);
+    }
+    throw new Error(erro || 'acabou o prazo para ler o log');
+}
+
+function logReembInfo(st, situacao, erro) {   // o que a tela recebe sobre o log
+    return { situacao, lido_em: st.lidoEm ? new Date(st.lidoEm).toISOString() : null, registros: st.registros || 0, erro: erro || '' };
+}
+
+async function lerLogReembolso(url, forcar) {   // { logMap, info } · info.situacao: 'ok' (log atual), 'copia' (Google falhou: última cópia boa) ou 'sem_log'
+    const st = logReembPorUrl[url] || (logReembPorUrl[url] = { mapa: null, lidoEm: 0, registros: 0, lendo: null });
+    const atual = () => !!st.mapa && (Date.now() - st.lidoEm < LOG_REEMB_VALIDADE_MS);
+    if (!forcar && atual()) return { logMap: st.mapa, info: logReembInfo(st, 'ok', '') };
+    if (!st.lendo) {   // quem pedir junto (as 3 rotas, várias telas) espera a mesma leitura
+        st.lendo = logReembBaixar(url)
+            .then(lista => {
+                const mapa = logReembMontarMapa(lista);
+                if (!Object.keys(mapa).length) throw new Error('a lista do log não tem nenhum ticket');
+                st.mapa = mapa; st.lidoEm = Date.now(); st.registros = lista.length;
+                return '';
+            })
+            .catch(e => (e && e.message) || String(e))
+            .finally(() => { st.lendo = null; });
+    }
+    const erro = await st.lendo;
+    if (!erro) return { logMap: st.mapa, info: logReembInfo(st, 'ok', '') };
+    if (st.mapa) {
+        console.log(`⚠️ Log de reembolso: o Google falhou (${erro}) — usando a cópia de ${new Date(st.lidoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
+        return { logMap: st.mapa, info: logReembInfo(st, atual() ? 'ok' : 'copia', erro) };
+    }
+    console.log(`⛔ Log de reembolso indisponível (${erro}) — sem cópia guardada: os tickets saem com a data da conversa`);
+    return { logMap: {}, info: logReembInfo(st, 'sem_log', erro) };
+}
+
+// ==========================================
 // 16. ROTA DE URGÊNCIA: REEMBOLSOS PAGAMERICAN (COM GOOGLE SHEETS)
 // ==========================================
 app.get('/api/reembolsos-pagamerican', async (req, res) => {
@@ -2066,21 +2174,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         // 1. LER O COFRE DO GOOGLE SHEETS
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
-        const _pLog = (async () => {
-            let logMap = {};
-            try {
-                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
-                const _t = (await _r.text()).trim();
-                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
-                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
-                    const tk = String(l.ticket || l[0] || '').trim();
-                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
-                    const dl = new Date(l.data_hora || l[1]);
-                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
-                });
-            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
-            return logMap;
-        })();
+        const _pLog = lerLogReembolso(URL_PLANILHA, req.query.fresh === '1');   // 08/10/2026: leitura protegida do log (ver 16.0): confere a resposta, tenta de novo e guarda a última cópia boa
 
         // 2. FILTRO DE DATAS DO PAINEL
         let dInicio, dFim;
@@ -2127,7 +2221,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
+        const [{ logMap, info: logInfo }, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (NODE.JS FAZ O TRABALHO PESADO)
         const resumoAgentes = {};
@@ -2168,7 +2262,8 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos); // Ordena o ranking de agentes
 
-        res.json({ success: true, dados: arrayFinal });
+        if (logInfo.situacao !== 'ok') res.locals.naoGuardarCache = true;   // 08/10/2026: com o log falho, a resposta não fica no cache (a próxima abertura tenta de novo)
+        res.json({ success: true, dados: arrayFinal, log: logInfo });
     } catch (error) { 
         console.error("Erro PagAmerican:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
@@ -3399,21 +3494,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
-        const _pLog = (async () => {
-            let logMap = {};
-            try {
-                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
-                const _t = (await _r.text()).trim();
-                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
-                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
-                    const tk = String(l.ticket || l[0] || '').trim();
-                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
-                    const dl = new Date(l.data_hora || l[1]);
-                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
-                });
-            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
-            return logMap;
-        })();
+        const _pLog = lerLogReembolso(URL_PLANILHA, req.query.fresh === '1');   // 08/10/2026: leitura protegida do log (ver 16.0): confere a resposta, tenta de novo e guarda a última cópia boa
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -3460,7 +3541,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
+        const [{ logMap, info: logInfo }, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -3500,7 +3581,8 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
 
-        res.json({ success: true, dados: arrayFinal });
+        if (logInfo.situacao !== 'ok') res.locals.naoGuardarCache = true;   // 08/10/2026: com o log falho, a resposta não fica no cache (a próxima abertura tenta de novo)
+        res.json({ success: true, dados: arrayFinal, log: logInfo });
     } catch (error) { 
         console.error("Erro BuyGoods:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
@@ -3522,21 +3604,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
-        const _pLog = (async () => {
-            let logMap = {};
-            try {
-                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
-                const _t = (await _r.text()).trim();
-                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
-                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
-                    const tk = String(l.ticket || l[0] || '').trim();
-                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
-                    const dl = new Date(l.data_hora || l[1]);
-                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
-                });
-            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
-            return logMap;
-        })();
+        const _pLog = lerLogReembolso(URL_PLANILHA, req.query.fresh === '1');   // 08/10/2026: leitura protegida do log (ver 16.0): confere a resposta, tenta de novo e guarda a última cópia boa
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -3583,7 +3651,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
+        const [{ logMap, info: logInfo }, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -3623,7 +3691,8 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
 
-        res.json({ success: true, dados: arrayFinal });
+        if (logInfo.situacao !== 'ok') res.locals.naoGuardarCache = true;   // 08/10/2026: com o log falho, a resposta não fica no cache (a próxima abertura tenta de novo)
+        res.json({ success: true, dados: arrayFinal, log: logInfo });
     } catch (error) { 
         console.error("Erro CartPanda:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
