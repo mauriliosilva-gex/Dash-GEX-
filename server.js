@@ -26,15 +26,66 @@ if (!process.env.SESSION_SECRET || !process.env.SNOOZE_HOOK_TOKEN) {
 // ==========================================
 // 1. BLINDAGEM DE SEGURANÇA BASE E BANCO DE DADOS
 // ==========================================
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
+// 🛡️ 16/10/2026: política de conteúdo (CSP) ligada — o navegador só carrega script, estilo e fonte do próprio Dash e das CDNs que o index usa
+// (Tailwind, jsDelivr, cdnjs, npmcdn/unpkg, Google Fonts); o Dash não abre dentro de iframe de outro site; sem plugin; formulário só para o próprio Dash;
+// os dados (fetch) só vão para o próprio servidor. 'unsafe-inline' continua porque o index tem script e onclick no próprio HTML.
+// Sem upgrade-insecure-requests: a cópia que roda no host local é http.
+const CSP_SCRIPTS = ['https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', 'https://npmcdn.com', 'https://unpkg.com'];
+app.use(helmet({
+    contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", ...CSP_SCRIPTS],
+            scriptSrcAttr: ["'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net', 'https://npmcdn.com', 'https://unpkg.com'],
+            fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+            imgSrc: ["'self'", 'data:', 'blob:'],
+            connectSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
+            frameAncestors: ["'none'"]
+        }
+    }
+}));
+app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()'); next(); });   // 🛡️ 16/10/2026: o Dash não usa câmera, microfone, localização nem pagamento
+// 🛡️ 16/10/2026: CORS fechado — o Dash só é chamado pelas próprias telas (mesma origem não precisa de CORS). Antes qualquer site podia pedir.
+// Se um dia outro site precisar ler a API: CORS_ORIGENS=https://site1.com,https://site2.com no Render.
+const CORS_ORIGENS = (process.env.CORS_ORIGENS || '').split(',').map(s => s.trim()).filter(Boolean);
+app.use(cors({ origin: (origem, cb) => cb(null, !!origem && CORS_ORIGENS.includes(origem)) }));
 
+// 14/10/2026: o limite de 100 chamadas a cada 15 min passa a contar por SESSÃO (cookie de login assinado pelo servidor) — antes todo mundo atrás
+// do mesmo IP (ex.: escritório) dividia as mesmas 100. Sem sessão válida continua por IP (cookie inventado não ganha cota nova).
+function chaveDoLimiteApi(req) {
+    try {
+        const m = /(?:^|;\s*)connect\.sid=s%3A([^.;]+)\.([^;]+)/.exec(req.headers.cookie || '');
+        if (m && decodeURIComponent(m[2]) === require('crypto').createHmac('sha256', process.env.SESSION_SECRET || 'chave_reserva_gex').update(m[1]).digest('base64').replace(/=+$/, '')) return 'sessao:' + m[1];
+    } catch (e) { /* cookie malformado: conta por IP */ }
+    return rateLimit.ipKeyGenerator ? rateLimit.ipKeyGenerator(req.ip) : req.ip;
+}
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
     max: 100, 
+    keyGenerator: chaveDoLimiteApi,   // 14/10/2026: conta por sessão (cookie de login); por IP só sem sessão
+    skip: (req) => req.path === '/raio-x-perf' || (req.headers['x-warm-token'] === WARM_TOKEN && ehChamadaInterna(req)),   // 14/10/2026: não contam o Raio-X de Desempenho (atualiza a cada 15 s, sem banco) nem a chamada interna do próprio servidor
     message: { success: false, error: "Muitas requisições. Aguarde alguns minutos." }
 });
 app.use('/api/', limiter);
+// 🛡️ 16/10/2026: trava contra pedido forjado (CSRF) — ação (POST/PUT/PATCH/DELETE) na API só vale vinda das telas do próprio Dash.
+// O navegador avisa de onde veio o pedido (Sec-Fetch-Site; nos antigos, Origin): de outro site → 403. A chamada interna do servidor continua.
+app.use('/api/', (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    if (req.headers['x-warm-token'] === WARM_TOKEN && ehChamadaInterna(req)) return next();
+    const site = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+    let deFora = !!site && site !== 'same-origin' && site !== 'none';
+    const origem = String(req.headers.origin || '');
+    if (!site && origem && origem !== 'null') { let host = ''; try { host = new URL(origem).host; } catch (e) {} deFora = host !== String(req.headers.host || ''); }
+    if (deFora) return res.status(403).json({ success: false, ok: false, error: 'Pedido de outro site bloqueado.', erro: 'Pedido de outro site bloqueado.' });
+    next();
+});
+// 🛡️ 16/10/2026: resposta da API (dados de clientes e agentes) não fica guardada no disco do navegador nem em proxy — o cache que vale é o do servidor
+app.use('/api/', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
 // Conexão de Leitura com PostgreSQL (Chatwoot)
 const pool = new Pool({
@@ -105,6 +156,17 @@ const queryTickets = `
     GROUP BY u.id, u.name, DATE(m.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')
 `;
 
+// 26/10/2026: teto de período das rotas que varrem `messages` por queryTickets (Tickets Atual, Tickets Geral e o Excel diário).
+// Sem teto, um período de anos no calendário vira varredura longa no banco do Chatwoot. Mesmo porte do Time 48H (186 dias).
+const TK_MAX_DIAS = 186;
+function tkPeriodoValido(ini, fim) {   // '' = ok · texto = motivo da recusa
+    const d1 = new Date(ini + 'T00:00:00Z'), d2 = new Date(fim + 'T00:00:00Z');
+    if (isNaN(d1) || isNaN(d2)) return 'Período inválido.';
+    const dias = Math.round((d2 - d1) / 86400000) + 1;
+    if (!(dias >= 1)) return 'Período inválido.';
+    return dias > TK_MAX_DIAS ? `Período máximo de ${TK_MAX_DIAS} dias (o escolhido tem ${dias}). Escolha uma faixa menor no calendário.` : '';
+}
+
 // Funções utilitárias de Data para o Banco
 function unixParaYYYYMMDD(unixSecs) {
     return new Date(unixSecs * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -118,6 +180,86 @@ function formatarDataSQL(dataObj) {
 }
 
 // ==========================================
+// 23/10/2026: EQUIPES POR LIDER — turno e pausa de cada agente (nome EXATO do Chatwoot).
+// Fonte unica: as rotas devolvem o campo `lider`; a Produtividade usa turno/pausa daqui.
+// ==========================================
+const TK_ROTULO = { flavia: 'Fl\u00e1via', adevania: 'Adev\u00e2nia', camila: 'Camila' };
+const TK_TURNOS = { flavia: '09:00-18:00', adevania: '15:00-00:00', camila: '08:00-17:00' };
+const TK_EQUIPE = {
+    // Flávia — turno 09:00-18:00
+    "Alexandre Filho - 48H": ['flavia', '13:00-14:30'],
+    "Aline Martins - RET": ['flavia', '12:00-13:30'],
+    "Ana Godinho - SMS": ['flavia', '13:00-14:30'],
+    "Ariane Akutsu - SAC": ['flavia', '13:00-14:30'],
+    "Barbara Ferreira - RET": ['flavia', '13:00-14:30'],
+    "Bruno Lima - SMS": ['flavia', '12:00-13:30'],
+    "Daniel Martins - 48H": ['flavia', '12:00-13:30'],
+    "Daryson Matheus - 48H": ['flavia', '12:00-13:30'],
+    "Giovana Feitosa - BKO": ['flavia', '13:00-14:30'],
+    "Graziela Donini - RET": ['flavia', '13:00-14:30'],
+    "Lucas Andrade - RET": ['flavia', '12:00-13:30'],
+    "Lucas Azeredo - SAC": ['flavia', '13:00-14:30'],
+    "Luiza Cavalcante - RET": ['flavia', '13:00-14:30'],
+    "Maria Moura - BKO": ['flavia', '12:00-13:30'],
+    "Maryana Peres - SAC": ['flavia', '12:00-13:30'],
+    "Patricia Figueredo - RET": ['flavia', '13:00-14:30'],
+    "Rafaela França - SAC": ['flavia', '13:00-14:30'],
+    "Raíssa Mesel - RET": ['flavia', '13:00-14:30'],
+    "Susana Barros - SAC": ['flavia', '12:00-13:30'],
+    "Thais Fadino - RET": ['flavia', '12:00-13:30'],
+    "Wanya Silva - RET": ['flavia', '13:00-14:30'],
+    // Adevânia — turno 15:00-00:00
+    "Agatha Cezar - RET": ['adevania', '18:30-20:00'],
+    "Ana Tonon - SAC": ['adevania', '18:30-20:00'],
+    "Bianca Cruz - SAC": ['adevania', '18:30-20:00'],
+    "Bruno Silva - 48H": ['adevania', '18:30-20:00'],
+    "Dayane Santos - RET": ['adevania', '20:00-21:30'],
+    "Gabriela Andrade - 48H": ['adevania', '20:00-21:30'],
+    "Henrique Morais - RET": ['adevania', '20:00-21:30'],
+    "Jessica Leite - SAC": ['adevania', '20:00-21:30'],
+    "Jose Neto - RET": ['adevania', '21:00-22:30'],
+    "Juan Lima - RET": ['adevania', '20:00-21:30'],
+    "Keroline Alves - RET": ['adevania', '20:00-21:30'],
+    "Miriam Sa - SAC": ['adevania', '18:30-20:00'],
+    "Rayssa Silva - RET": ['adevania', '20:00-21:30'],
+    "Simone Silva - RET": ['adevania', '18:30-20:00'],
+    "Tharyck Guerra - RET": ['adevania', '18:30-20:00'],
+    "Thaylle Lopes - SAC": ['adevania', '18:30-20:00'],
+    // Camila — turno 08:00-17:00
+    "Igor Silva - RET": ['camila', '11:00-12:30'],
+    "Karla Santos - RET": ['camila', '11:00-12:30'],
+    "Keuliane Moura - SMS": ['camila', '11:00-12:30'],
+    "Maria Rodrigues - 48H": ['camila', '11:00-12:30'],
+    "Mariana Xavier - SAC": ['camila', '11:00-12:30'],
+    "Paula Araujo - BKO": ['camila', '11:00-12:30'],
+    "Ellen Medeiros - RET": ['camila', '12:30-14:00'],
+    "Fernanda Campos - BKO": ['camila', '12:30-14:00'],
+    "Giovana Souza - SAC": ['camila', '12:30-14:00'],
+    "Giovanna Lira - SAC": ['camila', '12:30-14:00'],
+    "Humberto Souza - RET": ['camila', '12:30-14:00'],
+    "Luana Sousa - RET": ['camila', '12:30-14:00'],
+    "Mariana Cardoso - RET": ['camila', '12:30-14:00'],
+    "Rebeca Silva - SMS": ['camila', '12:30-14:00'],
+    "Rebeca Souza - RET": ['camila', '12:30-14:00'],
+    "Thauane Garcia - 48H": ['camila', '12:30-14:00'],
+    "Xaiane Celestino - SAC": ['camila', '12:30-14:00'],
+};
+function tkNorm(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase(); }
+const _tkIdxEq = {};
+for (const _k in TK_EQUIPE) _tkIdxEq[tkNorm(_k)] = TK_EQUIPE[_k];
+function tkLiderDe(nome) { const e = _tkIdxEq[tkNorm(nome)]; return e ? e[0] : null; }
+function tkHM(s) { const p = String(s).split(':'); const v = (+p[0]) * 60 + (+p[1]); return v; }
+// turno que termina 00:00 vira 1440 (nao cruza a meia-noite: fecha exatamente nela)
+function tkJornadaDe(nome) {
+    const e = _tkIdxEq[tkNorm(nome)];
+    if (!e) return null;
+    const t = TK_TURNOS[e[0]].split('-'), p = e[1].split('-');
+    const fim = tkHM(t[1]) === 0 ? 1440 : tkHM(t[1]);
+    const pf = tkHM(p[1]) === 0 ? 1440 : tkHM(p[1]);
+    return { tIni: tkHM(t[0]), tFim: fim, pIni: tkHM(p[0]), pFim: pf, lider: e[0], turno: TK_TURNOS[e[0]], pausa: e[1] };
+}
+
+// ==========================================
 // 2. SISTEMA DE LOGIN GOOGLE E SESSÕES
 // ==========================================
 app.get('/ping', (req, res) => res.status(200).send('Servidor GEX Ativo!'));
@@ -128,7 +270,7 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'chave_reserva_gex',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } // Sessão guardada por 30 dias
+    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax', secure: 'auto' } // Sessão guardada por 30 dias · 16/10/2026: script da página não lê o cookie (httpOnly), ele não vai em pedido que nasce em outro site (sameSite) e no Render só trafega por HTTPS (secure auto)
 }));
 
 app.use(passport.initialize());
@@ -218,7 +360,8 @@ app.get('/api/me', verificarLogin, (req, res) => {
         user: { 
             nome: nome, 
             email: email, 
-            role: adms.includes(email) ? 'admin' : 'agente' 
+            role: adms.includes(email) ? 'admin' : 'agente',
+            acessos: { adiar: ehDonoAdiar(req), telegram: !!tgEhAdmin(req), raiox: ehDonoRaioX(req) }   // 🔒 16/10/2026: o que este login vê (mesmas listas do Render que as rotas conferem) — antes o index tinha os e-mails escritos no código
         } 
     });
 });
@@ -232,7 +375,9 @@ const MAX_CACHE_KEYS = 200; // Trava de segurança para impedir estouro de RAM
 
 const emAndamento = {};          // 🛡️ consultas rodando agora (por URL) — quem pedir a mesma coisa espera e aproveita o resultado
 let consultasAproveitadas = 0, dadosGuardadosServidos = 0;
+const ROTAS_DO_DONO_CACHE = ['/api/casos-para-adiar', '/api/adiar-casos', '/api/transferir/', '/api/telegram/', '/api/raio-x-perf'];   // 🛡️ 16/10/2026: rotas de um dono só (EMAILS_ADIAR / EMAILS_TELEGRAM / EMAILS_RAIOX): cache por e-mail
 const cacheMiddleware = (req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();   // 14/10/2026: ação (POST) nunca usa nem guarda cache — o 2º "Adiar casos" em 30 min não rodava
     const agora = Date.now();
     // 🔄 Refresh manual (líder clicou Atualizar/Sincronizar/Recarregar): fura o cache e busca dados frescos.
     // O tempo de 15–30m continua como fallback passivo (agentes / navegação normal).
@@ -244,6 +389,11 @@ const cacheMiddleware = (req, res, next) => {
         const qs = u.searchParams.toString();
         chaveUrl = u.pathname + (qs ? '?' + qs : '');
     } catch (e) { chaveUrl = req.originalUrl; }
+    // 🛡️ 16/10/2026: cache separado por perfil — o que foi buscado por um admin nunca é entregue a um agente. Antes a chave era só a URL: quem abrisse
+    // /api/time48 (ou outra rota de admin) direto no navegador recebia o dado guardado do admin sem passar pela trava da rota. Rota do dono: pelo e-mail.
+    const _rotaDono = ROTAS_DO_DONO_CACHE.some(p => chaveUrl.toLowerCase().startsWith(p));
+    const _emailCache = ((req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value : '').toLowerCase();
+    chaveUrl = (_rotaDono ? 'dono:' + _emailCache : (ehAdminReq(req) ? 'admin' : 'agente')) + ' ' + chaveUrl;
 
     if (chaveUrl.includes('/api/raio-x-perf')) return next(); // Raio-X de Desempenho: sempre ao vivo, nunca cacheado
 
@@ -251,6 +401,7 @@ const cacheMiddleware = (req, res, next) => {
     if (Object.keys(cacheMemoria).length > MAX_CACHE_KEYS) {
         console.warn("🚨 ALERTA: Limite de cache atingido. Esvaziando memória para prevenir Memory Exhaustion (DoS).");
         cacheMemoria = {}; 
+        tempoRotas = {};   // 14/10/2026: o tempo por rota (Raio-X) é limpo junto com o cache — antes guardava toda URL já pedida, sem limite
     }
 
     // Lógica inteligente: Planilhas = 15 min / Banco de Dados (Tickets puros) = 30 min
@@ -259,6 +410,16 @@ const cacheMiddleware = (req, res, next) => {
         tempoCacheMinutos = 15;
     }
 
+    // 14/10/2026: ?fresh=1 de AGENTE só fura o cache se o dado guardado tiver mais de 1 min (o 🔄 Recarregar do Tickets Atual do agente continua; repetir fresh=1 não martela o banco). Admin e chamada interna furam sempre.
+    // 26/10/2026: a trava de refresh passa a valer para TODO MUNDO (antes só o agente era segurado).
+    // agente e admin: 1 min · chamada interna (aquecedor e bot do Telegram): 4 min — o bot roda de 5 em 5 min, então
+    // não perde atualização; só para de repetir no banco uma consulta que alguém acabou de fazer.
+    // Isentas da trava: recarregadas logo DEPOIS de uma ação (precisam do dado novo na hora) ou que nem leem o Postgres do Chatwoot.
+    const ROTAS_SEM_TRAVA_REFRESH = ['/api/casos-para-adiar', '/api/q3'];
+    const _semTrava = ROTAS_SEM_TRAVA_REFRESH.some(r => chaveUrl.includes(r));
+    const _interno = req.headers['x-warm-token'] === WARM_TOKEN && ehChamadaInterna(req);
+    const _janelaFura = _interno ? 4 * 60 * 1000 : 60 * 1000;
+    if (bypass && !_semTrava && cacheMemoria[chaveUrl] && agora - cacheMemoria[chaveUrl].tempo < _janelaFura) bypass = false;
     if (!bypass && cacheMemoria[chaveUrl] && (agora - cacheMemoria[chaveUrl].tempo < tempoCacheMinutos * 60 * 1000)) {
         console.log(`⚡ Retornando do Cache (${tempoCacheMinutos}m): ${chaveUrl}`);
         return res.json(cacheMemoria[chaveUrl].data);
@@ -279,7 +440,7 @@ const cacheMiddleware = (req, res, next) => {
 
     const sendJsonOriginal = res.json;
     res.json = function(dados) {
-        if (dados && dados.success && !(this.locals && this.locals.naoGuardarCache)) {   // 08/10/2026: resposta marcada pela rota (ex.: log de reembolso falhou) não fica guardada
+        if (dados && dados.success && !dados.sem_cache) {   // 14/10/2026: resposta com sem_cache: true é entregue normalmente, mas não fica guardada
             cacheMemoria[chaveUrl] = { tempo: agora, data: dados };
             tempoRotas[chaveUrl] = Date.now() - agora;
             console.log(`🔄 Dados Atualizados e Cache Salvo (${tempoCacheMinutos}m): ${chaveUrl}`);
@@ -365,11 +526,13 @@ app.post('/hook/snooze/:token', express.json({ limit: '3mb' }), async (req, res)
 
 // F: aquecedor de cache (warmer) — revalida em background as rotas pesadas do Postgres, sem o admin esperar.
 // Requisicao interna (localhost + token) finge um admin so-leitura; o ultimoAcessoApi so conta acesso REAL.
-const WARM_TOKEN = process.env.WARM_TOKEN || 'gex-warm-2026-interno';
+const WARM_TOKEN = process.env.WARM_TOKEN || require('crypto').randomBytes(32).toString('hex');   // 14/10/2026: sem WARM_TOKEN no ambiente, senha aleatória criada ao ligar (só o próprio servidor usa) — antes valia a senha escrita aqui
+// 14/10/2026: a senha interna só vale em chamada do PRÓPRIO servidor (aquecedor, bot do Telegram, Pergunte ao Dash: http.get em 127.0.0.1, sem proxy no meio)
+const ehChamadaInterna = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket && req.socket.remoteAddress) && !req.headers['x-forwarded-for'];
 const EMAIL_ADM_WARM = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',')[0].trim();
 let ultimoAcessoApi = 0;
 app.use('/api', (req, res, next) => {
-    if (req.headers['x-warm-token'] === WARM_TOKEN) {
+    if (req.headers['x-warm-token'] === WARM_TOKEN && ehChamadaInterna(req)) {   // 14/10/2026: + só do próprio servidor
         req.user = { emails: [{ value: EMAIL_ADM_WARM }], role: 'admin' };
         req.isAuthenticated = () => true;
     } else {
@@ -378,7 +541,52 @@ app.use('/api', (req, res, next) => {
     next();
 });
 app.use('/api', verificarLogin, cacheMiddleware);
-app.use(verificarLogin, express.static(path.join(__dirname, 'public')));
+// 🛡️ 16/10/2026: rota de tela de admin — o servidor confere (antes só o botão ficava escondido para o agente)
+const soAdmin = (req, res, next) => ehAdminReq(req) ? next() : res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+// 🔒 16/10/2026: o index.html sai por aqui (e não direto da pasta): admin recebe o arquivo inteiro; agente recebe sem os blocos marcados
+// ADMIN-HTML-INI/FIM e ADMIN-JS-INI/FIM (telas e código de gestão) — o código das telas de admin não chega no navegador de quem não é admin.
+// Se os marcadores estiverem quebrados (INI sem FIM), o agente recebe o arquivo inteiro e fica um aviso no log: a tela dele nunca quebra.
+const ARQ_INDEX = path.join(__dirname, 'public', 'index.html');
+let indexMem = { mtime: -1, admin: '', agente: '' };
+function versaoAgenteIndex(html) {
+    const marc = [...html.matchAll(/ADMIN-(HTML|JS)-(INI|FIM): ([^*>]*?)\s*(?:-->|\*\/)/g)].map(m => m[1] + '|' + m[2] + '|' + m[3]);
+    for (let k = 0; k < marc.length; k += 2) {
+        const a = (marc[k] || '').split('|'), b = (marc[k + 1] || '').split('|');
+        if (a[1] !== 'INI' || b[1] !== 'FIM' || a[0] !== b[0] || a[2] !== b[2]) { console.warn('⚠️ index.html: marcadores ADMIN-* quebrados perto de', marc[k], '— o agente recebe o arquivo inteiro'); return html; }
+    }
+    return html.replace(/[ \t]*<!-- ADMIN-HTML-INI: [^>]*-->[\s\S]*?<!-- ADMIN-HTML-FIM: [^>]*-->[ \t]*(\r?\n)?/g, '')
+               .replace(/[ \t]*\/\* ADMIN-JS-INI: [^*]*\*\/[\s\S]*?\/\* ADMIN-JS-FIM: [^*]*\*\/[ \t]*(\r?\n)?/g, '');
+}
+function indexDoPerfil(admin) {
+    const st = fs.statSync(ARQ_INDEX);
+    if (st.mtimeMs !== indexMem.mtime) { const html = fs.readFileSync(ARQ_INDEX, 'utf8'); indexMem = { mtime: st.mtimeMs, admin: html, agente: versaoAgenteIndex(html) }; }
+    return admin ? indexMem.admin : indexMem.agente;
+}
+app.get(['/', '/index.html'], verificarLogin, (req, res) => {
+    let html;
+    try { html = indexDoPerfil(ehAdminReq(req)); } catch (e) { console.error('[index]', e.message); return res.status(500).send('Não achei o index.html na pasta public.'); }
+    res.set({ 'Cache-Control': 'no-store', 'Vary': 'Cookie' });   // a versão do admin não fica guardada no navegador para o próximo login da mesma máquina
+    res.type('html').send(html);
+});
+// 🔎 16/10/2026: para o admin conferir o que chega no navegador do agente — mostra o código da versão do agente como texto (agente não abre)
+app.get('/versao-agente.txt', verificarLogin, (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).type('text').send('Acesso restrito para Administradores.');
+    let html;
+    try { html = indexDoPerfil(false); } catch (e) { console.error('[versao-agente]', e.message); return res.status(500).type('text').send('Não achei o index.html na pasta public.'); }
+    res.set({ 'Cache-Control': 'no-store' });
+    res.type('text/plain; charset=utf-8').send(html);
+});
+// 🔒 16/10/2026: da pasta public saem só imagens (logo) — nenhum outro arquivo que cair na pasta (cópia do index, planilha, backup) fica aberto
+const publicoEstatico = express.static(path.join(__dirname, 'public'), { index: false });
+const PASTA_PUBLIC = path.join(__dirname, 'public'), publicoBloqueadoAvisado = new Set();
+app.use(verificarLogin, (req, res, next) => {
+    if (/\.(jpe?g|png|gif|svg|ico|webp)$/i.test(req.path)) return publicoEstatico(req, res, next);
+    try {   // arquivo que existe na pasta mas não é imagem: fica bloqueado e avisa 1x no log do Render (se alguma tela precisar dele, o nome aparece lá)
+        const alvo = path.normalize(path.join(PASTA_PUBLIC, decodeURIComponent(req.path)));
+        if (alvo.startsWith(PASTA_PUBLIC + path.sep) && !publicoBloqueadoAvisado.has(alvo) && fs.existsSync(alvo) && fs.statSync(alvo).isFile()) { publicoBloqueadoAvisado.add(alvo); console.warn('🔒 pasta public: bloqueei', path.relative(PASTA_PUBLIC, alvo), '— da pasta só saem imagens (o index sai pela rota própria)'); }
+    } catch (e) { /* caminho malformado: segue para o 404 */ }
+    next();
+});
 
 // ==========================================
 // 5. FUNÇÕES COMPARTILHADAS (RETENÇÃO E TICKETS)
@@ -397,19 +605,19 @@ const normalizeNome = (nome) => {
     if (!nome) return '';
     return String(nome).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s*[-(\[|].*/, '').replace(/\s+/g, ' ').trim();
 };
-const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas) => {
+const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas, nomesDaPlanilha) => {   // 14/10/2026: nomesDaPlanilha (opcional) = nomes que já estão na planilha
     const nomeLimpo = normalizeNome(nomePlanilha);
     let agenteEncontrado = ticketsMap[nomeLimpo];
 
     if (!agenteEncontrado) {
         const partes = nomeLimpo.split(' ');
         const primeiroNome = partes[0];
-        const candidatos = Object.keys(ticketsMap).filter(k => k.split(' ')[0] === primeiroNome);
+        const candidatos = Object.keys(ticketsMap).filter(k => k.split(' ')[0] === primeiroNome && !(nomesDaPlanilha && nomesDaPlanilha.has(k)));   // 14/10/2026: quem está na planilha com o próprio nome não empresta os tickets para outra linha (antes contava 2x)
         if (candidatos.length === 1) agenteEncontrado = ticketsMap[candidatos[0]];
         else if (candidatos.length > 1 && partes.length > 1) {
             for (let c of candidatos) {
                 const ultimoPlanilha = partes[partes.length - 1];
-                if (c.includes(ultimoPlanilha) || c.includes(partes[1])) {
+                if (c.split(' ').includes(ultimoPlanilha) || (!['DA', 'DE', 'DO', 'DAS', 'DOS'].includes(partes[1]) && c.split(' ').includes(partes[1]))) {   // 14/10/2026: palavra inteira e sem "de/da/do" (antes o "DE" de "Maria de Souza" casava dentro de "FERNANDES")
                     agenteEncontrado = ticketsMap[c];
                     break;
                 }
@@ -429,7 +637,7 @@ const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas) => {
 app.get('/api/retencao', async (req, res) => {
     try {
         const agoraBR = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-        const anoPlanilha = 2026;
+        const anoPlanilha = agoraBR.getFullYear();   // 14/10/2026: ano atual de Brasília (antes fixo em 2026); o ano de cada aba sai de ordemDaAbaRet
 
         let privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').replace(/"/g, '').trim();
         const auth = new google.auth.GoogleAuth({
@@ -448,7 +656,11 @@ app.get('/api/retencao', async (req, res) => {
         } catch (e) {}
 
         // --- Meses selecionados: ?aba= (1 ou vários), validados; padrão Setembro ---
-        const PADRAO_ABA = "📊 Análise | Metas | Outubro";
+        // 14/10/2026: aba padrão = a do mês atual de Brasília; se ainda não existir, a mais recente (antes fixa em "Outubro": em 01/11 o agente continuava vendo Outubro).
+        // Mês depois do atual é do ano anterior ("Dezembro" vista em janeiro/2027 = 2026).
+        const ordemDaAbaRet = (aba) => { const m = MESES_PT.findIndex(mm => aba.toLowerCase().includes(mm.toLowerCase())); return (m > agoraBR.getMonth() ? anoPlanilha - 1 : anoPlanilha) * 12 + m; };
+        const abaDoMesAtualRet = '📊 Análise | Metas | ' + MESES_PT[agoraBR.getMonth()];
+        const PADRAO_ABA = abasDisponiveis.includes(abaDoMesAtualRet) ? abaDoMesAtualRet : (abasDisponiveis.reduce((melhor, t) => (melhor === null || ordemDaAbaRet(t) > ordemDaAbaRet(melhor)) ? t : melhor, null) || abaDoMesAtualRet);
         let selecionadas = req.query.aba;
         if (typeof selecionadas === 'string') selecionadas = [selecionadas];
         if (!Array.isArray(selecionadas)) selecionadas = [];
@@ -466,6 +678,7 @@ app.get('/api/retencao', async (req, res) => {
 
         const processarMes = async (aba) => {
             const mesP = mesDaAba(aba);
+            const anoPlanilha = Math.floor(ordemDaAbaRet(aba) / 12);   // 14/10/2026: ano desta aba (mês depois do atual = ano anterior)
             const diasNoMes = new Date(anoPlanilha, mesP + 1, 0).getDate();
             const dIni = new Date(anoPlanilha, mesP, 1);
             const dFim = new Date(anoPlanilha, mesP + 1, 0);
@@ -483,7 +696,7 @@ app.get('/api/retencao', async (req, res) => {
                 const nb = normalizeNome(row.agente);
                 if (!tkMap[nb]) tkMap[nb] = { totalMes: 0, hist_tickets: new Array(nSem).fill(0) };
                 tkMap[nb].totalMes += parseInt(row.tickets) || 0;
-                const dd = new Date(String(row.dia).split('T')[0] + 'T12:00:00Z');
+                const dd = new Date((row.dia instanceof Date ? row.dia.toISOString() : String(row.dia)).split('T')[0] + 'T12:00:00Z');   // 14/10/2026: o pg devolve a data como Date — String(Date) ("Thu Oct 01…") virava data inválida e o hist_tickets saía zerado
                 const idx = Math.floor(((dd.getTime() - domBase.getTime()) / 86400000) / 7);
                 if (idx >= 0 && idx < nSem) tkMap[nb].hist_tickets[idx] += parseInt(row.tickets) || 0;
             });
@@ -499,10 +712,11 @@ app.get('/api/retencao', async (req, res) => {
                 g.meta_minima_casos = parseMoeda(rows[5][17] || rows[5][16]);
             }
             const ags = {};
+            const nomesDaPlanilha = new Set(rows.slice(10).map(r => normalizeNome(String(r[3] || r[2] || '').trim())).filter(Boolean));   // 14/10/2026: para o vincularTickets não emprestar tickets de quem já está na planilha
             rows.slice(10).filter(r => String(r[3] || r[2] || '').trim() !== '' && parseMoeda(r[6] || r[7]) > 0).forEach(row => {
                 const nome = String(row[3] || row[2] || '').trim();
                 const nb = normalizeNome(nome);
-                const tk = vincularTickets(nome, tkMap, nSem);
+                const tk = vincularTickets(nome, tkMap, nSem, nomesDaPlanilha);   // 14/10/2026: + nomesDaPlanilha
                 ags[nb] = {
                     nome, meta_casos: parseMoeda(row[4] || row[3]),
                     casos_atual: parseMoeda(row[6] || row[7]), refund: parseMoeda(row[8] || row[9]),
@@ -515,7 +729,7 @@ app.get('/api/retencao', async (req, res) => {
             return { aba, label: labelDaAba(aba), mesP, diasNoMes, nSem, globais: g, ags };
         };
 
-        selecionadas.sort((a, b) => mesDaAba(a) - mesDaAba(b));
+        selecionadas.sort((a, b) => ordemDaAbaRet(a) - ordemDaAbaRet(b));   // 14/10/2026: ordem por ano + mês (antes só pelo mês: Janeiro/2027 vinha antes de Dezembro/2026)
         const meses = await Promise.all(selecionadas.map(processarMes));
         const mesRecenteObj = meses[meses.length - 1];
         const multiMes = meses.length > 1;
@@ -621,7 +835,7 @@ app.get('/api/qualidade', async (req, res) => {
         const sheetIdQualidade = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
         
         // 1. LER ABA DE MONITORIAS
-        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_MONITORIA'!A1:Z5000` });
+        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_MONITORIA'!A1:Z` });   // 14/10/2026: aba inteira (antes só até a linha 5000: o mês novo sumia sem aviso)
         const rows = response.data.values || [];
 
         if (rows.length < 4) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
@@ -767,10 +981,23 @@ app.get('/api/qualidade', async (req, res) => {
     } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
 
+// 14/10/2026: regra de setor da Qualidade (mesma ordem e listas da rota /api/qualidade) — a Sinalizações passa a usar esta mesma regra
+// (antes, só na Sinalizações: "SAC - SMS" virava SAC, Bruno Lima virava 48H e Adaptação virava RET)
+function qualSiglaDoSetor(setorRaw, nomeFormatado) {
+    const nomes48H = ['THAUANE GARCIA', 'BRUNO SILVA', 'ALEXANDRE FILHO', 'DARYSON MATHEUS', 'DARYSON NASCIMENTO', 'GABRIELA ANDRADE', 'GABRIELA PENHA'];
+    const nomesSMS = ['ANA GODINHO', 'REBECA SILVA', 'BRUNO LIMA', 'KEULIANE MOURA'];
+    if (setorRaw.includes('ADAPTA')) return 'ADAPTACAO';
+    if (setorRaw.includes('48H') || nomes48H.some(n => nomeFormatado.includes(n))) return '48H';
+    if (setorRaw.includes('SMS') || nomesSMS.some(n => nomeFormatado.includes(n))) return 'SMS';
+    if (setorRaw.includes('SAC')) return 'SAC';
+    if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) return 'BKO';
+    return 'RET';
+}
+
 // ==========================================
 // 7.5 ROTA DE SINALIZAÇÕES (PLANILHA C - BASE_SINALIZACOES)
 // ==========================================
-app.get('/api/sinalizacoes', async (req, res) => {
+app.get('/api/sinalizacoes', soAdmin, async (req, res) => {   // 🛡️ 16/10/2026: + soAdmin (tela de admin)
     try {
         let privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').replace(/"/g, '').trim();
         const auth = new google.auth.GoogleAuth({
@@ -781,7 +1008,7 @@ app.get('/api/sinalizacoes', async (req, res) => {
         
         const sheetIdQualidade = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
         
-        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_SINALIZACOES'!A1:Z5000` });
+        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_SINALIZACOES'!A1:Z` });   // 14/10/2026: aba inteira (antes só até a linha 5000: o mês novo sumia sem aviso)
         const rows = response.data.values || [];
 
         if (rows.length < 3) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
@@ -820,17 +1047,7 @@ app.get('/api/sinalizacoes', async (req, res) => {
             let setorRaw = String(row[idxSetor] || '').toUpperCase();
             let siglaSetor = 'RET'; 
             
-            const nomes48H = ['THAUANE GARCIA', 'BRUNO SILVA', 'BRUNO LIMA', 'ALEXANDRE FILHO', 'DARYSON MATHEUS', 'DARYSON NASCIMENTO', 'GABRIELA ANDRADE', 'GABRIELA PENHA'];
-            
-            if (setorRaw.includes('48H') || nomes48H.some(n => nomeFormatado.includes(n))) {
-                siglaSetor = '48H';
-            } else if (setorRaw.includes('SAC')) {
-                siglaSetor = 'SAC';
-            } else if (setorRaw.includes('BKO') || setorRaw.includes('BACKOFFICE')) {
-                siglaSetor = 'BKO';
-            } else if (setorRaw.includes('SMS')) {
-                siglaSetor = 'SMS';
-            }
+            siglaSetor = qualSiglaDoSetor(setorRaw, nomeFormatado);   // 14/10/2026: mesma regra de setor da Qualidade (antes: "SAC - SMS" virava SAC, Bruno Lima virava 48H e Adaptação virava RET)
 
             sinalizacoesGerais.push({
                 mes: mesRaw, nome: nomeFormatado, nomeOriginal: nomeRaw, time: siglaSetor,
@@ -876,6 +1093,8 @@ app.get('/api/tickets', async (req, res) => {
             dataInicioSQL = formatarDataSQL(seg); dataFimSQL = formatarDataSQL(dom);    
         }
 
+        const _errPer = tkPeriodoValido(dataInicioSQL, dataFimSQL);   // 26/10/2026: teto de período
+        if (_errPer) return res.status(400).json({ success: false, error: _errPer });
         const result = await pool.query(queryTickets, [dataInicioSQL, dataFimSQL]);
         const agentesMap = {};
         result.rows.forEach(row => {
@@ -914,8 +1133,8 @@ app.get('/api/tickets-geral', async (req, res) => {
             dataInicioSQL = unixParaYYYYMMDD(req.query.since); dataFimSQL = unixParaYYYYMMDD(req.query.until);
         } else {
             const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
-            const dInicio = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
-            const dFim = new Date(agora.getFullYear(), agora.getMonth(), 0); 
+            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            const dFim = agora; 
             dataInicioSQL = formatarDataSQL(dInicio); dataFimSQL = formatarDataSQL(dFim);
         }
 
@@ -927,12 +1146,14 @@ app.get('/api/tickets-geral', async (req, res) => {
         const totalSemanas = Math.floor((diffMsTotal / (1000 * 60 * 60 * 24)) / 7) + 1; 
         const metaCalculada = totalSemanas * 400; 
 
+        const _errPer = tkPeriodoValido(dataInicioSQL, dataFimSQL);   // 26/10/2026: teto de período
+        if (_errPer) return res.status(400).json({ success: false, error: _errPer });
         const result = await pool.query(queryTickets, [dataInicioSQL, dataFimSQL]);
         const agentesMap = {};
         result.rows.forEach(row => {
             const nome = (row.agente || '').toUpperCase();
             if (!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
-            if (!agentesMap[nome]) agentesMap[nome] = { nome: row.agente, semanas: new Array(totalSemanas).fill(0), total: 0 };
+            if (!agentesMap[nome]) agentesMap[nome] = { nome: row.agente, lider: tkLiderDe(row.agente), semanas: new Array(totalSemanas).fill(0), total: 0 };
 
             const diaStr = row.dia instanceof Date ? row.dia.toISOString().split('T')[0] : String(row.dia).split('T')[0];
             const dataData = new Date(diaStr + 'T12:00:00Z');
@@ -956,7 +1177,7 @@ app.get('/api/tickets-geral', async (req, res) => {
 // ==========================================
 // 10. ROTA DISTRIBUIÇÃO E CASOS (ADMIN-ONLY)
 // ==========================================
-app.get('/api/distribuicao', async (req, res) => {
+app.get('/api/distribuicao', soAdmin, async (req, res) => {   // 🛡️ 16/10/2026: + soAdmin (tela de admin)
     try {
         // 1. Query de Distribuição de Tickets por Inbox
         const qDist = `
@@ -1009,7 +1230,7 @@ app.get('/api/distribuicao', async (req, res) => {
             }
             
             if (!distAgentes[nome]) distAgentes[nome] = { nome, total: 0 };
-            distAgentes[nome][cx] = parseInt(r.qtd) || 0;
+            distAgentes[nome][cx] = (distAgentes[nome][cx] || 0) + (parseInt(r.qtd) || 0);   // 14/10/2026: soma — o mesmo agente na mesma caixa vem em mais de 1 linha quando o time da conversa muda
             distAgentes[nome].total += parseInt(r.qtd) || 0;
         });
 
@@ -1090,7 +1311,7 @@ app.get('/api/distribuicao', async (req, res) => {
             }
             
             if (r.so_48h && !nome.endsWith(' - 48H')) return;   // caixa "Atendimento | Brasil": só conta no Time 48H; nos outros times continua fora, como antes
-            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, em_aberto: 0, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
+            if (!resCasosMap[nome]) resCasosMap[nome] = { nome, lider: tkLiderDe(nome), em_aberto: 0, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
             
             const dataBaseParaSLA = r.last_msg_at ? new Date(r.last_msg_at) : (r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at));   // conta da última mensagem
             const diffHoras = (agora - dataBaseParaSLA) / (1000 * 60 * 60);
@@ -1139,7 +1360,7 @@ app.get('/api/distribuicao', async (req, res) => {
 // DIAGNÓSTICO: setor dos casos SEM ATRIBUIR (temporário)
 // Abrir em: localhost:3003/api/diag-setores
 // ==========================================
-app.get('/api/diag-setores', async (req, res) => {
+app.get('/api/diag-setores', soAdmin, async (req, res) => {   // 🛡️ 16/10/2026: + soAdmin (tela de admin)
     try {
         const q = `
             WITH Conv48 AS (
@@ -1178,7 +1399,7 @@ app.get('/api/diag-setores', async (req, res) => {
 // ==========================================
 // 11. ROTA DE PRODUTIVIDADE E TEMPO OCIOSO (ADMIN-ONLY)
 // ==========================================
-app.get('/api/produtividade', async (req, res) => {
+app.get('/api/produtividade', soAdmin, async (req, res) => {   // 🛡️ 16/10/2026: + soAdmin (tela de admin)
     try {
         let dataInicioSQL, dataFimSQL;
         if (req.query.since && req.query.until) {
@@ -1212,7 +1433,9 @@ app.get('/api/produtividade', async (req, res) => {
         const relatorio = {};
         result.rows.forEach(r => {
             let nome = (r.agente || '').toUpperCase();
-            if (!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
+            const mSigProd = nome.match(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b/);   // 14/10/2026: time pelo nome na regra padrão do Dash (a mesma do Status de Casos)
+            if (!mSigProd) return;
+            if (!nome.includes('- ' + mSigProd[1])) nome = nome.replace(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b.*$/, '').trim() + ' - ' + mSigProd[1];   // 14/10/2026: nome fora do padrão ("FULANO RET") aparece como "FULANO - RET", igual ao Status de Casos (o filtro de time da tela acha)
             
             let d = new Date(r.data_hora.replace(' ', 'T'));
             let diaStr = r.data_hora.split(' ')[0];
@@ -1226,6 +1449,8 @@ app.get('/api/produtividade', async (req, res) => {
 
         const output = [];
         for (const [agente, dados] of Object.entries(relatorio)) {
+            // 23/10/2026: jornada real do agente (turno da lider + pausa dele). Sem lider = regra antiga.
+            const _jor = tkJornadaDe(agente) || { tIni: 9 * 60, tFim: 18 * 60, pIni: 12 * 60 + 30, pFim: 14 * 60 };
             let totalTickets = 0;
             let totalMinutosAciosos = 0;
             let historicoPausas = [];
@@ -1239,6 +1464,7 @@ app.get('/api/produtividade', async (req, res) => {
             for (const [dia, horas] of Object.entries(dados.dias)) {
                 totalTickets += horas.length;
                 if (horas.length === 0) continue;
+                horas.sort((a, b) => a - b);   // 14/10/2026: 2 nomes do mesmo agente (regra padrão do time) juntam as mensagens; as pausas precisam da ordem do horário
                 
                 let inicio = horas[0];
                 let fim = horas[horas.length - 1];
@@ -1252,6 +1478,7 @@ app.get('/api/produtividade', async (req, res) => {
                 ticketsPorDia[objDia] = horas.length;
                 ociosoPorDia[objDia] = 0;
 
+                if (!isFDS) ticketsPorHora[inicio.getHours()] = (ticketsPorHora[inicio.getHours()] || 0) + 1;   // 14/10/2026: a 1ª mensagem do dia também conta no pico por hora (o laço abaixo começa na 2ª)
                 // Calcula os gaps de tempo entre as mensagens desse dia
                 for (let i = 1; i < horas.length; i++) {
                     let msgAnterior = horas[i-1];
@@ -1270,9 +1497,9 @@ app.get('/api/produtividade', async (req, res) => {
                         
                         const overlap = (s1, e1, s2, e2) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
                         
-                        let idleUtil = overlap(startMin, endMin, 9*60, 12*60+30) + overlap(startMin, endMin, 14*60, 18*60);
+                        let idleUtil = overlap(startMin, endMin, _jor.tIni, _jor.pIni) + overlap(startMin, endMin, _jor.pFim, _jor.tFim);
                         
-                        let overlapAlmoco = overlap(startMin, endMin, 12*60+30, 14*60);
+                        let overlapAlmoco = overlap(startMin, endMin, _jor.pIni, _jor.pFim);
                         let isAlmoco = overlapAlmoco > 0;
                         
                         let strPausa = `${objDia} das ${formatHora(msgAnterior)} às ${formatHora(msgAtual)} (${Math.round(diffMinRaw)}m)`;
@@ -1299,8 +1526,9 @@ app.get('/api/produtividade', async (req, res) => {
             let horaMaisAtiva = 0, maxT = -1;
             let horaMenosAtiva = 0, minT = 999999;
             
-            for(let h=9; h<18; h++) {
-                if (h === 13) continue; // Pula horário de almoço na média
+            const _hIni = Math.floor(_jor.tIni / 60), _hFim = Math.min(24, Math.ceil(_jor.tFim / 60));
+            for(let h=_hIni; h<_hFim; h++) {
+                if (h * 60 >= _jor.pIni && (h + 1) * 60 <= _jor.pFim) continue; // hora inteira dentro da pausa
                 if(ticketsPorHora[h] > maxT) { maxT = ticketsPorHora[h]; horaMaisAtiva = h; }
                 if(ticketsPorHora[h] < minT) { minT = ticketsPorHora[h]; horaMenosAtiva = h; }
             }
@@ -1319,6 +1547,9 @@ app.get('/api/produtividade', async (req, res) => {
 
             output.push({
                 nome: agente,
+                lider: _jor.lider || null,
+                turno: _jor.turno || null,
+                pausa: _jor.pausa || null,
                 tickets: totalTickets,
                 jornada: jornadas.join('\n'),
                 tempo_ocioso: Math.round(totalMinutosAciosos),
@@ -1342,7 +1573,7 @@ app.get('/api/produtividade', async (req, res) => {
 // ==========================================
 // 12. ROTA DE RECORRÊNCIA E RETORNO (CHATWOOT)
 // ==========================================
-app.get('/api/recorrencia', async (req, res) => {
+app.get('/api/recorrencia', soAdmin, async (req, res) => {   // 🛡️ 16/10/2026: + soAdmin (tela de admin)
     try {
         const q = `
         WITH ClientMessages AS (
@@ -1364,7 +1595,7 @@ app.get('/api/recorrencia', async (req, res) => {
                 created_at,
                 prev_msg_date,
                 EXTRACT(EPOCH FROM (created_at - prev_msg_date))/3600 AS hours_since_last,
-                TO_CHAR(created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') as mes_retorno
+                TO_CHAR(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') as mes_retorno -- 14/10/2026: de UTC para Brasília (antes ficava 6 h adiantado e a virada do mês saía errada)
             FROM ClientMessages
             WHERE prev_msg_date IS NOT NULL
         )
@@ -1387,7 +1618,7 @@ app.get('/api/recorrencia', async (req, res) => {
 // ==========================================
 // 13. ROTA INTELIGÊNCIA DE PRODUTOS E ATRITO (ÚLTIMO RETORNO + FCR + SLA)
 // ==========================================
-app.get('/api/produtos-metricas', async (req, res) => {
+app.get('/api/produtos-metricas', soAdmin, async (req, res) => {   // 🛡️ 16/10/2026: + soAdmin (tela de admin)
     try {
         const q = `
         WITH ConversasBase AS (
@@ -1414,6 +1645,8 @@ app.get('/api/produtos-metricas', async (req, res) => {
                 cb.contato_nome,
                 m.message_type,
                 m.created_at,
+                m.sender_type,   -- 14/10/2026: TMR só com resposta de agente humano (robô/automação não contam)
+                COUNT(*) FILTER (WHERE m.message_type = 1 AND m.sender_type = 'User') OVER (PARTITION BY m.conversation_id ORDER BY m.created_at ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS resp_humanas_antes,   -- 14/10/2026: separa as esperas do cliente
                 LAG(m.created_at) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_time,
                 LAG(m.message_type) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) as prev_msg_type
             FROM messages m
@@ -1422,6 +1655,19 @@ app.get('/api/produtos-metricas', async (req, res) => {
               AND m.account_id = 1 
               AND m.message_type IN (0, 1) 
               AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+        ),
+        EsperasHumanas AS (   -- 14/10/2026: cada espera = da 1ª mensagem do cliente ainda sem resposta até a 1ª resposta de agente humano
+            SELECT conversation_id, resp_humanas_antes,
+                MIN(created_at) FILTER (WHERE message_type = 0) AS inicio_espera,
+                MIN(created_at) FILTER (WHERE message_type = 1 AND sender_type = 'User') AS resposta_humana
+            FROM BaseMessages
+            GROUP BY conversation_id, resp_humanas_antes
+        ),
+        TmrConversa AS (   -- 14/10/2026: TMR da conversa = média das esperas que tiveram resposta humana (sem resposta fica de fora, não vira 0)
+            SELECT conversation_id, AVG(EXTRACT(EPOCH FROM (resposta_humana - inicio_espera))/60) AS tmr_minutos
+            FROM EsperasHumanas
+            WHERE inicio_espera IS NOT NULL AND resposta_humana IS NOT NULL
+            GROUP BY conversation_id
         ),
         UltimoRetorno AS (
             SELECT DISTINCT ON (conversation_id)
@@ -1448,8 +1694,8 @@ app.get('/api/produtos-metricas', async (req, res) => {
                 MAX(contato_nome) AS contato_nome,
                 COUNT(*) FILTER (WHERE message_type = 0) AS qtd_msgs_cliente,
                 SUM(CASE WHEN message_type = 0 AND prev_msg_type = 0 AND prev_msg_time IS NOT NULL AND EXTRACT(EPOCH FROM (created_at - prev_msg_time))/3600 <= 1 THEN 1 ELSE 0 END) AS qtd_floods,
-                AVG(EXTRACT(EPOCH FROM (created_at - prev_msg_time))/60) FILTER (WHERE message_type = 1 AND prev_msg_type = 0) AS tmr_minutos
-            FROM BaseMessages
+                MAX(tc.tmr_minutos) AS tmr_minutos   -- 14/10/2026: da 1ª mensagem do cliente que esperou até a 1ª resposta humana (TmrConversa)
+            FROM BaseMessages LEFT JOIN TmrConversa tc USING (conversation_id)   -- 14/10/2026: 1 linha por conversa no TmrConversa (não multiplica as mensagens)
             GROUP BY conversation_id, produto
         )
         SELECT 
@@ -1466,7 +1712,7 @@ app.get('/api/produtos-metricas', async (req, res) => {
             
             COALESCE(SUM(a.qtd_floods), 0) AS flood_desespero,
             ROUND(AVG(a.qtd_msgs_cliente), 1) AS atrito_msg_por_conv,
-            COALESCE(AVG(a.tmr_minutos), 0) AS sla_tmr_minutos,
+            AVG(a.tmr_minutos) AS sla_tmr_minutos,   -- 14/10/2026: sem resposta humana = null (a tela mostra –), não 0
             
             json_agg(
                 json_build_object(
@@ -1556,7 +1802,7 @@ function mencoesUnificar(linhas) {
 // ==========================================
 // 14. ROTA DE PRODUTOS CITADOS (MINERAÇÃO DE TEXTO NA FILA)
 // ==========================================
-app.get('/api/mencoes-abertos', async (req, res) => {
+app.get('/api/mencoes-abertos', soAdmin, async (req, res) => {   // 🛡️ 16/10/2026: + soAdmin (tela de admin)
     try {
         const q = `
         WITH OpenConversations AS (
@@ -1931,8 +2177,12 @@ app.get('/api/qualidade-tickets', async (req, res) => {
             dataFimSQL = formatarDataSQL(agora);
         }
 
+        // 14/10/2026: período de no máximo 62 dias (período gigante gera consulta pesada no banco do Chatwoot); o padrão (hoje) não muda
+        const diasMonTk = Math.round((Date.parse(dataFimSQL) - Date.parse(dataInicioSQL)) / 86400000) + 1;
+        if (diasMonTk > 62) return res.status(400).json({ success: false, error: `Período muito grande (${diasMonTk} dias). Escolha no máximo 62 dias na Monitoria de Tickets.` });
+
         const q = `
-        WITH BaseAcoes AS (
+        WITH BaseAcoes AS MATERIALIZED (   -- 14/10/2026: calcula quem fez a ação 1 vez por mensagem (com a busca nova de quem agiu, sem isto a consulta ficava ~45% mais lenta)
             SELECT 
                 m.conversation_id,
                 c.display_id,
@@ -1941,11 +2191,12 @@ app.get('/api/qualidade-tickets', async (req, res) => {
                 m.created_at AS m_created_at,
                 c.status AS conv_status,
                 -- 🔥 O HISTORIADOR: Tenta pegar o tempo exato no momento que o botão foi clicado!
-                COALESCE(m.content_attributes->>'snoozed_until', c.snoozed_until::text) AS snoozed_until,
+                COALESCE(m.content_attributes->>'snoozed_until', to_char(c.snoozed_until, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) AS snoozed_until,   -- 14/10/2026: com fuso (Z), igual ao horário da ação (a tela faz adiamento − ação)
                 COALESCE(
                     (CASE WHEN m.message_type = 1 THEN u_sender.name END), 
-                    SUBSTRING(m.content FROM '(?i)por (.*? - (?:RET|SAC|BKO|SMS))'), 
-                    u_assignee.name 
+                    SUBSTRING(m.content FROM '(?i)por (.*?[[:space:]-]+(?:RET|SAC|BKO|SMS|48H))[[:>:]]'),   -- 14/10/2026: reconhece o 48H (e o nome fora do padrão, como no Status de Casos)
+                    (CASE WHEN SUBSTRING(m.content FROM '(?i)^(.*?[[:space:]-]+(?:RET|SAC|BKO|SMS|48H))[[:>:]]') IN (SELECT u_ini.name FROM users u_ini)
+                          THEN SUBSTRING(m.content FROM '(?i)^(.*?[[:space:]-]+(?:RET|SAC|BKO|SMS|48H))[[:>:]]') END)   -- 14/10/2026: quem fez a ação no começo do texto ("Fulano - SAC adicionou..."), se for um usuário; não usa mais o responsável atual
                 ) AS agente_nome
             FROM messages m
             JOIN conversations c ON c.id = m.conversation_id
@@ -1953,6 +2204,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
             LEFT JOIN users u_assignee ON u_assignee.id = c.assignee_id
             WHERE m.account_id = 1
               AND m.message_type IN (1, 2) 
+              AND (m.message_type = 2 OR m.sender_type = 'User')   -- 14/10/2026: resposta só de agente humano (robô/automação não viram ação de ninguém)
               AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
               AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
               AND m.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
@@ -1963,14 +2215,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
         ConversasAgrupadas AS (
             SELECT 
                 agente_nome,
-                CASE 
-                    WHEN agente_nome ILIKE '%- RET%' THEN 'RET'
-                    WHEN agente_nome ILIKE '%- SAC%' THEN 'SAC'
-                    WHEN agente_nome ILIKE '%- BKO%' THEN 'BKO'
-                    WHEN agente_nome ILIKE '%- SMS%' THEN 'SMS'
-                    WHEN agente_nome ILIKE '%- 48H%' THEN '48H'
-                    ELSE 'OUTROS'
-                END AS equipe,
+                COALESCE(SUBSTRING(UPPER(agente_nome) FROM '[[:space:]-]+(RET|SAC|BKO|SMS|48H)[[:>:]]'), 'OUTROS') AS equipe,   -- 14/10/2026: time pelo nome na regra padrão do Dash (a mesma do Status de Casos)
                 display_id,
                 conversation_id,
                 COUNT(CASE WHEN message_type = 2 AND content ILIKE '%adiad%' THEN 1 END) AS qtd_adiado,
@@ -1979,7 +2224,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
                     json_build_object(
                         'tipo', message_type,
                         'texto', COALESCE(content, 'Ação do Sistema'),
-                        'data', m_created_at,
+                        'data', to_char(m_created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),   -- 14/10/2026: horário em UTC com fuso (Z): o navegador mostra certo em Brasília
                         'snooze', snoozed_until,
                         'status_conv', conv_status
                     ) ORDER BY m_created_at ASC
@@ -2012,7 +2257,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
         // 🅱️ ENRIQUECER com o snooze capturado (planilha) — recupera a escolha até em conversas reabertas
         try {
             const sheetsLog = getSheetsRW();
-            const rlog = await sheetsLog.spreadsheets.values.get({ spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A2:F100000` });
+            const rlog = await sheetsLog.spreadsheets.values.get({ spreadsheetId: SNOOZE_SHEET_ID, range: `${SNOOZE_ABA}!A2:F` });   // 14/10/2026: aba inteira (com o teto de 100 mil linhas os adiamentos novos, no fim da aba, ficavam de fora)
             const snoozeMap = {};
             for (const row of (rlog.data.values || [])) {
                 const convId = row[1]; if (!convId) continue;
@@ -2049,114 +2294,6 @@ app.get('/api/qualidade-tickets', async (req, res) => {
 });
 
 // ==========================================
-// 16.0 LOG DE REEMBOLSO DO GOOGLE — LEITURA PROTEGIDA (08/10/2026)
-// O mesmo log (Apps Script) serve as 3 rotas de reembolso: PagAmerican, BuyGoods e CartPanda. O Google leva de 2 a 68 s
-// para rodar o script e às vezes devolve uma página de erro ("Page Not Found") no lugar da lista. Antes, essa página
-// virava "log vazio" em silêncio e todos os tickets saíam como "Conversa", com a data da última movimentação (07/10/2026).
-// Agora: só aceita a lista; repete o download do resultado (a página de erro costuma sumir na 2ª vez) e depois a leitura
-// inteira; 1 leitura vale 5 min para as 3 rotas (o 🔄 Atualizar lê de novo); guarda a última cópia boa para usar se o
-// Google falhar; registra o motivo no log do Render; e devolve a situação do log para a tela avisar.
-// ==========================================
-const LOG_REEMB_VALIDADE_MS = 5 * 60 * 1000;   // uma leitura serve às 3 rotas por 5 min
-const LOG_REEMB_RODADAS = 3;                   // leituras completas (o Google roda o script e devolve o endereço do resultado)
-const LOG_REEMB_DOWNLOADS = 3;                 // downloads do resultado por rodada
-const LOG_REEMB_ESPERA_MS = 90 * 1000;         // cada pedido ao Google espera até 90 s
-const LOG_REEMB_PRAZO_MS = 150 * 1000;         // e a leitura inteira, até 2,5 min
-const logReembPorUrl = {};                     // por link do log: { mapa, lidoEm, registros, lendo }
-
-function logReembMontarMapa(lista) {   // a mesma montagem de antes: 1 registro por ticket (mantém o mais antigo), ignora "sem reembolso"
-    const logMap = {};
-    lista.forEach(l => {
-        if (!l) return;
-        const tk = String(l.ticket || l[0] || '').trim();
-        if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
-        const dl = new Date(l.data_hora || l[1]);
-        logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
-    });
-    return logMap;
-}
-
-async function logReembPedir(alvo, espera, seguir) {   // 1 pedido ao Google: devolve { lista } ou { proximo } (o endereço do resultado)
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), espera);
-    try {
-        const r = await fetch(alvo, { redirect: seguir ? 'follow' : 'manual', signal: ctrl.signal });
-        const destino = r.headers.get('location');
-        if (r.status >= 300 && r.status < 400 && destino) {
-            try { await r.arrayBuffer(); } catch (e) {}
-            return { proximo: new URL(destino, alvo).toString() };
-        }
-        const txt = (await r.text()).trim();
-        if (!txt.startsWith('[')) {
-            const titulo = (txt.match(/<title>([^<]*)<\/title>/i) || [])[1];
-            throw new Error(`o Google respondeu ${r.status} sem a lista${titulo ? ' ("' + titulo.trim() + '")' : ''}`);
-        }
-        const lista = JSON.parse(txt);
-        if (!Array.isArray(lista) || !lista.length) throw new Error('a lista do log veio vazia');
-        return { lista };
-    } catch (e) {
-        if (e && e.name === 'AbortError') throw new Error(`o Google não respondeu em ${Math.round(espera / 1000)} s`);
-        throw e;
-    } finally { clearTimeout(timer); }
-}
-
-async function logReembBaixar(url) {   // rodada: o Google roda o script (etapa 1) e a gente baixa o resultado (etapa 2)
-    const inicio = Date.now(), resta = () => LOG_REEMB_PRAZO_MS - (Date.now() - inicio);
-    const pausa = (ms) => new Promise(ok => setTimeout(ok, ms));
-    let erro = '';
-    for (let rodada = 1; rodada <= LOG_REEMB_RODADAS && resta() > 5000; rodada++) {
-        try {
-            const r = await logReembPedir(url, Math.min(LOG_REEMB_ESPERA_MS, resta()), false);
-            if (r.lista) return r.lista;
-            for (let d = 1; d <= LOG_REEMB_DOWNLOADS && resta() > 3000; d++) {
-                try {
-                    const r2 = await logReembPedir(r.proximo, Math.min(LOG_REEMB_ESPERA_MS, resta()), true);
-                    if (r2.lista) return r2.lista;
-                } catch (e) {
-                    erro = e.message;
-                    console.log(`⚠️ Log de reembolso: download ${d}/${LOG_REEMB_DOWNLOADS} da rodada ${rodada} falhou — ${erro}`);
-                    if (d < LOG_REEMB_DOWNLOADS) await pausa(1500);
-                }
-            }
-        } catch (e) {
-            erro = e.message;
-            console.log(`⚠️ Log de reembolso: rodada ${rodada}/${LOG_REEMB_RODADAS} falhou — ${erro}`);
-        }
-        if (rodada < LOG_REEMB_RODADAS) await pausa(2000);
-    }
-    throw new Error(erro || 'acabou o prazo para ler o log');
-}
-
-function logReembInfo(st, situacao, erro) {   // o que a tela recebe sobre o log
-    return { situacao, lido_em: st.lidoEm ? new Date(st.lidoEm).toISOString() : null, registros: st.registros || 0, erro: erro || '' };
-}
-
-async function lerLogReembolso(url, forcar) {   // { logMap, info } · info.situacao: 'ok' (log atual), 'copia' (Google falhou: última cópia boa) ou 'sem_log'
-    const st = logReembPorUrl[url] || (logReembPorUrl[url] = { mapa: null, lidoEm: 0, registros: 0, lendo: null });
-    const atual = () => !!st.mapa && (Date.now() - st.lidoEm < LOG_REEMB_VALIDADE_MS);
-    if (!forcar && atual()) return { logMap: st.mapa, info: logReembInfo(st, 'ok', '') };
-    if (!st.lendo) {   // quem pedir junto (as 3 rotas, várias telas) espera a mesma leitura
-        st.lendo = logReembBaixar(url)
-            .then(lista => {
-                const mapa = logReembMontarMapa(lista);
-                if (!Object.keys(mapa).length) throw new Error('a lista do log não tem nenhum ticket');
-                st.mapa = mapa; st.lidoEm = Date.now(); st.registros = lista.length;
-                return '';
-            })
-            .catch(e => (e && e.message) || String(e))
-            .finally(() => { st.lendo = null; });
-    }
-    const erro = await st.lendo;
-    if (!erro) return { logMap: st.mapa, info: logReembInfo(st, 'ok', '') };
-    if (st.mapa) {
-        console.log(`⚠️ Log de reembolso: o Google falhou (${erro}) — usando a cópia de ${new Date(st.lidoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
-        return { logMap: st.mapa, info: logReembInfo(st, atual() ? 'ok' : 'copia', erro) };
-    }
-    console.log(`⛔ Log de reembolso indisponível (${erro}) — sem cópia guardada: os tickets saem com a data da conversa`);
-    return { logMap: {}, info: logReembInfo(st, 'sem_log', erro) };
-}
-
-// ==========================================
 // 16. ROTA DE URGÊNCIA: REEMBOLSOS PAGAMERICAN (COM GOOGLE SHEETS)
 // ==========================================
 app.get('/api/reembolsos-pagamerican', async (req, res) => {
@@ -2174,7 +2311,31 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         // 1. LER O COFRE DO GOOGLE SHEETS
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
-        const _pLog = lerLogReembolso(URL_PLANILHA, req.query.fresh === '1');   // 08/10/2026: leitura protegida do log (ver 16.0): confere a resposta, tenta de novo e guarda a última cópia boa
+        let avisoLogPag = '';   // 14/10/2026: motivo curto quando o log falha — vai na resposta (aviso_log) e a resposta não fica no cache (sem_cache)
+        const _pLog = (async () => {
+            let logMap = {};
+            const _ctlLog = new AbortController(), _timerLog = setTimeout(() => _ctlLog.abort(), 20000);   // 14/10/2026: tempo limite de 20 s (Apps Script travado não segura mais a tela)
+            try {
+                const _r = await fetch(URL_PLANILHA, { redirect: 'follow', signal: _ctlLog.signal });
+                const _t = (await _r.text()).trim();
+                if (!_r.ok) throw new Error(`a planilha de log respondeu HTTP ${_r.status}`);   // 14/10/2026: erro do Apps Script não passa mais como "log vazio"
+                if (!(_t.startsWith('[') || _t.startsWith('{'))) throw new Error('a planilha de log devolveu uma página de erro');
+                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
+                if (!Array.isArray(dadosPlanilha)) throw new Error('a planilha de log devolveu um formato inesperado');   // 14/10/2026
+                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                    const tk = String(l.ticket || l[0] || '').trim();
+                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
+                    const dl = new Date(l.data_hora || l[1]);
+                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+                });
+            } catch (err) {   // 14/10/2026: a falha vira aviso_log (a tela avisa); os dados seguem do banco, como antes
+                avisoLogPag = err.name === 'AbortError' ? 'a planilha de log não respondeu em 20 s'
+                    : (err instanceof SyntaxError ? 'a planilha de log devolveu dados inválidos'
+                    : (/^a planilha de log/.test(String(err.message)) ? String(err.message) : 'falha ao ler a planilha de log (' + String(err.message || err).slice(0, 80) + ')'));
+                console.log("Aviso: falha ao ler o log de reembolso.", avisoLogPag);
+            } finally { clearTimeout(_timerLog); }
+            return logMap;
+        })();
 
         // 2. FILTRO DE DATAS DO PAINEL
         let dInicio, dFim;
@@ -2183,8 +2344,8 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
             dFim = new Date(parseInt(req.query.until) * 1000);
         } else {
             const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-            dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
-            dFim = agora;
+            dInicio = new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), 1, 3));        // 14/10/2026: dia 1 às 00:00 de Brasília (03:00 UTC), com o servidor em qualquer fuso
+            dFim = new Date(Date.UTC(agora.getFullYear(), agora.getMonth() + 1, 1, 3) - 1);   // 14/10/2026: fim do mês 23:59:59 de Brasília (antes "agora" ficava 3 h atrasado com o servidor em UTC)
         }
         const dCorte = new Date(dInicio); dCorte.setDate(dCorte.getDate() - 90); const dCorteSQL = dCorte.toISOString().slice(0, 10); // E: filtro de data movido pro banco (periodo + 90 dias de margem) — reduz o scan sem cortar resultado
 
@@ -2221,7 +2382,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const [{ logMap, info: logInfo }, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
+        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (NODE.JS FAZ O TRABALHO PESADO)
         const resumoAgentes = {};
@@ -2262,8 +2423,7 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos); // Ordena o ranking de agentes
 
-        if (logInfo.situacao !== 'ok') res.locals.naoGuardarCache = true;   // 08/10/2026: com o log falho, a resposta não fica no cache (a próxima abertura tenta de novo)
-        res.json({ success: true, dados: arrayFinal, log: logInfo });
+        res.json(Object.assign({ success: true, dados: arrayFinal }, avisoLogPag ? { aviso_log: avisoLogPag, sem_cache: true } : {}));   // 14/10/2026: log com falha → aviso_log na tela e sem_cache (o cache não guarda)
     } catch (error) { 
         console.error("Erro PagAmerican:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
@@ -2273,6 +2433,12 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
 // ==========================================
 // 17. ROTA: TIME 48 HORAS (ETIQUETAS + RETORNOS)
 // ==========================================
+// 🛡️ 14/10/2026 — teto de período nas rotas de agente e do Time 48H: período gigante vira consulta pesada no banco do Chatwoot (sem data escolhida, o padrão de cada rota não muda)
+const T48_MAX_DIAS = 186;
+function t48PeriodoGrande(dataInicioSQL, dataFimSQL) {   // 'AAAA-MM-DD' × 'AAAA-MM-DD' → o texto do erro se passar do teto ('' se estiver dentro)
+    const dias = Math.round((new Date(dataFimSQL + 'T00:00:00Z') - new Date(dataInicioSQL + 'T00:00:00Z')) / 86400000) + 1;
+    return dias > T48_MAX_DIAS ? `Período grande demais: ${dias} dias. Escolha no máximo ${T48_MAX_DIAS} dias (cerca de 6 meses) no calendário.` : '';
+}
 app.get('/api/time48', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
     const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
@@ -2291,6 +2457,8 @@ app.get('/api/time48', async (req, res) => {
             dataFimSQL = formatarDataSQL(agora);
         }
 
+        const erroPeriodo = t48PeriodoGrande(dataInicioSQL, dataFimSQL);   // 🛡️ 14/10/2026: teto de período (consulta pesada no banco do Chatwoot)
+        if (erroPeriodo) return res.status(400).json({ success: false, error: erroPeriodo });
         // 🛡️ Conversas com as etiquetas buscadas UMA vez: as consultas abaixo só leem essas conversas, sem varrer todas as conversas do Chatwoot
         const idsTime = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')`)).rows.map(r => r.id);
         const q = `
@@ -2545,6 +2713,8 @@ app.get('/api/time48-etiquetas', async (req, res) => {
             dataFimSQL = formatarDataSQL(agora);
         }
 
+        const erroPeriodo = t48PeriodoGrande(dataInicioSQL, dataFimSQL);   // 🛡️ 14/10/2026: teto de período (consulta pesada no banco do Chatwoot)
+        if (erroPeriodo) return res.status(400).json({ success: false, error: erroPeriodo });
         // 🛡️ Conversas com as etiquetas buscadas UMA vez: as consultas abaixo só leem essas conversas, sem varrer todas as conversas do Chatwoot
         const idsSel = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND lower(tg.name) = ANY($1::text[])`, [etiquetas])).rows.map(r => r.id);
         const q = `
@@ -2767,6 +2937,8 @@ app.get('/api/time48-agentes', async (req, res) => {
             dataFimSQL = formatarDataSQL(agora);
         }
 
+        const erroPeriodo = t48PeriodoGrande(dataInicioSQL, dataFimSQL);   // 🛡️ 14/10/2026: teto de período (consulta pesada no banco do Chatwoot)
+        if (erroPeriodo) return res.status(400).json({ success: false, error: erroPeriodo });
         // Mesmas etiquetas da Visão Geral (time-48h* e painel-do-pedido*). O PERÍODO aqui é a data em que o agente ENVIOU a mensagem (o ticket pode ser de qualquer data)
         const idsSel = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')`)).rows.map(r => r.id);
 
@@ -2930,6 +3102,7 @@ app.get('/api/time48-agentes', async (req, res) => {
                 detalhes: dets
             };
         }).sort((x, y) => (y.tickets - x.tickets) || (y.mensagens - x.mensagens) || x.agente.localeCompare(y.agente));
+        await tjAplicar(dados, linhas, dataInicioSQL, dataFimSQL);   // ⚖️ TMC/TMR justos (13/10/2026): só na vez do agente
 
         res.json({
             success: true,
@@ -2966,6 +3139,8 @@ app.get('/api/time48-atendimento', async (req, res) => {
             dataFimSQL = formatarDataSQL(agora);
         }
 
+        const erroPeriodo = t48PeriodoGrande(dataInicioSQL, dataFimSQL);   // 🛡️ 14/10/2026: teto de período (consulta pesada no banco do Chatwoot)
+        if (erroPeriodo) return res.status(400).json({ success: false, error: erroPeriodo });
         // Etiquetas marcadas na aba (?etiquetas=a,b,c), igual às abas de etiqueta; sem o parâmetro = as duas (time-48h* e painel-do-pedido*), igual ao 👥 Todos os Agentes
         const temEtiquetas = req.query.etiquetas !== undefined;
         const etiquetas = [...new Set(String(req.query.etiquetas || '').split(',')
@@ -3139,6 +3314,7 @@ app.get('/api/time48-atendimento', async (req, res) => {
                 detalhes: dets
             };
         }).sort((x, y) => (y.tickets - x.tickets) || (y.mensagens - x.mensagens) || x.agente.localeCompare(y.agente));
+        await tjAplicar(dados, linhas, dataInicioSQL, dataFimSQL);   // ⚖️ TMC/TMR justos (13/10/2026): só na vez do agente
 
         res.json({
             success: true,
@@ -3150,6 +3326,680 @@ app.get('/api/time48-atendimento', async (req, res) => {
     } catch (error) {
         console.error("Erro Time 48h (atendimento):", error);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// 15.3.1 TIME 48H — ⏱️ 1º CONTATO 15 MIN (08/10/2026)
+// O relógio começa na ATRIBUIÇÃO do agente (o registro "Atribuído a ... por ..." que o Chatwoot grava dentro da conversa)
+// e para no 1º contato = 1ª mensagem pública de agente depois da atribuição (mesma regra do TMC). Passou de 15 min sem contato = atraso.
+// Só conta atribuição com o cliente esperando resposta. Se o caso saiu do agente (ou foi encerrado) antes dos 15 min, sem contato, fica fora da conta.
+// Universo: tickets com etiqueta 48H ou Painel (time-48h* e painel-do-pedido*), de qualquer agente. Só LÊ o banco do Chatwoot.
+// Atribuição automática antiga (round robin, que não grava o registro): vem da tabela conversation_participants (só a do agente atual do ticket).
+// Rota da sub-aba: /api/time48-primeiro-contato (?since&until = dia da atribuição; sem período = mês atual)
+// Monitor: a cada 5 min grava os atrasos novos na aba t48_1contato da planilha de log (sem repetir o caso) · conferência: /api/raio-x-atribuicao
+// ==========================================
+const T48P_PRAZO_MIN = 15;                 // prazo do 1º contato depois da atribuição (min)
+const T48P_FOLGA_SEG = 60;                 // folga de relógio: o Chatwoot grava o registro da atribuição um instante depois da atribuição
+const T48P_ABA = 't48_1contato';           // aba nova na planilha de log (a mesma do snooze e do bot)
+const T48P_CAB = ['registrado_em', 'chave', 'conversa', 'link', 'cliente', 'agente', 'atribuido_em', 'atribuido_por', 'origem', 'prazo_ate', 'situacao', 'minutos', 'primeiro_contato_em', 'primeiro_contato_por', 'status_conversa'];
+const T48P_STATUS = { 0: 'Em aberto', 1: 'Resolvido', 2: 'Pendente', 3: 'Adiado' };
+const T48P_FIM_TXT = { reatribuido: 'depois foi para outro agente', desatribuido: 'depois ficou sem agente', encerrado: 'depois foi resolvido', trocou_time: 'depois mudou de time' };
+// registros de atribuição (pt-BR e inglês): "Atribuído a X por Y", "Atribuído a X via TIME por Y", "Y atribuiu a si mesmo essa conversa"
+const T48P_SQL_ATRIB = `(m.content ILIKE 'Atribu%' OR m.content ILIKE 'Assigned to %' OR m.content ILIKE '% atribuiu a si mesmo essa conversa' OR m.content ILIKE '% self-assigned this conversation')`;
+// o que pode encerrar a vez do agente: outra atribuição, desatribuição, troca de time ou conversa resolvida
+const T48P_SQL_FIM = `(${T48P_SQL_ATRIB} OR m.content ILIKE 'Conversa desatribu%' OR m.content ILIKE 'Conversation unassigned by %' OR m.content ILIKE 'Desatribu%' OR m.content ILIKE 'Unassigned from %'
+    OR m.content ILIKE '%conversa foi marcada como resolvida%' OR m.content ILIKE '%conversa foi resolvida por%' OR m.content ILIKE 'Conversation was marked resolved%' OR m.content ILIKE 'Conversation was resolved by%')`;
+const T48P_JANELA_DIA = (col) => `${col} >= ((($1::date)::timestamp AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'UTC') AND ${col} < (((($2::date) + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'UTC')`;   // dias de Brasília (período da tela)
+const T48P_JANELA_TS = (col) => `${col} >= (to_timestamp($1::float8) AT TIME ZONE 'UTC') AND ${col} <= (to_timestamp($2::float8) AT TIME ZONE 'UTC')`;   // instantes em segundos (monitor)
+const t48pMonitor = { rodando: false, ultimaRodada: 0, ultimoErro: '', registrados: 0, chaves: new Set(), chavesLidas: false, abaOk: false };
+let t48pNomesCache = { em: 0, usuarios: [], times: [], membros: null, nomePorId: {} };
+
+function t48pTextoBR(ms) {   // 'AAAA-MM-DD HH:MM:SS' no horário de Brasília (vai para a planilha)
+    if (ms == null || isNaN(ms)) return '';
+    const p = {};
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+        .formatToParts(new Date(ms)).forEach(x => { p[x.type] = x.value; });
+    return `${p.year}-${p.month}-${p.day} ${String(parseInt(p.hour, 10) % 24).padStart(2, '0')}:${p.minute}:${p.second}`;
+}
+const t48pNomeBase = (n) => String(n || '').replace(/\s*-\s*(RET|SAC|BKO|SMS|48H|LD)\b.*$/i, '').trim().toLowerCase();
+const t48pOrigem = (por) => /^(Sistema de Automa|Automation System|Pol[ií]tica Padr|Default Policy)/i.test(String(por || '')) ? 'automática' : 'manual';
+
+async function t48pNomes() {   // agentes, times e quem é de cada time (guardado por 10 min: tabelas pequenas)
+    if (Date.now() - t48pNomesCache.em < 10 * 60 * 1000) return t48pNomesCache;
+    const usuarios = (await pool.query(`SELECT id, name FROM users`)).rows
+        .filter(u => String(u.name || '').trim().length >= 2).map(u => ({ id: Number(u.id), name: String(u.name) }));
+    const times = (await pool.query(`SELECT id, name FROM teams WHERE account_id = 1`)).rows
+        .filter(t => String(t.name || '').trim()).map(t => ({ id: Number(t.id), name: String(t.name) }));
+    let membros = new Set();
+    try { (await pool.query(`SELECT team_id, user_id FROM team_members`)).rows.forEach(r => membros.add(`${r.team_id}|${r.user_id}`)); } catch (e) { membros = null; }
+    usuarios.sort((a, b) => b.name.length - a.name.length);   // o nome mais longo primeiro ("Ana Paula" antes de "Ana")
+    times.sort((a, b) => b.name.length - a.name.length);
+    const nomePorId = {};
+    usuarios.forEach(u => { nomePorId[u.id] = u.name; });
+    t48pNomesCache = { em: Date.now(), usuarios, times, membros, nomePorId };
+    return t48pNomesCache;
+}
+function t48pAcharAgente(nome, nomes) {   // nome exato; se não achar, pelo nome sem a sigla do time ("Maria Souza" × "Maria Souza - 48H"), só se der 1 agente
+    const exato = nomes.usuarios.find(u => u.name === nome);
+    if (exato) return exato;
+    const base = t48pNomeBase(nome);
+    const parecidos = base ? nomes.usuarios.filter(u => t48pNomeBase(u.name) === base) : [];
+    return parecidos.length === 1 ? parecidos[0] : null;
+}
+function t48pLerRegistro(txt, nomes) {   // lê o registro de atividade da conversa: atribuido | desatribuido | time | time_removido | encerrado | null
+    const s = String(txt || '').trim();
+    let m = s.match(/^(.+) atribuiu a si mesmo essa conversa$/) || s.match(/^(.+) self-assigned this conversation$/);
+    if (m) { const u = t48pAcharAgente(m[1], nomes); return { tipo: 'atribuido', agente: u ? u.name : m[1], agente_id: u ? u.id : null, por: m[1], origem: 'pegou para si' }; }
+    if (/^Conversa desatribu/i.test(s) || /^Conversation unassigned by /.test(s)) return { tipo: 'desatribuido' };
+    m = s.match(/^Desatribu\S* de (.*) por (.+)$/i) || s.match(/^Unassigned from (.*) by (.+)$/);
+    if (m) return { tipo: 'time_removido', time: m[1] };
+    let resto = null, POR = ' por ';
+    if (/^Atribu\S* a /i.test(s)) resto = s.replace(/^Atribu\S* a /i, '');
+    else if (/^Assigned to /.test(s)) { resto = s.slice('Assigned to '.length); POR = ' by '; }
+    if (resto !== null) {
+        const u = nomes.usuarios.find(x => resto.startsWith(x.name + POR) || resto.startsWith(x.name + ' via '));
+        if (u) {
+            let depois = resto.slice(u.name.length), por = '';
+            if (depois.startsWith(' via ')) {   // "via TIME por Y": o time pode ter " por " no nome, então procura pelo nome do time
+                const semVia = depois.slice(5);
+                const t = nomes.times.find(x => semVia.startsWith(x.name + POR));
+                const i = semVia.indexOf(POR);
+                por = t ? semVia.slice(t.name.length + POR.length) : (i >= 0 ? semVia.slice(i + POR.length) : '');
+            } else por = depois.slice(POR.length);
+            return { tipo: 'atribuido', agente: u.name, agente_id: u.id, por, origem: t48pOrigem(por) };
+        }
+        const t = nomes.times.find(x => resto.startsWith(x.name + POR));
+        if (t) return { tipo: 'time', time: t.name, time_id: t.id, por: resto.slice(t.name.length + POR.length) };
+        // nome que mudou no Chatwoot depois do registro (ex.: ganhou o " - 48H"): separa no 1º " via " / " por "
+        const mm = resto.match(POR === ' por ' ? /^(.+?)(?: via .+?)? por (.+)$/ : /^(.+?)(?: via .+?)? by (.+)$/);
+        if (!mm) return null;
+        const u2 = t48pAcharAgente(mm[1], nomes);
+        return { tipo: 'atribuido', agente: u2 ? u2.name : mm[1], agente_id: u2 ? u2.id : null, por: mm[2], origem: t48pOrigem(mm[2]) };
+    }
+    if (/conversa foi marcada como resolvida|conversa foi resolvida por|^Conversation was marked resolved|^Conversation was resolved by/i.test(s)) return { tipo: 'encerrado' };
+    return null;
+}
+
+// Avalia cada atribuição da janela (janela = T48P_JANELA_DIA com 'AAAA-MM-DD' ou T48P_JANELA_TS com segundos) e devolve a situação do 1º contato
+async function t48pAvaliar(janela, p1, p2) {
+    const nomes = await t48pNomes();
+    const diag = { registros: 0, participantes_usados: 0, sem_cliente_esperando: 0 };   // números da conferência (Raio-X da Atribuição)
+    const ids = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')`)).rows.map(r => r.id);
+    if (!ids.length) return { eventos: [], diag };
+
+    // 1) registros de atribuição gravados na conversa (mensagem de atividade) dentro da janela
+    const regs = (await pool.query(`
+        SELECT m.id, m.conversation_id AS conv_id, m.content, EXTRACT(EPOCH FROM m.created_at)::float8 AS ts
+        FROM messages m
+        WHERE m.conversation_id = ANY($3::bigint[]) AND m.account_id = 1 AND m.message_type = 2
+          AND ${janela('m.created_at')} AND ${T48P_SQL_ATRIB}
+        ORDER BY m.created_at, m.id`, [p1, p2, ids])).rows;
+    diag.registros = regs.length;
+    const eventos = [];
+    regs.forEach(r => {
+        const l = t48pLerRegistro(r.content, nomes);
+        if (!l || l.tipo !== 'atribuido') return;   // só o que atribui a um agente abre a contagem
+        eventos.push({ chave: `${r.conv_id}-m${r.id}`, conv_id: Number(r.conv_id), msg_id: Number(r.id), ts: Number(r.ts), agente: l.agente, agente_id: l.agente_id, por: l.por, origem: l.origem });
+    });
+
+    // 2) atribuição automática antiga (sem registro na conversa): conversation_participants do agente ATUAL do ticket
+    let parts = [];
+    try {
+        parts = (await pool.query(`
+            SELECT cp.conversation_id AS conv_id, cp.user_id, EXTRACT(EPOCH FROM cp.created_at)::float8 AS ts
+            FROM conversation_participants cp
+            JOIN conversations c ON c.id = cp.conversation_id AND c.assignee_id = cp.user_id
+            WHERE cp.conversation_id = ANY($3::bigint[]) AND ${janela('cp.created_at')}`, [p1, p2, ids])).rows;
+    } catch (e) { parts = []; }   // Chatwoot sem a tabela: segue só com os registros da conversa
+    if (parts.length) {
+        const idsP = [...new Set(parts.map(p => Number(p.conv_id)))];
+        const todos = (await pool.query(`
+            SELECT m.conversation_id AS conv_id, m.content, EXTRACT(EPOCH FROM m.created_at)::float8 AS ts
+            FROM messages m
+            WHERE m.conversation_id = ANY($1::bigint[]) AND m.account_id = 1 AND m.message_type = 2 AND ${T48P_SQL_ATRIB}`, [idsP])).rows;
+        const comRegistro = new Set(), regPorConv = {};
+        todos.forEach(r => {
+            const l = t48pLerRegistro(r.content, nomes);
+            if (l && l.tipo === 'atribuido' && l.agente_id) comRegistro.add(`${r.conv_id}|${l.agente_id}`);
+            (regPorConv[r.conv_id] = regPorConv[r.conv_id] || []).push(Number(r.ts));
+        });
+        parts.forEach(p => {
+            const ts = Number(p.ts);
+            if (comRegistro.has(`${p.conv_id}|${p.user_id}`)) return;                          // essa atribuição já tem o registro na conversa
+            if ((regPorConv[p.conv_id] || []).some(t => Math.abs(t - ts) <= 120)) return;      // registro de atribuição no mesmo instante
+            diag.participantes_usados += 1;
+            eventos.push({ chave: `${p.conv_id}-p${p.user_id}`, conv_id: Number(p.conv_id), msg_id: 0, ts, agente: nomes.nomePorId[Number(p.user_id)] || ('Agente #' + p.user_id), agente_id: Number(p.user_id), por: 'Distribuição automática', origem: 'automática (sem registro)' });
+        });
+    }
+    if (!eventos.length) return { eventos: [], diag };
+
+    // 3) por atribuição: última mensagem do cliente, última mensagem de agente antes, 1ª mensagem de agente depois (índice da conversa)
+    const ctx = (await pool.query(`
+        WITH ev AS (
+            SELECT x.i, x.conv_id, (to_timestamp(x.ts) AT TIME ZONE 'UTC') AS t
+            FROM unnest($1::int[], $2::bigint[], $3::float8[]) AS x(i, conv_id, ts)
+        )
+        SELECT ev.i,
+            (SELECT EXTRACT(EPOCH FROM MAX(mi.created_at))::float8 FROM messages mi
+               WHERE mi.conversation_id = ev.conv_id AND mi.account_id = 1 AND mi.message_type = 0 AND mi.private = FALSE
+                 AND mi.created_at <= ev.t + interval '${T48P_FOLGA_SEG} seconds') AS cliente_ts,
+            (SELECT EXTRACT(EPOCH FROM MAX(ma.created_at))::float8 FROM messages ma
+               WHERE ma.conversation_id = ev.conv_id AND ma.account_id = 1 AND ma.message_type = 1 AND ma.private = FALSE AND ma.sender_type = 'User'
+                 AND ma.created_at < ev.t - interval '${T48P_FOLGA_SEG} seconds') AS agente_antes_ts,
+            pc.ts AS contato_ts, pc.sender_id AS contato_id
+        FROM ev
+        LEFT JOIN LATERAL (
+            SELECT EXTRACT(EPOCH FROM mc.created_at)::float8 AS ts, mc.sender_id
+            FROM messages mc
+            WHERE mc.conversation_id = ev.conv_id AND mc.account_id = 1 AND mc.message_type = 1 AND mc.private = FALSE AND mc.sender_type = 'User'
+              AND mc.created_at >= ev.t - interval '${T48P_FOLGA_SEG} seconds'
+              AND (mc.created_at >= ev.t OR mc.sender_id = ($4::bigint[])[ev.i + 1])   -- 14/10/2026: antes do registro só vale a mensagem do próprio agente atribuído (a do agente anterior, logo antes da transferência, não é contato)
+            ORDER BY mc.created_at, mc.id LIMIT 1
+        ) pc ON TRUE`, [eventos.map((e, i) => i), eventos.map(e => e.conv_id), eventos.map(e => e.ts), eventos.map(e => e.agente_id || 0)])).rows;   // 14/10/2026: $4 = agente atribuído de cada evento
+    const ctxPorI = {};
+    ctx.forEach(r => { ctxPorI[r.i] = r; });
+
+    // 4) o que veio depois de cada atribuição (outra atribuição, desatribuição, troca de time, resolvida) e os dados do ticket
+    const idsEv = [...new Set(eventos.map(e => e.conv_id))];
+    const menorTs = eventos.reduce((a, e) => Math.min(a, e.ts), Infinity) - 1;
+    const finsPorConv = {};
+    (await pool.query(`
+        SELECT m.id, m.conversation_id AS conv_id, m.content, EXTRACT(EPOCH FROM m.created_at)::float8 AS ts
+        FROM messages m
+        WHERE m.conversation_id = ANY($1::bigint[]) AND m.account_id = 1 AND m.message_type = 2
+          AND m.created_at >= (to_timestamp($2::float8) AT TIME ZONE 'UTC') AND ${T48P_SQL_FIM}
+        ORDER BY m.conversation_id, m.created_at, m.id`, [idsEv, menorTs])).rows
+        .forEach(r => { (finsPorConv[r.conv_id] = finsPorConv[r.conv_id] || []).push({ id: Number(r.id), ts: Number(r.ts), l: t48pLerRegistro(r.content, nomes) }); });
+    const convs = {};
+    (await pool.query(`SELECT c.id, c.display_id, c.status, ct.name AS cliente FROM conversations c LEFT JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = ANY($1::bigint[])`, [idsEv])).rows
+        .forEach(r => { convs[Number(r.id)] = r; });
+
+    // 5) situação de cada atribuição
+    const agora = Date.now() / 1000, prazoSeg = T48P_PRAZO_MIN * 60;
+    const saida = [];
+    eventos.forEach((e, i) => {
+        const c = ctxPorI[i] || {};
+        const clienteTs = c.cliente_ts == null ? null : Number(c.cliente_ts);
+        const antesTs = c.agente_antes_ts == null ? null : Number(c.agente_antes_ts);
+        if (clienteTs == null || (antesTs != null && antesTs >= clienteTs)) { diag.sem_cliente_esperando += 1; return; }   // o cliente não estava esperando resposta
+        let fim = null;   // fim da vez do agente
+        for (const f of (finsPorConv[e.conv_id] || [])) {
+            if (f.id === e.msg_id || f.ts < e.ts || (f.ts === e.ts && f.id < e.msg_id)) continue;
+            const l = f.l;
+            if (!l || l.tipo === 'time_removido') continue;   // tirar o time não tira o agente
+            if (l.tipo === 'atribuido') {
+                if ((l.agente_id && l.agente_id === e.agente_id) || (!l.agente_id && l.agente === e.agente)) continue;   // registro do mesmo agente: a vez continua
+                fim = { ts: f.ts, tipo: 'reatribuido' }; break;
+            }
+            if (l.tipo === 'time') {
+                if (nomes.membros && l.time_id && e.agente_id && nomes.membros.has(`${l.time_id}|${e.agente_id}`)) continue;   // mudou para um time do qual o agente faz parte: o caso continua com ele
+                fim = { ts: f.ts, tipo: 'trocou_time' }; break;
+            }
+            fim = { ts: f.ts, tipo: l.tipo };   // desatribuido | encerrado
+            break;
+        }
+        const contatoTs = c.contato_ts == null ? null : Number(c.contato_ts);
+        const contatoNaVez = contatoTs != null && (!fim || contatoTs < fim.ts);
+        const prazo = e.ts + prazoSeg;
+        let situacao, minutos = null;
+        if (contatoNaVez && contatoTs <= prazo) { situacao = 'no_prazo'; minutos = Math.max(0, (contatoTs - e.ts) / 60); }
+        else if (fim && fim.ts <= prazo) situacao = fim.tipo;                                   // saiu do agente (ou encerrou) antes dos 15 min, sem contato: fora da conta
+        else if (agora < prazo) situacao = 'aguardando';                                        // ainda dentro dos 15 min
+        else if (contatoNaVez) { situacao = 'atrasado'; minutos = (contatoTs - e.ts) / 60; }    // contato depois dos 15 min
+        else { situacao = 'sem_contato'; minutos = ((fim ? fim.ts : agora) - e.ts) / 60; }      // passou dos 15 min sem contato
+        const cv = convs[e.conv_id] || {};
+        saida.push({
+            chave: e.chave, conv_id: e.conv_id, id: cv.display_id || e.conv_id, cliente: cv.cliente || 'Cliente sem nome',
+            status: cv.status == null ? null : Number(cv.status),
+            agente: e.agente, agente_id: e.agente_id, atribuido_por: e.por, origem: e.origem,
+            atribuido_ms: Math.round(e.ts * 1000), prazo_ms: Math.round(prazo * 1000), cliente_ms: Math.round(clienteTs * 1000),
+            contato_ms: contatoNaVez ? Math.round(contatoTs * 1000) : null,
+            contato_por: contatoNaVez ? (nomes.nomePorId[Number(c.contato_id)] || (c.contato_id ? 'Agente #' + c.contato_id : '')) : null,
+            minutos: minutos == null ? null : Math.round(minutos * 10) / 10,
+            situacao, fim_tipo: fim ? fim.tipo : null, fim_ms: fim ? Math.round(fim.ts * 1000) : null
+        });
+    });
+    return { eventos: saida, diag };
+}
+
+function t48pContar(lista) {   // atribuições contadas = no prazo + contato atrasado + sem contato (prazo já vencido e o caso ainda com o agente)
+    const r = { atribuicoes: 0, no_prazo: 0, atrasado: 0, sem_contato: 0, atrasos: 0, aguardando: 0, fora_da_conta: 0, pct_no_prazo: null, tempo_medio_min: null };
+    let soma = 0, n = 0;
+    lista.forEach(e => {
+        if (e.situacao === 'aguardando') { r.aguardando += 1; return; }
+        if (!['no_prazo', 'atrasado', 'sem_contato'].includes(e.situacao)) { r.fora_da_conta += 1; return; }
+        r.atribuicoes += 1; r[e.situacao] += 1;
+        if (e.situacao !== 'no_prazo') r.atrasos += 1;
+        if (e.situacao !== 'sem_contato' && e.minutos != null) { soma += e.minutos; n += 1; }
+    });
+    if (r.atribuicoes) r.pct_no_prazo = r.no_prazo / r.atribuicoes * 100;
+    if (n) r.tempo_medio_min = soma / n;
+    return r;
+}
+function t48pRegistroInfo() {   // situação do registro na planilha de log (aparece na sub-aba)
+    return { aba: T48P_ABA, configurado: !!(process.env.GOOGLE_PRIVATE_KEY && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL), intervalo_min: 5, ultima_rodada: t48pMonitor.ultimaRodada || null, ultimo_erro: t48pMonitor.ultimoErro || '', registrados: t48pMonitor.registrados };
+}
+
+app.get('/api/time48-primeiro-contato', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+
+    if (!adms.includes(emailUser)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+
+    try {
+        let dataInicioSQL, dataFimSQL;
+        if (req.query.since && req.query.until) {
+            dataInicioSQL = unixParaYYYYMMDD(req.query.since);
+            dataFimSQL = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+            const dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+            dataInicioSQL = formatarDataSQL(dInicio);
+            dataFimSQL = formatarDataSQL(agora);
+        }
+        const erroPeriodo = t48PeriodoGrande(dataInicioSQL, dataFimSQL);   // 🛡️ 14/10/2026: teto de período (consulta pesada no banco do Chatwoot)
+        if (erroPeriodo) return res.status(400).json({ success: false, error: erroPeriodo });
+        const r = await t48pAvaliar(T48P_JANELA_DIA, dataInicioSQL, dataFimSQL);
+        const porAgente = {};
+        r.eventos.forEach(e => {
+            const k = e.agente_id ? 'id' + e.agente_id : 'nome' + e.agente;
+            (porAgente[k] = porAgente[k] || { agente: e.agente, agente_id: e.agente_id, lista: [] }).lista.push(e);
+        });
+        const agentes = Object.values(porAgente).map(a => Object.assign({ agente: a.agente, agente_id: a.agente_id }, t48pContar(a.lista)))
+            .sort((x, y) => (y.atrasos - x.atrasos) || (y.atribuicoes - x.atribuicoes) || String(x.agente).localeCompare(String(y.agente)));
+        const casos = r.eventos.filter(e => e.situacao === 'atrasado' || e.situacao === 'sem_contato').sort((x, y) => y.atribuido_ms - x.atribuido_ms);
+        res.json({
+            success: true,
+            periodo: { inicio: dataInicioSQL, fim: dataFimSQL },
+            prazo_min: T48P_PRAZO_MIN,
+            resumo: Object.assign(t48pContar(r.eventos), { agentes: agentes.filter(a => a.atribuicoes > 0).length }),
+            agentes: agentes,
+            casos: casos.slice(0, 3000),   // os atrasos (contato atrasado e sem contato), do mais novo para o mais antigo
+            casos_total: casos.length,
+            registro: t48pRegistroInfo()
+        });
+    } catch (error) {
+        console.error("Erro Time 48h (1º contato 15 min):", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Monitor do 1º contato: a cada 5 min olha as atribuições das últimas 6h com o prazo vencido e grava os atrasos novos na aba t48_1contato.
+// Não repete caso: a chave (conversa + registro da atribuição) é conferida na própria aba antes de gravar (as 2 cópias do Dash usam a mesma planilha).
+async function t48pGarantirAba(sheets) {
+    if (t48pMonitor.abaOk) return;
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SNOOZE_SHEET_ID, fields: 'sheets.properties.title' });
+    const existe = ((meta.data && meta.data.sheets) || []).some(s => s.properties && s.properties.title === T48P_ABA);
+    if (!existe) await sheets.spreadsheets.batchUpdate({ spreadsheetId: SNOOZE_SHEET_ID, requestBody: { requests: [{ addSheet: { properties: { title: T48P_ABA } } }] } });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SNOOZE_SHEET_ID, range: `${T48P_ABA}!A1:O1` });
+    if (!r.data.values || !r.data.values.length) {
+        await sheets.spreadsheets.values.update({ spreadsheetId: SNOOZE_SHEET_ID, range: `${T48P_ABA}!A1`, valueInputOption: 'RAW', requestBody: { values: [T48P_CAB] } });
+    }
+    t48pMonitor.abaOk = true;
+}
+function t48pLinhaPlanilha(e) {
+    return [
+        t48pTextoBR(Date.now()), e.chave, Number(e.id), `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(e.id)}`,
+        String(e.cliente || ''), String(e.agente || ''), t48pTextoBR(e.atribuido_ms), String(e.atribuido_por || ''), String(e.origem || ''), t48pTextoBR(e.prazo_ms),
+        e.situacao === 'atrasado' ? 'contato atrasado' : ('sem contato' + (e.fim_tipo ? ` (${T48P_FIM_TXT[e.fim_tipo] || e.fim_tipo})` : '')), e.minutos == null ? '' : Math.round(e.minutos),
+        e.contato_ms ? t48pTextoBR(e.contato_ms) : '', String(e.contato_por || ''), T48P_STATUS[e.status] || ''
+    ];
+}
+const t48pGravado = new Map();   // 14/10/2026: chave → colunas K:O (situação, minutos, 1º contato, status) que esta cópia gravou por último — só das atribuições da janela de 6 h
+async function t48pRodarMonitor() {
+    if (t48pMonitor.rodando) return;
+    if (!process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) { t48pMonitor.ultimoErro = 'sem credenciais do Google (GOOGLE_PRIVATE_KEY / GOOGLE_SERVICE_ACCOUNT_EMAIL): nada é gravado na planilha'; return; }
+    if (pool.waitingCount > 0 || Date.now() < FREIO.ate) return;   // 🛡️ banco ocupado (fila) ou com freio: tenta na próxima rodada
+    t48pMonitor.rodando = true;
+    try {
+        const agora = Date.now() / 1000;
+        const r = await t48pAvaliar(T48P_JANELA_TS, agora - 6 * 3600, agora - T48P_PRAZO_MIN * 60);
+        const atrasos = r.eventos.filter(e => (e.situacao === 'atrasado' || e.situacao === 'sem_contato') && !t48pMonitor.chaves.has(e.chave));
+        const mudaram = r.eventos.filter(e => (e.situacao === 'atrasado' || e.situacao === 'sem_contato') && t48pGravado.get(e.chave) !== JSON.stringify(t48pLinhaPlanilha(e).slice(10)));   // 14/10/2026: atraso que esta cópia ainda não gravou como está agora (linha nova ou que mudou)
+        if (atrasos.length || mudaram.length || !t48pMonitor.chavesLidas) {   // 14/10/2026: + mudaram (atualiza a linha que já existe)
+            const sheets = getSheetsRW();
+            await t48pGarantirAba(sheets);
+            const lidas = await sheets.spreadsheets.values.get({ spreadsheetId: SNOOZE_SHEET_ID, range: `${T48P_ABA}!B2:B` });   // relê as chaves: a outra cópia do Dash pode ter gravado
+            ((lidas.data && lidas.data.values) || []).forEach(l => { if (l && l[0]) t48pMonitor.chaves.add(String(l[0])); });
+            t48pMonitor.chavesLidas = true;
+            const linhasDe = {};   // 14/10/2026: chave → linhas da aba (2, 3, ...), lidas logo antes de gravar; chave repetida (as 2 cópias gravaram no mesmo segundo) atualiza todas
+            ((lidas.data && lidas.data.values) || []).forEach((l, k) => { if (l && l[0]) (linhasDe[String(l[0])] = linhasDe[String(l[0])] || []).push(k + 2); });
+            const novos = atrasos.filter(e => !t48pMonitor.chaves.has(e.chave)).sort((x, y) => x.atribuido_ms - y.atribuido_ms);
+            if (novos.length) {
+                await sheets.spreadsheets.values.append({ spreadsheetId: SNOOZE_SHEET_ID, range: `${T48P_ABA}!A:O`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: novos.map(t48pLinhaPlanilha) } });
+                novos.forEach(e => t48pMonitor.chaves.add(e.chave));
+                novos.forEach(e => t48pGravado.set(e.chave, JSON.stringify(t48pLinhaPlanilha(e).slice(10))));   // 14/10/2026
+                t48pMonitor.registrados += novos.length;
+                console.log(`⏱️ 1º contato 48H: ${novos.length} atraso(s) gravado(s) na planilha de log (aba ${T48P_ABA})`);
+            }
+            const paraAtualizar = mudaram.filter(e => linhasDe[e.chave]);   // 14/10/2026: a linha já está na aba → atualiza as colunas K:O dela (não grava de novo)
+            if (paraAtualizar.length) {
+                await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SNOOZE_SHEET_ID, requestBody: { valueInputOption: 'RAW', data: [].concat(...paraAtualizar.map(e => linhasDe[e.chave].map(n => ({ range: `${T48P_ABA}!K${n}:O${n}`, values: [t48pLinhaPlanilha(e).slice(10)] })))) } });
+                paraAtualizar.forEach(e => t48pGravado.set(e.chave, JSON.stringify(t48pLinhaPlanilha(e).slice(10))));
+                console.log(`⏱️ 1º contato 48H: ${paraAtualizar.length} linha(s) atualizada(s) na planilha de log (aba ${T48P_ABA})`);
+            }
+        }
+        [...t48pGravado.keys()].forEach(k => { if (!r.eventos.some(e => e.chave === k)) t48pGravado.delete(k); });   // 14/10/2026: memória só das atribuições que ainda estão na janela de 6 h
+        t48pMonitor.ultimaRodada = Date.now();
+        t48pMonitor.ultimoErro = '';
+    } catch (e) {
+        t48pMonitor.ultimoErro = String((e && e.message) || e).slice(0, 200);
+        console.error('[1º contato 48H] falha no monitor (tenta de novo em 5 min):', t48pMonitor.ultimoErro);
+    } finally { t48pMonitor.rodando = false; }
+}
+function t48pAgendar(ms) {   // a cada 5 min (± 30 s, para as 2 cópias do Dash não rodarem no mesmo segundo)
+    setTimeout(async () => { await t48pRodarMonitor(); t48pAgendar(5 * 60 * 1000 + Math.floor(Math.random() * 60000) - 30000); }, ms);
+}
+t48pAgendar(2 * 60 * 1000);   // 1ª rodada 2 min depois de ligar
+
+// ==========================================
+// 15.3.2 ⚖️ TMC E TMR JUSTOS (13/10/2026) — o relógio só corre na VEZ do agente
+// A vez começa quando o caso fica com o agente: registro "Atribuído a X por Y" / "X atribuiu a si mesmo essa conversa" (registro gravado até 60 s
+// depois da mensagem dele vale desde a mensagem) ou, sem registro, a tabela conversation_participants (só o agente atual, igual ao 1º contato 15 min).
+// A vez termina quando o caso sai dele: outro agente, sem agente ou troca para um time do qual ele não faz parte. Resolver NÃO tira o caso dele: só zera a espera.
+// Espera do cliente = 1ª mensagem dele ainda sem resposta (bot, nota e atividade não respondem). Cada resposta conta 1 e o relógio começa no que vier
+// por último: essa 1ª mensagem do cliente ou o início da vez. TMC = 1ª resposta do agente na vez · TMR = as demais respostas dele na vez.
+// Tempo corrido (24h, sábado e domingo contam). Período = data da resposta. Só LÊ o banco do Chatwoot.
+// À parte (fora da média): "fora da vez" = respondeu o cliente com o caso fora dele · "saiu sem resposta" = o caso saiu dele com o cliente esperando 15 min ou mais na vez dele.
+// Vale para 🧑‍💻 Atendimento por Agente e Time 48H (⏳ Visão Geral, 🏷️ Etiqueta 48H, 📦 Etiqueta Painel, 👥 Todos os Agentes e o /relatorio do bot).
+// 🧠 Inteligência por Produto segue contando da mensagem do cliente (mede quanto o cliente esperou). O cálculo antigo (SQL das rotas) fica em tmc_antigo_minutos / tmr_antigo_minutos.
+// Conferência: /api/raio-x-tmc
+// ==========================================
+const TJ_LOTE = 1000;   // conversas por consulta (não pesa no banco nem na memória do Dash)
+const TJ_ATRIB = /^(atribu|assigned to )|( atribuiu a si mesmo essa conversa| self-assigned this conversation)$/i;   // o mesmo filtro do T48P_SQL_ATRIB
+
+function tjUnixDia(dataStr, fimDoDia) {   // 00:00:00 (ou 23:59:59) do dia 'AAAA-MM-DD' no horário de Brasília, em segundos (UTC−3, igual ao bot)
+    const [a, m, d] = String(dataStr).split('-').map(Number);
+    return Date.UTC(a, m - 1, d, 3, 0, 0) / 1000 + (fimDoDia ? 86399 : 0);
+}
+
+// Mede cada resposta de agente das conversas (ids internos) enviada entre iniSeg e fimSeg (segundos). opcoes.amostras = guarda cada medição (Raio-X)
+async function tjCalcular(convIds, iniSeg, fimSeg, opcoes) {
+    const op = opcoes || {};
+    const nomes = await t48pNomes();
+    const porUsuario = {}, amostras = [];
+    const tot = (uid) => (porUsuario[uid] = porUsuario[uid] || { tmcS: 0, tmcN: 0, tmrS: 0, tmrN: 0, fora: 0, saiu: 0 });
+    const noPeriodo = (ts) => ts >= iniSeg && ts <= fimSeg;
+    const baseDe = (uid) => t48pNomeBase(nomes.nomePorId[uid]);
+    const mesmo = (id1, base1, id2, base2) => (id1 && id2) ? id1 === id2 : (!!base1 && base1 === base2);   // pelo id; sem id, pelo nome sem a sigla do time
+    const ids = [...new Set((convIds || []).map(Number).filter(n => n > 0))];
+    for (let i = 0; i < ids.length; i += TJ_LOTE) {
+        const lote = ids.slice(i, i + TJ_LOTE);
+        // 1) mensagens do cliente e respostas de agente (públicas, não apagadas) até o fim do período + registros de atribuição, desatribuição, time e resolvida
+        const msgs = (await pool.query(`
+            SELECT m.id, m.conversation_id AS conv_id, m.message_type AS tipo, m.sender_id, EXTRACT(EPOCH FROM m.created_at)::float8 AS ts,
+                   CASE WHEN m.message_type = 2 THEN m.content END AS content
+            FROM messages m
+            WHERE m.conversation_id = ANY($1::bigint[]) AND m.account_id = 1
+              AND ((m.message_type = 2 AND ${T48P_SQL_FIM})
+                OR (m.created_at <= (to_timestamp($2::float8) AT TIME ZONE 'UTC') AND m.private = FALSE
+                    AND (m.message_type = 0 OR (m.message_type = 1 AND m.sender_type = 'User' AND m.sender_id IS NOT NULL AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE))))`,
+            [lote, fimSeg + T48P_FOLGA_SEG])).rows;
+        // 2) atribuição automática antiga (sem registro na conversa): conversation_participants do agente ATUAL do ticket
+        let parts = [];
+        try {
+            parts = (await pool.query(`
+                SELECT cp.conversation_id AS conv_id, cp.user_id, EXTRACT(EPOCH FROM cp.created_at)::float8 AS ts
+                FROM conversation_participants cp
+                JOIN conversations c ON c.id = cp.conversation_id AND c.assignee_id = cp.user_id
+                WHERE cp.conversation_id = ANY($1::bigint[])`, [lote])).rows;
+        } catch (e) { parts = []; }   // Chatwoot sem a tabela: segue só com os registros da conversa
+        // 3) linha do tempo de cada conversa
+        const evPorConv = {}, regPorConv = {};
+        const add = (cid, ev) => { (evPorConv[cid] = evPorConv[cid] || []).push(ev); };
+        msgs.forEach(r => {
+            const cid = Number(r.conv_id), ts = Number(r.ts), id = Number(r.id), tipo = Number(r.tipo);
+            if (tipo === 0) { add(cid, { k: 'cli', ts, ord: 1, id }); return; }
+            if (tipo === 1) { add(cid, { k: 'ag', ts, ord: 2, id, uid: Number(r.sender_id) }); return; }
+            const txt = String(r.content || ''), l = t48pLerRegistro(txt, nomes);
+            const rg = regPorConv[cid] = regPorConv[cid] || { ts: [], com: new Set() };
+            if (TJ_ATRIB.test(txt)) rg.ts.push(ts);
+            if (!l) return;
+            if (l.tipo === 'atribuido') { if (l.agente_id) rg.com.add(l.agente_id); add(cid, { k: 'dono', ts, ord: 0, id, agente_id: l.agente_id, agente: l.agente }); }
+            else if (l.tipo === 'desatribuido') add(cid, { k: 'sem_dono', ts, ord: 0, id });
+            else if (l.tipo === 'time') add(cid, { k: 'time', ts, ord: 0, id, time_id: l.time_id });
+            else if (l.tipo === 'encerrado') add(cid, { k: 'resolvido', ts, ord: 0, id });
+            // time_removido: tirar o time não tira o agente
+        });
+        parts.forEach(p => {
+            const cid = Number(p.conv_id), uid = Number(p.user_id), ts = Number(p.ts), rg = regPorConv[cid];
+            if (rg && rg.com.has(uid)) return;                              // essa atribuição já tem o registro na conversa
+            if (rg && rg.ts.some(t => Math.abs(t - ts) <= 120)) return;     // registro de atribuição no mesmo instante
+            add(cid, { k: 'dono', ts, ord: 0, id: 0, agente_id: uid, agente: nomes.nomePorId[uid] || ('Agente #' + uid) });
+        });
+        // 4) a vez de cada agente, resposta por resposta
+        Object.keys(evPorConv).forEach(chave => {
+            const cid = Number(chave);
+            const evs = evPorConv[chave].sort((a, b) => (a.ts - b.ts) || (a.ord - b.ord) || (a.id - b.id));
+            const donos = evs.filter(e => e.k === 'dono');
+            let dono = null, espera = null;   // dono = de quem é a vez · espera = 1ª mensagem do cliente ainda sem resposta
+            const ehDele = (uid) => !!dono && mesmo(dono.id, dono.base, uid, baseDe(uid));
+            const sair = (ts) => {   // o caso saiu do agente: "saiu sem resposta" se o cliente esperava 15 min ou mais na vez dele
+                if (dono && dono.id && espera !== null && noPeriodo(ts)) {
+                    const seg = ts - Math.max(espera, dono.desde);
+                    if (seg >= T48P_PRAZO_MIN * 60) {
+                        tot(dono.id).saiu += 1;
+                        if (op.amostras) amostras.push({ conv_id: cid, uid: dono.id, tipo: 'saiu sem resposta', ts, espera, desde: dono.desde, seg });
+                    }
+                }
+                dono = null;
+            };
+            const assumir = (e, ts) => {   // o caso passa a ser de e.agente a partir de ts (registro do mesmo agente: a vez continua)
+                if (dono && mesmo(dono.id, dono.base, e.agente_id, t48pNomeBase(e.agente))) return;
+                sair(ts);
+                dono = { id: e.agente_id || null, nome: e.agente, base: t48pNomeBase(e.agente), desde: ts, respondeu: false };
+            };
+            evs.forEach(e => {
+                if (e.k === 'dono') { assumir(e, e.ts); return; }
+                if (e.k === 'sem_dono') { sair(e.ts); return; }
+                if (e.k === 'time') {   // mudou de time: se o agente faz parte do time novo, o caso continua com ele
+                    if (dono && dono.id && nomes.membros && e.time_id && nomes.membros.has(`${e.time_id}|${dono.id}`)) return;
+                    sair(e.ts); return;
+                }
+                if (e.k === 'resolvido') { espera = null; return; }   // resolvida: zera a espera (o caso continua com o agente)
+                if (e.k === 'cli') { if (espera === null) espera = e.ts; return; }
+                // resposta de agente
+                if (!ehDele(e.uid)) {   // folga: o registro da atribuição dele foi gravado até 60 s depois desta mensagem
+                    const prox = donos.find(d => d.ts > e.ts && d.ts <= e.ts + T48P_FOLGA_SEG && mesmo(d.agente_id, t48pNomeBase(d.agente), e.uid, baseDe(e.uid)));
+                    if (prox) assumir(prox, e.ts);
+                }
+                const daVez = ehDele(e.uid);
+                if (espera !== null && noPeriodo(e.ts)) {
+                    if (daVez) {
+                        const seg = Math.max(0, e.ts - Math.max(espera, dono.desde)), t = tot(e.uid);
+                        if (dono.respondeu) { t.tmrS += seg; t.tmrN += 1; } else { t.tmcS += seg; t.tmcN += 1; }
+                        if (op.amostras) amostras.push({ conv_id: cid, uid: e.uid, tipo: dono.respondeu ? 'TMR' : 'TMC', ts: e.ts, espera, desde: dono.desde, seg });
+                    } else {
+                        tot(e.uid).fora += 1;
+                        if (op.amostras) amostras.push({ conv_id: cid, uid: e.uid, tipo: 'fora da vez', ts: e.ts, espera, desde: null, seg: e.ts - espera, dono: dono ? dono.nome : '' });
+                    }
+                }
+                espera = null;   // o cliente foi respondido (por quem for)
+                if (daVez) dono.respondeu = true;
+            });
+        });
+    }
+    return { porUsuario, amostras, conversas: ids.length };
+}
+
+// Troca o TMC/TMR das linhas da tela pelo justo (mesmos agentes e tickets da rota) e guarda o antigo para conferência
+async function tjAplicar(dados, linhas, dataInicioSQL, dataFimSQL) {
+    if (!dados || !dados.length) return;
+    const nomePorUid = {};
+    (linhas || []).forEach(r => { nomePorUid[Number(r.user_id)] = r.agente; });
+    const r = await tjCalcular((linhas || []).map(x => x.conv_id), tjUnixDia(dataInicioSQL, false), tjUnixDia(dataFimSQL, true));
+    const porNome = {};
+    Object.keys(r.porUsuario).forEach(uid => {
+        const nome = nomePorUid[Number(uid)];
+        if (nome === undefined) return;   // agente que não está nesta tela
+        const s = r.porUsuario[uid], a = porNome[nome] = porNome[nome] || { tmcS: 0, tmcN: 0, tmrS: 0, tmrN: 0, fora: 0, saiu: 0 };
+        a.tmcS += s.tmcS; a.tmcN += s.tmcN; a.tmrS += s.tmrS; a.tmrN += s.tmrN; a.fora += s.fora; a.saiu += s.saiu;
+    });
+    dados.forEach(d => {
+        const a = porNome[d.agente] || { tmcS: 0, tmcN: 0, tmrS: 0, tmrN: 0, fora: 0, saiu: 0 };
+        d.tmc_antigo_minutos = d.tmc_medio_minutos;   // regra antiga (SQL da rota), só para conferência
+        d.tmr_antigo_minutos = d.tmr_medio_minutos;
+        d.tmc_medio_minutos = a.tmcN ? a.tmcS / a.tmcN / 60 : 0;
+        d.tmr_medio_minutos = a.tmrN ? a.tmrS / a.tmrN / 60 : 0;
+        d.tmc_qtd = a.tmcN;                 // base do TMC: 1ª resposta de cada vez
+        d.tmr_qtd = a.tmrN;                 // base do TMR: as demais respostas na vez
+        d.fora_da_vez = a.fora;             // à parte: respostas com o caso fora do agente
+        d.saiu_sem_resposta = a.saiu;       // à parte: casos que saíram do agente com o cliente esperando 15 min ou mais
+    });
+}
+
+// 🩻 RAIO-X DO TMC/TMR JUSTOS (somente leitura) — SOMENTE ADMIN · confere, num dia, cada resposta medida (dá para apagar esta rota sem afetar nada)
+// Abra: /api/raio-x-tmc (hoje) ou /api/raio-x-tmc?dia=AAAA-MM-DD
+app.get('/api/raio-x-tmc', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    if (!adms.includes(emailUser)) return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
+
+    const esc = (v) => String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const tabela = (cab, linhas) => '<table><tr>' + cab.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>' + linhas.map(l => '<tr>' + l.map(v => `<td>${v}</td>`).join('') + '</tr>').join('') + '</table>';
+    const dur = (min) => { if (!min) return '—'; const t = Math.round(min); return t < 60 ? t + ' min' : `${Math.floor(t / 60)}h ${t % 60}m`; };
+    const hora = (seg) => seg == null ? '—' : esc(t48pTextoBR(seg * 1000).slice(5, 16).replace(/^(\d\d)-(\d\d)/, '$2/$1'));   // 'DD/MM HH:MM' no horário de Brasília
+    const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.dia || '')) ? String(req.query.dia) : t48pTextoBR(Date.now()).slice(0, 10);
+    let html = `<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>Raio-X do TMC/TMR</title>
+    <style>
+      body{font-family:system-ui,Segoe UI,Arial;background:#0f172a;color:#e2e8f0;padding:24px;}
+      h1{color:#22d3ee;} h2{color:#93c5fd;margin-top:22px;border-bottom:1px solid #334155;padding-bottom:6px;font-size:16px;}
+      a{color:#38bdf8;text-decoration:none;} a:hover{text-decoration:underline;}
+      table{border-collapse:collapse;width:100%;margin-top:8px;font-size:13px;}
+      th,td{border:1px solid #334155;padding:6px 8px;text-align:left;vertical-align:top;}
+      th{background:#1e293b;color:#cbd5e1;} tr:nth-child(even){background:#111c30;}
+      .box{background:#1e293b;padding:10px 14px;border-radius:8px;margin-top:6px;line-height:1.6;}
+      .aviso{background:#064e3b;color:#a7f3d0;padding:8px 12px;border-radius:8px;display:inline-block;margin-bottom:10px;}
+      code{color:#fbbf24;}
+    </style></head><body>
+    <h1>🩻 Raio-X do TMC/TMR justos — ${esc(dia.split('-').reverse().join('/'))}</h1>
+    <div class="aviso">🔒 Modo leitura: só executa SELECT. Nada é criado, alterado ou apagado no Chatwoot.</div>
+    <div class="box">Regra: o relógio só corre na <b>vez do agente</b> (da atribuição até o caso sair dele). Cada resposta conta desde o que vier por último: a 1ª mensagem do cliente ainda sem resposta ou o início da vez.
+    <b>TMC</b> = 1ª resposta do agente na vez · <b>TMR</b> = as demais respostas dele na vez · tempo corrido. Outro dia: <code>/api/raio-x-tmc?dia=AAAA-MM-DD</code></div>`;
+    try {
+        const ini = tjUnixDia(dia, false), fim = tjUnixDia(dia, true);
+        // 1) antes × agora por agente: a própria rota do 🧑‍💻 Atendimento por Agente nesse dia
+        const ag = await tgGetInterno(`/api/atendimento-agentes?since=${ini}&until=${fim}`, 120000);
+        html += `<h2>1) Antes × agora por agente (🧑‍💻 Atendimento por Agente, mensagens enviadas no dia)</h2>`;
+        html += ag && ag.success && (ag.dados || []).length ? tabela(['agente', 'time', 'tickets', 'TMC antes', 'TMC agora', 'base TMC', 'TMR antes', 'TMR agora', 'base TMR', 'fora da vez', 'saiu sem resposta'], ag.dados.map(d => [
+            esc(d.agente), esc(d.time), esc(d.tickets), dur(d.tmc_antigo_minutos), `<b>${dur(d.tmc_medio_minutos)}</b>`, esc(d.tmc_qtd), dur(d.tmr_antigo_minutos), `<b>${dur(d.tmr_medio_minutos)}</b>`, esc(d.tmr_qtd), esc(d.fora_da_vez), esc(d.saiu_sem_resposta)
+        ])) : `<div class="box">${ag && ag.success ? '(nenhum agente enviou mensagem nesse dia)' : '(não consegui ler a rota do Atendimento por Agente agora)'}</div>`;
+
+        // 2) cada medição do dia (mais recentes primeiro), para conferir no Chatwoot
+        const ids = (await pool.query(`
+            SELECT DISTINCT m.conversation_id AS id
+            FROM messages m
+            WHERE m.account_id = 1 AND m.message_type = 1 AND m.private = FALSE AND m.sender_type = 'User' AND m.sender_id IS NOT NULL
+              AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+              AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+              AND m.created_at <= ($1 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'`, [dia])).rows.map(r => r.id);
+        const r = await tjCalcular(ids, ini, fim, { amostras: true });
+        const nomes = await t48pNomes();
+        const cont = {};
+        r.amostras.forEach(a => { cont[a.tipo] = (cont[a.tipo] || 0) + 1; });
+        const am = r.amostras.sort((a, b) => b.ts - a.ts).slice(0, 60);
+        const disp = {};
+        if (am.length) (await pool.query(`SELECT id, display_id FROM conversations WHERE id = ANY($1::bigint[])`, [[...new Set(am.map(a => a.conv_id))]])).rows.forEach(x => { disp[Number(x.id)] = x.display_id; });
+        html += `<h2>2) As 60 medições mais recentes do dia · ${r.conversas} conversas · ${Object.keys(cont).map(k => esc(k) + ': ' + cont[k]).join(' · ') || 'nenhuma medição'}</h2>`;
+        html += am.length ? tabela(['ticket', 'agente', 'medição', 'cliente esperando desde', 'vez do agente desde', 'resposta / saída', 'tempo contado', 'observação'], am.map(a => {
+            const id = disp[a.conv_id] || a.conv_id;
+            const obs = a.tipo === 'fora da vez' ? 'não entra na média · ' + (a.dono ? 'o caso estava com ' + esc(a.dono) : 'o caso estava sem agente')
+                : a.tipo === 'saiu sem resposta' ? 'não entra na média · o caso saiu do agente com o cliente esperando'
+                : (a.desde > a.espera ? 'o cliente já esperava antes da vez: conta desde o início da vez' : 'conta desde a 1ª mensagem do cliente sem resposta');
+            return [`<a href="https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(id)}" target="_blank">#${esc(id)}</a>`,
+                esc(nomes.nomePorId[a.uid] || ('Agente #' + a.uid)), esc(a.tipo), hora(a.espera), hora(a.desde), hora(a.ts), esc((a.seg / 60).toFixed(1)) + ' min', obs];
+        })) : '<div class="box">(nenhuma resposta a cliente esperando nesse dia)</div>';
+        html += '</body></html>';
+        res.send(html);
+    } catch (e) {
+        res.status(500).send(`<body style="background:#0f172a;color:#f87171;font-family:system-ui;padding:24px"><h1>Erro (nada foi alterado)</h1><pre>${String(e.message).replace(/</g,'&lt;')}</pre></body>`);
+    }
+});
+
+// 🩻 RAIO-X DA ATRIBUIÇÃO (somente leitura) — SOMENTE ADMIN · mostra os registros de atribuição que o banco tem nos tickets 48H/Painel
+// Abra: /api/raio-x-atribuicao
+app.get('/api/raio-x-atribuicao', async (req, res) => {
+    const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
+    const adms = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
+    if (!adms.includes(emailUser)) return res.status(403).send('<h1>Acesso restrito a administradores.</h1>');
+
+    const esc = (v) => (v === null || v === undefined) ? '<i style="color:#64748b">null</i>'
+        : String(typeof v === 'object' ? JSON.stringify(v) : v).replace(/</g, '&lt;');
+    const tabela = (cab, linhas) => '<table><tr>' + cab.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>' + linhas.map(l => '<tr>' + l.map(v => `<td>${v}</td>`).join('') + '</tr>').join('') + '</table>';
+    let html = `<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>Raio-X da Atribuição</title>
+    <style>
+      body{font-family:system-ui,Segoe UI,Arial;background:#0f172a;color:#e2e8f0;padding:24px;}
+      h1{color:#22d3ee;} h2{color:#93c5fd;margin-top:22px;border-bottom:1px solid #334155;padding-bottom:6px;font-size:16px;}
+      a{color:#38bdf8;text-decoration:none;} a:hover{text-decoration:underline;}
+      table{border-collapse:collapse;width:100%;margin-top:8px;font-size:13px;}
+      th,td{border:1px solid #334155;padding:6px 8px;text-align:left;vertical-align:top;}
+      th{background:#1e293b;color:#cbd5e1;} tr:nth-child(even){background:#111c30;}
+      .box{background:#1e293b;padding:10px 14px;border-radius:8px;margin-top:6px;line-height:1.6;}
+      .aviso{background:#064e3b;color:#a7f3d0;padding:8px 12px;border-radius:8px;display:inline-block;margin-bottom:10px;}
+      .ok{color:#34d399;} .fail{color:#f87171;} code{color:#fbbf24;}
+    </style></head><body>
+    <h1>🩻 Raio-X da Atribuição — ⏱️ 1º Contato 15 min do Time 48H</h1>
+    <div class="aviso">🔒 Modo leitura: só executa SELECT. Nada é criado, alterado ou apagado no Chatwoot.</div>
+    <div class="box">De onde vem a atribuição: <b>1)</b> o registro que o Chatwoot grava dentro da conversa toda vez que alguém atribui, pega para si, distribui por time ou a automação atribui (ex.: <code>Atribuído a Maria por Leo</code>) · <b>2)</b> a tabela <code>conversation_participants</code>, para a distribuição automática antiga, que não grava esse registro (só a do agente atual do ticket).<br>
+    Não servem: <code>audits</code> (o Chatwoot só guarda conversa apagada) e <code>reporting_events</code> (não tem evento de atribuição). Não precisa de webhook nem do Raio-X para puxar os dados.</div>`;
+    try {
+        const tabs = (await pool.query(`SELECT to_regclass('public.conversation_participants') IS NOT NULL AS conversation_participants, to_regclass('public.team_members') IS NOT NULL AS team_members, to_regclass('public.audits') IS NOT NULL AS audits`)).rows[0] || {};
+        html += `<h2>1) Tabelas</h2>` + tabela(['tabela', 'existe?', 'uso'], [
+            ['messages (registro de atividade, message_type 2)', '<span class="ok">sim</span>', 'fonte principal: quem atribuiu, para quem e quando'],
+            ['conversation_participants', tabs.conversation_participants ? '<span class="ok">sim</span>' : '<span class="fail">não</span>', 'distribuição automática antiga (sem registro na conversa)'],
+            ['team_members', tabs.team_members ? '<span class="ok">sim</span>' : '<span class="fail">não</span>', 'quando o ticket muda de time: o agente é desse time? (se for, o caso continua com ele)'],
+            ['audits', tabs.audits ? 'sim' : 'não', 'não usado (o Chatwoot não audita a conversa, só a exclusão)']
+        ]);
+
+        const nomes = await t48pNomes();
+        const ids = (await pool.query(`SELECT DISTINCT t.taggable_id AS id FROM taggings t JOIN tags tg ON tg.id = t.tag_id WHERE t.taggable_type = 'Conversation' AND (tg.name ILIKE '%time-48h%' OR tg.name ILIKE 'painel-do-pedido%')`)).rows.map(r => r.id);
+        const regs = ids.length ? (await pool.query(`
+            SELECT m.content
+            FROM messages m
+            WHERE m.conversation_id = ANY($1::bigint[]) AND m.account_id = 1 AND m.message_type = 2
+              AND m.created_at >= ((now() - interval '30 days') AT TIME ZONE 'UTC') AND ${T48P_SQL_FIM}
+            ORDER BY m.created_at DESC`, [ids])).rows : [];
+        const porTipo = {};
+        regs.forEach(r => {
+            const l = t48pLerRegistro(r.content, nomes);
+            const k = l ? (l.tipo === 'atribuido' ? 'atribuido · ' + l.origem + (l.agente_id ? '' : ' · agente não achado pelo nome') : l.tipo) : 'não reconhecido';
+            const o = porTipo[k] || (porTipo[k] = { n: 0, ex: [] });
+            o.n += 1;
+            if (o.ex.length < (k === 'não reconhecido' ? 15 : 2)) o.ex.push(r.content);
+        });
+        html += `<h2>2) Registros de atribuição nos tickets 48H/Painel — últimos 30 dias (${ids.length} tickets com a etiqueta, ${regs.length} registros)</h2>`;
+        html += Object.keys(porTipo).length ? tabela(['tipo', 'quantidade', 'exemplos'], Object.keys(porTipo).sort((a, b) => porTipo[b].n - porTipo[a].n).map(k => [esc(k), porTipo[k].n, porTipo[k].ex.map(esc).join('<br>')]))
+            : '<div class="box">(nenhum registro nos últimos 30 dias)</div>';
+
+        const agora = Date.now() / 1000;
+        const av = await t48pAvaliar(T48P_JANELA_TS, agora - 7 * 86400, agora);
+        const cont = t48pContar(av.eventos), d = av.diag;
+        const porSit = {};
+        av.eventos.forEach(e => { porSit[e.situacao] = (porSit[e.situacao] || 0) + 1; });
+        html += `<h2>3) Avaliação dos últimos 7 dias (mesma regra da sub-aba ⏱️ 1º Contato 15 min)</h2>`;
+        html += tabela(['item', 'quantidade'], [
+            ['registros de atribuição lidos', d.registros], ['atribuições pela conversation_participants (sem registro)', d.participantes_usados],
+            ['atribuições sem o cliente esperando resposta (não entram)', d.sem_cliente_esperando],
+            ['contadas (prazo vencido)', cont.atribuicoes], ['✅ no prazo (até 15 min)', cont.no_prazo], ['🟠 contato atrasado', cont.atrasado], ['🔴 sem contato', cont.sem_contato],
+            ['⏳ ainda dentro dos 15 min', cont.aguardando], ['fora da conta (saiu do agente ou encerrou antes dos 15 min)', cont.fora_da_conta],
+            ['por situação', esc(porSit)]
+        ]);
+        const amostra = av.eventos.slice().sort((x, y) => y.atribuido_ms - x.atribuido_ms).slice(0, 30);
+        html += `<h2>4) Amostra: as 30 atribuições mais recentes (confira no Chatwoot)</h2>`;
+        html += amostra.length ? tabela(['ticket', 'agente', 'atribuído em', 'por', 'origem', 'cliente escreveu', '1º contato', 'minutos', 'situação', 'fim da vez'], amostra.map(e => [
+            `<a href="https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(e.id)}" target="_blank">#${esc(e.id)}</a>`,
+            esc(e.agente), esc(t48pTextoBR(e.atribuido_ms)), esc(e.atribuido_por), esc(e.origem), esc(t48pTextoBR(e.cliente_ms)),
+            e.contato_ms ? esc(t48pTextoBR(e.contato_ms) + ' · ' + (e.contato_por || '')) : '—', e.minutos == null ? '—' : esc(e.minutos), esc(e.situacao),
+            e.fim_tipo ? esc(e.fim_tipo + ' · ' + t48pTextoBR(e.fim_ms)) : '—'
+        ])) : '<div class="box">(nenhuma atribuição nos últimos 7 dias)</div>';
+
+        const reg = t48pRegistroInfo();
+        html += `<h2>5) Registro na planilha de log (aba <code>${T48P_ABA}</code>)</h2><div class="box">Credenciais do Google: ${reg.configurado ? '<span class="ok">ok</span>' : '<span class="fail">faltando — o monitor não grava</span>'} · roda a cada ${reg.intervalo_min} min · última rodada: ${reg.ultima_rodada ? esc(t48pTextoBR(reg.ultima_rodada)) : '—'} · gravados desde que o Dash ligou: ${reg.registrados}${reg.ultimo_erro ? ` · <span class="fail">último erro: ${esc(reg.ultimo_erro)}</span>` : ''}</div>`;
+        html += '</body></html>';
+        res.send(html);
+    } catch (e) {
+        res.status(500).send(`<body style="background:#0f172a;color:#f87171;font-family:system-ui;padding:24px"><h1>Erro (nada foi alterado)</h1><pre>${String(e.message).replace(/</g,'&lt;')}</pre></body>`);
     }
 });
 
@@ -3180,6 +4030,8 @@ app.get('/api/atendimento-agentes', async (req, res) => {
             dataInicioSQL = formatarDataSQL(dInicio);
             dataFimSQL = formatarDataSQL(agora);
         }
+        const erroPeriodo = t48PeriodoGrande(dataInicioSQL, dataFimSQL);   // 🛡️ 14/10/2026: teto de período (consulta pesada no banco do Chatwoot)
+        if (erroPeriodo) return res.status(400).json({ success: false, error: erroPeriodo });
         const agenteId = /^\d+$/.test(String(req.query.agente_id || '')) ? parseInt(req.query.agente_id, 10) : null;
         const comDetalhes = req.query.detalhes === '1' || agenteId !== null;
         const TIMES = ['RET', 'SAC', 'BKO', 'SMS', '48H'];
@@ -3345,6 +4197,7 @@ app.get('/api/atendimento-agentes', async (req, res) => {
             if (comDetalhes) linha.detalhes = dets;   // a lista de tickets só vai quando pedida (Ver Tickets / Excel): o mês inteiro de todos os times é grande
             return linha;
         }).sort((x, y) => (y.tickets - x.tickets) || (y.mensagens - x.mensagens) || x.agente.localeCompare(y.agente));
+        await tjAplicar(dados, todasLinhas, dataInicioSQL, dataFimSQL);   // ⚖️ TMC/TMR justos (13/10/2026): só na vez do agente (todasLinhas: o mesmo resultado com ou sem filtro de time)
 
         // Resumo por time sem repetir ticket (ticket atendido por 2 agentes do mesmo time conta 1 vez)
         const porTime = {};
@@ -3370,10 +4223,12 @@ app.get('/api/atendimento-agentes', async (req, res) => {
 });
 
 // ==========================================
-// 15.5 TICKETS OPERAÇÃO — 📥 RECEBIMENTO DE TICKETS (06/10/2026)
+// 15.5 TICKETS OPERAÇÃO — 📥 RECEBIMENTO DE TICKETS (06/10/2026 · regra nova em 14/10/2026)
 // Conversas NOVAS criadas no período, separadas por time pela mesma regra do Status de Casos:
-// etiqueta 48H/Painel → 48H · caixa [GEX] SMS Support → SMS · time do Chatwoot → RET/SAC/BKO/SMS · sem time → OUTROS
-// (a caixa "Atendimento | Brasil" só entra com etiqueta 48H) · compara com o período anterior do mesmo tamanho · hoje = dia parcial
+// etiqueta 48H/Painel colocada na chegada (até 10 min) → 48H · caixa [GEX] SMS Support → SMS · time do Chatwoot → RET/SAC/BKO/SMS
+// · etiqueta colocada depois e time desconhecido → 48H · sem time → OUTROS · compara com o período anterior do mesmo tamanho · hoje = dia parcial
+// 14/10: só conta a conversa aberta pelo cliente (1ª mensagem pública é dele) · duplicadas (etiqueta "duplicado"), abertas por nós
+// e sem mensagem ficam à parte em "fora" · caixas "Atendimento | Brasil" e "Pitaco Teste" fora, sem exceção
 // ==========================================
 app.get('/api/recebimento-tickets', async (req, res) => {
     const emailUser = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
@@ -3402,10 +4257,11 @@ app.get('/api/recebimento-tickets', async (req, res) => {
 
         const base = (selecao) => `
             WITH Conv48 AS (
-                SELECT DISTINCT tg.taggable_id AS conv_id
+                SELECT tg.taggable_id AS conv_id, MIN(tg.created_at) AS etiquetada_em   -- 14/10: quando a etiqueta 48H/Painel foi colocada
                 FROM taggings tg
                 JOIN tags t2 ON t2.id = tg.tag_id
                 WHERE tg.taggable_type = 'Conversation' AND (t2.name ILIKE '%time-48h%' OR t2.name ILIKE 'painel-do-pedido%')
+                GROUP BY tg.taggable_id
             ),
             Recebidos AS (
                 SELECT
@@ -3413,27 +4269,40 @@ app.get('/api/recebimento-tickets', async (req, res) => {
                     c.assignee_id,
                     (c.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS criado_br,
                     CASE
-                        WHEN c.id IN (SELECT conv_id FROM Conv48) THEN '48H'
+                        WHEN c48.etiquetada_em <= c.created_at + interval '10 minutes' THEN '48H'   -- 14/10: 48H só com a etiqueta colocada na chegada
                         WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
                         WHEN t.name ILIKE '%reten%' THEN 'RET'
                         WHEN t.name ILIKE '%sac%' THEN 'SAC'
                         WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
                         WHEN t.name ILIKE '%sms%' THEN 'SMS'
+                        WHEN c48.conv_id IS NOT NULL THEN '48H'   -- 14/10: etiqueta colocada depois e time desconhecido
                         ELSE 'OUTROS'
-                    END AS setor
+                    END AS setor,
+                    CASE   -- 14/10: só a conversa aberta pelo cliente conta; o resto fica à parte
+                        WHEN COALESCE(c.cached_label_list, '') ILIKE '%duplicado%' THEN 'duplicado'
+                        WHEN pm.message_type IS NULL THEN 'sem_mensagem'
+                        WHEN pm.message_type IN (1, 3) THEN 'aberto_por_nos'
+                        ELSE 'valido'
+                    END AS tipo
                 FROM conversations c
                 LEFT JOIN teams t ON t.id = c.team_id
                 LEFT JOIN inboxes i ON i.id = c.inbox_id
+                LEFT JOIN Conv48 c48 ON c48.conv_id = c.id
+                LEFT JOIN LATERAL (   -- 14/10: 1ª mensagem pública (0 = do cliente · 1 e 3 = nossa)
+                    SELECT m.message_type FROM messages m
+                    WHERE m.conversation_id = c.id AND m.private = FALSE AND m.message_type IN (0, 1, 3)
+                    ORDER BY m.created_at, m.id LIMIT 1
+                ) pm ON TRUE
                 WHERE c.account_id = 1
                   AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                   AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
-                  AND (i.name IS NULL OR i.name != 'Atendimento | Brasil' OR c.id IN (SELECT conv_id FROM Conv48))
+                  AND (i.name IS NULL OR i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste'))   -- 14/10: fora, sem exceção
             )
             ${selecao}`;
         const linhas = (await pool.query(base(`
-            SELECT setor, TO_CHAR(criado_br, 'YYYY-MM-DD') AS dia, EXTRACT(HOUR FROM criado_br)::int AS hora, status, (assignee_id IS NULL) AS sem_agente, COUNT(*)::int AS qtd
-            FROM Recebidos GROUP BY 1, 2, 3, 4, 5`), [dataInicioSQL, dataFimSQL])).rows;
-        const linhasAnt = (await pool.query(base(`SELECT setor, COUNT(*)::int AS qtd FROM Recebidos GROUP BY 1`), [ymd(antIni), ymd(antFim)])).rows;
+            SELECT setor, TO_CHAR(criado_br, 'YYYY-MM-DD') AS dia, EXTRACT(HOUR FROM criado_br)::int AS hora, status, (assignee_id IS NULL) AS sem_agente, tipo, COUNT(*)::int AS qtd
+            FROM Recebidos GROUP BY 1, 2, 3, 4, 5, 6`), [dataInicioSQL, dataFimSQL])).rows;
+        const linhasAnt = (await pool.query(base(`SELECT setor, COUNT(*)::int AS qtd FROM Recebidos WHERE tipo = 'valido' GROUP BY 1`), [ymd(antIni), ymd(antFim)])).rows;
 
         const TIMES = ['RET', 'SAC', 'BKO', 'SMS', '48H', 'OUTROS'];
         const zerado = () => { const o = { total: 0 }; TIMES.forEach(t => { o[t] = 0; }); return o; };
@@ -3446,8 +4315,15 @@ app.get('/api/recebimento-tickets', async (req, res) => {
         const situacao = {};
         ['TODOS', ...TIMES].forEach(t => { situacao[t] = { abertos: 0, sem_agente: 0, pendentes: 0, adiados: 0, resolvidos: 0 }; });
         const porTime = zerado();
+        const fora = {};   // 14/10: o que ficou fora da conta, por time
+        ['TODOS', ...TIMES].forEach(t => { fora[t] = { duplicados: 0, abertos_por_nos: 0, sem_mensagem: 0 }; });
         linhas.forEach(r => {
             const t = TIMES.includes(r.setor) ? r.setor : 'OUTROS', n = parseInt(r.qtd) || 0, st = parseInt(r.status);
+            if (r.tipo !== 'valido') {   // 14/10: duplicada, aberta por nós ou sem mensagem → à parte
+                const k = r.tipo === 'duplicado' ? 'duplicados' : (r.tipo === 'aberto_por_nos' ? 'abertos_por_nos' : 'sem_mensagem');
+                fora.TODOS[k] += n; fora[t][k] += n;
+                return;
+            }
             porTime.total += n; porTime[t] += n;
             if (porDia[r.dia]) { porDia[r.dia].total += n; porDia[r.dia][t] += n; }
             if (porHora[r.hora]) { porHora[r.hora].total += n; porHora[r.hora][t] += n; }
@@ -3468,6 +4344,7 @@ app.get('/api/recebimento-tickets', async (req, res) => {
             por_dia: Object.values(porDia),
             por_hora: porHora,
             situacao: situacao,
+            fora: fora,   // 14/10
             anterior: { inicio: ymd(antIni), fim: ymd(antFim), dias: dias, por_time: anterior }
         });
     } catch (error) {
@@ -3477,9 +4354,1016 @@ app.get('/api/recebimento-tickets', async (req, res) => {
 });
 
 // ==========================================
+// 15.5.1 ⏱️ SLA DO RECEBIMENTO (16/10/2026) — sub-aba ⏱️ SLA de Recebimento de Tickets · SOMENTE ADMIN · só leitura
+// Uma consulta por carga traz todos os blocos (cards, hora, dia, faixa, próxima resposta, capacidade, agora) em formato longo; o filtro de time é feito na tela.
+// O cache de 30 min por período é o do cacheMiddleware (a URL tem o período); o 🔄 Atualizar fura o cache com fresh=1.
+// Período máximo de 92 dias; a comparação com o período anterior (mesmo tamanho) vai até 46 dias, para não pesar no banco.
+// ==========================================
+const SLA_MAX_DIAS = 31, SLA_MAX_DIAS_COMPARACAO = 31;   // 17/10/2026: SLA por aberturas — período máximo 31 dias, sempre compara com o anterior do mesmo tamanho
+const SLA_SQL = `
+-- ⏱️ SLA do Recebimento v2 (17/10/2026) — base de ABERTURAS (clientes N+R). Uma consulta por carga, só leitura.
+-- Espera (w) = do instante da abertura até o 1º contato humano (message_type 1, público, sender_id <> 2), tempo corrido.
+-- "% em até 1h" só conta a abertura que já passou de 1h (mad1); "% em até 24h" só a que já passou de 24h (mad24); sem contato = fora.
+-- $1 = início · $2 = fim (AAAA-MM-DD, Brasília) · $2 = início da leitura (período anterior; = $1 sem comparação) · $3 = dia seguinte ao fim.
+-- Saída em formato longo: bloco, periodo, setor, k, n, v1..v9.
+WITH conv AS (
+    SELECT c.id, c.inbox_id
+    FROM conversations c JOIN inboxes i ON i.id = c.inbox_id
+    WHERE c.account_id = 1
+      AND i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste')
+      AND COALESCE(c.cached_label_list, '') NOT ILIKE '%duplicado%'
+      AND COALESCE(c.cached_label_list, '') NOT ILIKE '%spam%'
+      AND COALESCE(c.cached_label_list, '') NOT ILIKE '%compra_teste%'
+      AND c.contact_id NOT IN (279944, 244572, 9950, 272736, 244905, 4133, 271799)
+      AND c.last_activity_at >= ($2 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+),
+ev AS (
+    SELECT c.id AS cid, c.created_at AS t, 1 AS pri, 'criacao' AS src FROM conversations c
+    WHERE c.account_id = 1 AND c.created_at >= ($2 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND c.created_at < ($3 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+    UNION ALL
+    SELECT m.conversation_id, m.created_at, 2, CASE WHEN m.content ILIKE '%Sarah Williams%' OR m.content ILIKE 'O sistema reabriu%' THEN 'reab_cli' ELSE 'reab_ag' END
+    FROM messages m WHERE m.account_id = 1 AND m.message_type = 2
+      AND (m.content ILIKE 'Conversa foi reaberta%' OR m.content ILIKE 'O sistema reabriu%' OR m.content ILIKE 'Conversation was reopened%')
+      AND m.created_at >= ($2 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND m.created_at < ($3 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+    UNION ALL
+    SELECT re.conversation_id, re.created_at, 3, 'evt' FROM reporting_events re
+    WHERE re.account_id = 1 AND re.name = 'conversation_opened'
+      AND re.created_at >= ($2 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' AND re.created_at < ($3 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+),
+ev2 AS (SELECT ev.*, lag(t) OVER (PARTITION BY cid ORDER BY t, pri) AS tprev FROM ev WHERE cid IN (SELECT id FROM conv)),
+grp AS (SELECT *, sum(CASE WHEN tprev IS NULL OR t - tprev > interval '2 minutes' THEN 1 ELSE 0 END) OVER (PARTITION BY cid ORDER BY t, pri) AS g FROM ev2),
+ab AS (SELECT cid, g, min(t) AS t, bool_or(src = 'criacao') AS criacao, bool_or(src = 'reab_cli') AS rcli, bool_or(src = 'reab_ag') AS rag FROM grp GROUP BY cid, g),
+cli AS (
+    SELECT conv.inbox_id, i.name AS caixa,
+      CASE WHEN i.channel_type = 'Channel::Email' THEN 'E-mail' WHEN i.name = '[GEX] SMS Support' THEN 'SMS' WHEN i.channel_type = 'Channel::WebWidget' THEN 'Chat web' ELSE 'Outros' END AS canal,
+      ab.t,
+      (ab.t AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS tb,
+      CASE WHEN ab.t >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' THEN 'atual' ELSE 'anterior' END AS periodo,
+      CASE WHEN ab.criacao THEN CASE WHEN (SELECT m.message_type FROM messages m WHERE m.conversation_id = ab.cid AND m.private = false AND m.message_type IN (0,1,3) ORDER BY m.created_at, m.id LIMIT 1) = 0 THEN 'N' ELSE 'F' END
+           WHEN EXISTS (SELECT 1 FROM messages x WHERE x.conversation_id = ab.cid AND x.message_type = 0 AND x.created_at BETWEEN ab.t - interval '2 minutes' AND ab.t + interval '2 minutes') THEN 'R'
+           ELSE 'S' END AS tipo,   -- 20/10: reabertura com msg do cliente = Retorno (R); sem = Follow-up nosso (S)
+      (SELECT min(m.created_at) FROM messages m WHERE m.conversation_id = ab.cid AND m.message_type = 1 AND m.private = false AND m.sender_type = 'User' AND m.sender_id <> 2 AND coalesce(m.content_attributes::text, '') NOT LIKE '%deleted%true%' AND m.created_at >= ab.t - interval '2 minutes') AS t1,
+      (SELECT min(m.created_at) FROM messages m LEFT JOIN users uia ON uia.id = m.sender_id WHERE m.conversation_id = ab.cid AND m.message_type = 1 AND m.private = false AND (m.sender_id = 2 OR uia.name ILIKE '%sarah williams%' OR uia.name ILIKE '%copilot%') AND coalesce(m.content_attributes::text, '') NOT LIKE '%deleted%true%' AND m.created_at >= ab.t - interval '2 minutes') AS t1_ia
+    FROM ab JOIN conv ON conv.id = ab.cid JOIN inboxes i ON i.id = conv.inbox_id
+),
+c AS (  -- só clientes (N+R), com a espera em minutos e as marcas de prazo
+    SELECT inbox_id, caixa, canal, periodo, tb,
+      extract(hour from tb)::int AS ha,
+      CASE WHEN t1 IS NULL THEN NULL WHEN t1::date <> t::date THEN 99 ELSE extract(hour from (t1 AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo'))::int END AS hc,
+      CASE WHEN t1 IS NULL THEN NULL ELSE greatest(0, extract(epoch from (t1 - t)) / 60.0) END AS w,
+      CASE WHEN t1_ia IS NULL THEN NULL ELSE greatest(0, extract(epoch from (t1_ia - t)) / 60.0) END AS w_ia,
+      (t1_ia IS NOT NULL) AS tocou_ia,
+      (t1_ia IS NOT NULL AND (t1 IS NULL OR t1_ia < t1)) AS robo_antes,
+      (t <= (now() AT TIME ZONE 'UTC') - interval '1 hour') AS mad1,
+      (t <= (now() AT TIME ZONE 'UTC') - interval '2 hours') AS mad2,
+      (t <= (now() AT TIME ZONE 'UTC') - interval '24 hours') AS mad24
+    FROM cli WHERE tipo IN ('N', 'R')
+)
+-- 1) por CANAL (+ Geral) — cards, tabela e metas
+SELECT 'canal' AS bloco, periodo, coalesce(canal, 'Geral') AS setor, NULL::text AS k,
+  count(*)::numeric AS n,
+  count(*) FILTER (WHERE mad1)::numeric AS v1,
+  count(*) FILTER (WHERE mad1 AND w <= 60)::numeric AS v2,
+  count(*) FILTER (WHERE mad24)::numeric AS v3,
+  count(*) FILTER (WHERE mad24 AND w <= 1440)::numeric AS v4,
+  count(w)::numeric AS v5,
+  count(*) FILTER (WHERE w IS NULL)::numeric AS v6,
+  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY w))::numeric, 0) AS v7,
+  round((percentile_cont(0.9) WITHIN GROUP (ORDER BY w))::numeric, 0) AS v8,
+  count(*) FILTER (WHERE mad2)::numeric AS v9,
+  count(*) FILTER (WHERE mad2 AND w <= 120)::numeric AS v10
+FROM c GROUP BY GROUPING SETS ((periodo, canal), (periodo))
+UNION ALL
+-- 1b) ROBÔ/IA: 1º contato do robô/IA (FLAGADO — não é atendimento humano; só pra ficarmos cientes)
+SELECT 'robo' AS bloco, periodo, coalesce(canal, 'Geral') AS setor, NULL::text AS k,
+  count(*)::numeric AS n,
+  count(*) FILTER (WHERE tocou_ia)::numeric AS v1,
+  count(*) FILTER (WHERE robo_antes)::numeric AS v2,
+  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY w_ia))::numeric, 0) AS v3,
+  NULL::numeric AS v4, NULL::numeric AS v5, NULL::numeric AS v6, NULL::numeric AS v7, NULL::numeric AS v8, NULL::numeric AS v9, NULL::numeric AS v10
+FROM c GROUP BY GROUPING SETS ((periodo, canal), (periodo))
+UNION ALL
+-- 2) por CAIXA (setor = nome da caixa, k = canal)
+SELECT 'caixa', periodo, caixa, canal, count(*)::numeric,
+  count(*) FILTER (WHERE mad1), count(*) FILTER (WHERE mad1 AND w <= 60),
+  count(*) FILTER (WHERE mad24), count(*) FILTER (WHERE mad24 AND w <= 1440),
+  count(w), count(*) FILTER (WHERE w IS NULL),
+  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY w))::numeric, 0),
+  round((percentile_cont(0.9) WITHIN GROUP (ORDER BY w))::numeric, 0),
+  count(*) FILTER (WHERE mad2), count(*) FILTER (WHERE mad2 AND w <= 120)
+FROM c GROUP BY periodo, caixa, canal
+UNION ALL
+-- 3) por PERÍODO DO DIA (7-8 · 9-15 · 16-19 · 20-23 · 0-6) — por canal e Geral
+SELECT 'periododia', periodo, coalesce(canal, 'Geral'), faixa,
+  count(*)::numeric, count(*) FILTER (WHERE mad1), count(*) FILTER (WHERE mad1 AND w <= 60),
+  count(*) FILTER (WHERE mad24), count(*) FILTER (WHERE mad24 AND w <= 1440),
+  count(w), count(*) FILTER (WHERE w IS NULL), NULL, NULL, count(*) FILTER (WHERE mad2), count(*) FILTER (WHERE mad2 AND w <= 120)
+FROM (SELECT periodo, canal, mad1, mad2, mad24, w,
+        CASE WHEN ha BETWEEN 7 AND 8 THEN '1 07h-08h' WHEN ha BETWEEN 9 AND 15 THEN '2 09h-15h' WHEN ha BETWEEN 16 AND 19 THEN '3 16h-19h' WHEN ha BETWEEN 20 AND 23 THEN '4 20h-23h' ELSE '5 00h-06h' END AS faixa
+      FROM c) pc
+GROUP BY GROUPING SETS ((periodo, canal, faixa), (periodo, faixa))
+UNION ALL
+-- 4) por HORA DE CHEGADA (0-23), período atual, por canal e Geral — faixa de % em até 1h
+SELECT 'horachegada', 'atual', coalesce(canal, 'Geral'), lpad(ha::text, 2, '0'),
+  count(*)::numeric, count(*) FILTER (WHERE mad1), count(*) FILTER (WHERE mad1 AND w <= 60),
+  count(*) FILTER (WHERE mad24), count(*) FILTER (WHERE mad24 AND w <= 1440),
+  count(w), count(*) FILTER (WHERE w IS NULL), NULL, NULL, count(*) FILTER (WHERE mad2), count(*) FILTER (WHERE mad2 AND w <= 120)
+FROM c WHERE periodo = 'atual' GROUP BY GROUPING SETS ((canal, ha), (ha))
+UNION ALL
+-- 5) ESPERANDO POR HORA (matriz hora-da-abertura × hora-do-1º-contato), período atual, por canal e Geral.
+--    hc: hora do contato no MESMO dia (0-23) · 99 = contato só no dia seguinte · NULL(k ...|-1) = nunca teve contato. O Node faz a foto por hora.
+SELECT 'esperando', 'atual', coalesce(canal, 'Geral'), ha::text || '|' || coalesce(hc, -1)::text,
+  count(*)::numeric, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+FROM c WHERE periodo = 'atual' GROUP BY GROUPING SETS ((canal, ha, hc), (ha, hc))
+UNION ALL
+-- 6) por DIA (atual, Geral) — para o Excel
+SELECT 'dia', 'atual', 'Geral', to_char(tb, 'YYYY-MM-DD'),
+  count(*)::numeric, count(*) FILTER (WHERE mad1), count(*) FILTER (WHERE mad1 AND w <= 60),
+  count(*) FILTER (WHERE mad24), count(*) FILTER (WHERE mad24 AND w <= 1440),
+  count(w), count(*) FILTER (WHERE w IS NULL), NULL, NULL, count(*) FILTER (WHERE mad2), count(*) FILTER (WHERE mad2 AND w <= 120)
+FROM c WHERE periodo = 'atual' GROUP BY to_char(tb, 'YYYY-MM-DD')
+UNION ALL
+-- 7) AGORA: casos abertos com o cliente esperando, por time e agente (independe do período)
+SELECT 'agora', 'agora', ag.setor, coalesce(u.name, '(sem agente)'), count(*)::numeric,
+  count(*) FILTER (WHERE ag.espera <= interval '24 hours'),
+  count(*) FILTER (WHERE ag.espera > interval '24 hours' AND ag.espera <= interval '48 hours'),
+  count(*) FILTER (WHERE ag.espera > interval '48 hours'),
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL
+FROM (
+  SELECT c2.assignee_id,
+    CASE WHEN COALESCE(c2.cached_label_list,'') ILIKE '%time-48h%' OR COALESCE(c2.cached_label_list,'') ILIKE '%painel-do-pedido%' THEN '48H'
+      WHEN i.name = '[GEX] SMS Support' THEN 'SMS' WHEN t.name ILIKE '%reten%' THEN 'RET' WHEN t.name ILIKE '%sac%' THEN 'SAC'
+      WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
+      WHEN t.name ILIKE '%sms%' THEN 'SMS' ELSE 'OUTROS' END AS setor,
+    lm.message_type AS ult_tipo, (now() AT TIME ZONE 'UTC') - lm.created_at AS espera
+  FROM conversations c2
+  LEFT JOIN teams t ON t.id = c2.team_id LEFT JOIN inboxes i ON i.id = c2.inbox_id
+  LEFT JOIN LATERAL (SELECT m.message_type, m.created_at FROM messages m
+     WHERE m.conversation_id = c2.id AND m.private = FALSE AND m.message_type IN (0, 1)
+       AND (m.message_type = 0 OR (m.sender_type = 'User' AND m.sender_id IS NOT NULL AND m.sender_id <> 2))
+     ORDER BY m.created_at DESC LIMIT 1) lm ON TRUE
+  WHERE c2.account_id = 1 AND c2.status = 0
+    AND COALESCE(c2.cached_label_list, '') NOT ILIKE '%duplicado%'
+    AND (i.name IS NULL OR i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste'))
+) ag LEFT JOIN users u ON u.id = ag.assignee_id
+WHERE ag.ult_tipo = 0
+GROUP BY ag.setor, u.name
+UNION ALL
+-- 8) FILA ABERTA em 3 (como o Cockpit): nunca respondida / cliente esperando / follow-up nosso
+SELECT 'fila', 'agora', fa.setor, NULL::text, count(*)::numeric,
+  count(*) FILTER (WHERE NOT fa.tem_resp)::numeric,
+  count(*) FILTER (WHERE fa.tem_resp AND fa.ult = 0)::numeric,
+  count(*) FILTER (WHERE fa.ult = 1)::numeric,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL
+FROM (
+  SELECT
+    CASE WHEN COALESCE(c2.cached_label_list,'') ILIKE '%time-48h%' OR COALESCE(c2.cached_label_list,'') ILIKE '%painel-do-pedido%' THEN '48H'
+      WHEN i.name = '[GEX] SMS Support' THEN 'SMS' WHEN t.name ILIKE '%reten%' THEN 'RET' WHEN t.name ILIKE '%sac%' THEN 'SAC'
+      WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
+      WHEN t.name ILIKE '%sms%' THEN 'SMS' ELSE 'OUTROS' END AS setor,
+    lm.message_type AS ult,
+    EXISTS (SELECT 1 FROM messages mr WHERE mr.conversation_id = c2.id AND mr.private = FALSE AND mr.message_type = 1 AND mr.sender_type = 'User' AND mr.sender_id <> 2) AS tem_resp
+  FROM conversations c2
+  LEFT JOIN teams t ON t.id = c2.team_id LEFT JOIN inboxes i ON i.id = c2.inbox_id
+  LEFT JOIN LATERAL (SELECT m.message_type FROM messages m
+     WHERE m.conversation_id = c2.id AND m.private = FALSE AND m.message_type IN (0, 1)
+       AND (m.message_type = 0 OR (m.sender_type = 'User' AND m.sender_id IS NOT NULL AND m.sender_id <> 2))
+     ORDER BY m.created_at DESC LIMIT 1) lm ON TRUE
+  WHERE c2.account_id = 1 AND c2.status = 0
+    AND COALESCE(c2.cached_label_list, '') NOT ILIKE '%duplicado%'
+    AND (i.name IS NULL OR i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste'))
+) fa
+GROUP BY fa.setor
+`;
+app.get('/api/recebimento-sla', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        let ini, fim;
+        if (req.query.since && req.query.until) {
+            ini = unixParaYYYYMMDD(req.query.since);
+            fim = unixParaYYYYMMDD(req.query.until);
+        } else {   // padrão: do dia 1º do mês até hoje (igual ao Recebimento)
+            const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1));
+            fim = formatarDataSQL(agora);
+        }
+        const DIA_MS = 86400000, ymd = d => d.toISOString().slice(0, 10);
+        const dIni = new Date(ini + 'T00:00:00Z'), dFim = new Date(fim + 'T00:00:00Z');
+        const dias = Math.round((dFim - dIni) / DIA_MS) + 1;
+        if (!(dias >= 1)) return res.status(400).json({ success: false, error: 'Período inválido.' });
+        if (dias > SLA_MAX_DIAS) return res.status(400).json({ success: false, error: `Período máximo de ${SLA_MAX_DIAS} dias (o escolhido tem ${dias}).` });
+        const comparar = dias <= SLA_MAX_DIAS_COMPARACAO;
+        const antIni = new Date(dIni.getTime() - dias * DIA_MS), antFim = new Date(dIni.getTime() - DIA_MS);
+        const t0 = Date.now();
+        const { rows } = await pool.query(SLA_SQL, [ini, comparar ? ymd(antIni) : ini, ymd(new Date(dFim.getTime() + DIA_MS))]);
+        const ms = Date.now() - t0;
+        console.log(`⏱️ SLA do Recebimento ${ini} a ${fim}${comparar ? ' (+ período anterior)' : ''}: ${rows.length} linhas em ${ms} ms`);
+        const num = (v) => (v === null || v === undefined) ? null : Number(v);
+        res.json({
+            success: true,
+            periodo: { inicio: ini, fim: fim, dias: dias },
+            anterior: comparar ? { inicio: ymd(antIni), fim: ymd(antFim), dias: dias } : null,
+            comparacao: comparar, max_dias: SLA_MAX_DIAS, max_dias_comparacao: SLA_MAX_DIAS_COMPARACAO,
+            gerado_em: new Date().toISOString(), ms: ms,
+            linhas: rows.map(r => ({ bloco: r.bloco, periodo: r.periodo, setor: r.setor, k: r.k, n: num(r.n), v1: num(r.v1), v2: num(r.v2), v3: num(r.v3), v4: num(r.v4), v5: num(r.v5), v6: num(r.v6), v7: num(r.v7), v8: num(r.v8), v9: num(r.v9), v10: num(r.v10) }))
+        });
+    } catch (error) {
+        console.error("Erro SLA do Recebimento:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// 15.5C 👥 AGENTES do Recebimento (17/10/2026) — produção por HORÁRIO, por MENSAGENS ENVIADAS · SOMENTE ADMIN
+// Liderança fora (LIDERANCA_IDS e " - LD" no nome). Ticket atendido = conversa distinta com >= 1 mensagem do agente na hora.
+// Uma consulta por carga; período máximo 31 dias, compara com o anterior do mesmo tamanho. Só leitura.
+// ==========================================
+const AG_MAX_DIAS = 31, AG_MAX_DIAS_COMPARACAO = 31;
+const AGENTES_SQL = `-- 👥 AGENTES do Recebimento (17/10/2026) — produção por HORÁRIO, contando MENSAGENS ENVIADAS. Uma consulta por carga, só leitura.
+-- Mensagem = message_type 1, pública, sender_type 'User', sender_id <> 2, não apagada, content não nulo; caixa fora de Atendimento | Brasil e Pitaco Teste.
+-- Liderança fora: LIDERANCA_IDS (9,22,37,51,54) e quem tem " - LD" no nome. Ticket atendido = conversa distinta em que o agente mandou >= 1 mensagem.
+-- $1 = início do período (split atual/anterior) · $2 = início da leitura (período anterior; = $1 sem comparação) · $3 = dia seguinte ao fim.
+-- Saída: uma linha por (periodo, agente, dia, hora) + o rollup (periodo, agente, dia) com hora NULL (tickets/dia distintos). O Node faz as médias.
+WITH msgs AS (
+    SELECT m.sender_id, m.conversation_id,
+      (m.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS tb
+    FROM messages m
+    LEFT JOIN inboxes i ON i.id = m.inbox_id
+    WHERE m.account_id = 1 AND m.message_type = 1 AND m.private = FALSE AND m.sender_type = 'User'
+      AND m.sender_id IS NOT NULL
+      AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+      AND m.content IS NOT NULL
+      AND (i.name IS NULL OR i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste'))
+      AND m.created_at >= ($2 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+      AND m.created_at <  ($3 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+),
+base AS (
+    SELECT ms.sender_id, u.name, u.created_at,
+      CASE WHEN ms.tb >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo' THEN 'atual' ELSE 'anterior' END AS periodo,
+      TO_CHAR(ms.tb, 'YYYY-MM-DD') AS dia, extract(hour from ms.tb)::int AS hora, ms.conversation_id,
+      (ms.sender_id = 2 OR u.name ILIKE '%sarah williams%' OR u.name ILIKE '%copilot%') AS ia
+    FROM msgs ms JOIN users u ON u.id = ms.sender_id
+    WHERE u.id NOT IN (9, 22, 37, 51, 54) AND u.name NOT ILIKE '% - LD%'
+)
+SELECT periodo, sender_id, name, created_at,
+  dia, hora,
+  count(*)::int AS msgs,
+  count(DISTINCT conversation_id)::int AS convs,
+  bool_or(ia) AS ia
+FROM base
+GROUP BY GROUPING SETS ((periodo, sender_id, name, created_at, dia, hora), (periodo, sender_id, name, created_at, dia))`;
+app.get('/api/recebimento-agentes', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        let ini, fim;
+        if (req.query.since && req.query.until) {
+            ini = unixParaYYYYMMDD(req.query.since);
+            fim = unixParaYYYYMMDD(req.query.until);
+        } else {
+            const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1));
+            fim = formatarDataSQL(agora);
+        }
+        const DIA_MS = 86400000, ymd = d => d.toISOString().slice(0, 10);
+        const dIni = new Date(ini + 'T00:00:00Z'), dFim = new Date(fim + 'T00:00:00Z');
+        const dias = Math.round((dFim - dIni) / DIA_MS) + 1;
+        if (!(dias >= 1)) return res.status(400).json({ success: false, error: 'Período inválido.' });
+        if (dias > AG_MAX_DIAS) return res.status(400).json({ success: false, error: `Período máximo de ${AG_MAX_DIAS} dias (o escolhido tem ${dias}).` });
+        const comparar = dias <= AG_MAX_DIAS_COMPARACAO;
+        const antIni = new Date(dIni.getTime() - dias * DIA_MS), antFim = new Date(dIni.getTime() - DIA_MS);
+        const t0 = Date.now();
+        const { rows } = await pool.query(AGENTES_SQL, [ini, comparar ? ymd(antIni) : ini, ymd(new Date(dFim.getTime() + DIA_MS))]);
+        const ms = Date.now() - t0;
+        console.log(`👥 Agentes do Recebimento ${ini} a ${fim}: ${rows.length} linhas em ${ms} ms`);
+        res.json({
+            success: true,
+            periodo: { inicio: ini, fim: fim, dias: dias },
+            anterior: comparar ? { inicio: ymd(antIni), fim: ymd(antFim), dias: dias } : null,
+            comparacao: comparar, max_dias: AG_MAX_DIAS, max_dias_comparacao: AG_MAX_DIAS_COMPARACAO,
+            gerado_em: new Date().toISOString(), ms: ms,
+            linhas: rows.map(r => ({ periodo: r.periodo, id: r.sender_id, nome: r.name, criado_em: r.created_at, dia: r.dia, hora: r.hora === null ? null : Number(r.hora), msgs: Number(r.msgs), convs: Number(r.convs), ia: !!r.ia }))
+        });
+    } catch (error) {
+        console.error('Erro Agentes do Recebimento:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// 15.5B 📥 RECEBIMENTO — ABERTURAS (17/10/2026) — base reutilizável (Tarefa 1 tela · Tarefa 2 SLA · Tarefa 3 Agentes) · SOMENTE ADMIN
+// Abertura = o momento em que a conversa passa a esperar atendimento: criação, reabertura pelo cliente (automação) ou conversation_opened.
+// Eventos da mesma conversa a < 2 min contam como 1 abertura. Tipo: N (novo pelo cliente) · R (retorno/reabertura do cliente) · F (à parte: aberta/reaberta por nós).
+// N + R = CLIENTES (o que conta). w = 1º contato humano − abertura (robô sender_id 2 não conta); guardado em faixas de minutos para a Tarefa 2.
+// Escopo CS de produtos: todas as caixas da conta 1 menos "Atendimento | Brasil" e "Pitaco Teste"; fora: etiqueta duplicado/spam/compra_teste e os contatos automáticos.
+// Cache próprio por período (10 min quando inclui hoje · 60 min fechado) para o SLA e o Agentes não repetirem a consulta. SÓ LEITURA no banco.
+// ==========================================
+const CONTATOS_AUTOMATICOS = [279944, 244572, 9950, 272736, 244905, 4133, 271799];   // contatos que não são cliente real (automação) — ficam fora
+const LIDERANCA_IDS = [9, 22, 37, 51, 54];   // liderança não conta como agente (além de quem tem " - LD" no nome) — a Tarefa 3 (Agentes) usa
+const AB_MAX_DIAS = 62, AB_MAX_DIAS_COMPARACAO = 31;   // teto do período; compara com o período anterior só até 31 dias
+const AB_SQL = `WITH conv AS (
+    SELECT c.id, c.inbox_id
+    FROM conversations c
+    JOIN inboxes i ON i.id = c.inbox_id
+    WHERE c.account_id = 1
+      AND i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste')
+      AND COALESCE(c.cached_label_list, '') NOT ILIKE '%duplicado%'
+      AND COALESCE(c.cached_label_list, '') NOT ILIKE '%spam%'
+      AND COALESCE(c.cached_label_list, '') NOT ILIKE '%compra_teste%'
+      AND c.contact_id NOT IN (${CONTATOS_AUTOMATICOS.join(', ')})
+      AND c.last_activity_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+),
+ev AS (
+    SELECT c.id AS cid, c.created_at AS t, 1 AS pri, 'criacao' AS src
+    FROM conversations c
+    WHERE c.account_id = 1
+      AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+      AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+    UNION ALL
+    SELECT m.conversation_id, m.created_at, 2,
+           CASE WHEN m.content ILIKE '%Sarah Williams%' OR m.content ILIKE 'O sistema reabriu%' THEN 'reab_cli' ELSE 'reab_ag' END
+    FROM messages m
+    WHERE m.account_id = 1 AND m.message_type = 2
+      AND (m.content ILIKE 'Conversa foi reaberta%' OR m.content ILIKE 'O sistema reabriu%' OR m.content ILIKE 'Conversation was reopened%')
+      AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+      AND m.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+    UNION ALL
+    SELECT re.conversation_id, re.created_at, 3, 'evt'
+    FROM reporting_events re
+    WHERE re.account_id = 1 AND re.name = 'conversation_opened'
+      AND re.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+      AND re.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+),
+ev2 AS (
+    SELECT ev.*, lag(t) OVER (PARTITION BY cid ORDER BY t, pri) AS tprev
+    FROM ev WHERE cid IN (SELECT id FROM conv)
+),
+grp AS (
+    SELECT *, sum(CASE WHEN tprev IS NULL OR t - tprev > interval '2 minutes' THEN 1 ELSE 0 END) OVER (PARTITION BY cid ORDER BY t, pri) AS g
+    FROM ev2
+),
+ab AS (
+    SELECT cid, g, min(t) AS t, bool_or(src = 'criacao') AS criacao, bool_or(src = 'reab_cli') AS rcli, bool_or(src = 'reab_ag') AS rag
+    FROM grp GROUP BY cid, g
+),
+cl AS (
+    SELECT ab.cid, conv.inbox_id, ab.t,
+       (ab.t AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS tb,
+       CASE
+         WHEN ab.criacao THEN CASE WHEN (SELECT m.message_type FROM messages m WHERE m.conversation_id = ab.cid AND m.private = false AND m.message_type IN (0, 1, 3) ORDER BY m.created_at, m.id LIMIT 1) = 0 THEN 'N' ELSE 'F' END
+         WHEN EXISTS (SELECT 1 FROM messages x WHERE x.conversation_id = ab.cid AND x.message_type = 0 AND x.created_at BETWEEN ab.t - interval '2 minutes' AND ab.t + interval '2 minutes') THEN 'R'
+         ELSE 'S'
+       END AS tipo,
+       (SELECT CASE WHEN min(m.created_at) IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM (min(m.created_at) - ab.t))) END
+          FROM messages m WHERE m.conversation_id = ab.cid AND m.message_type = 1 AND m.private = false AND m.sender_type = 'User' AND m.sender_id <> 2 AND m.created_at >= ab.t - interval '2 minutes') AS w_seg
+    FROM ab JOIN conv ON conv.id = ab.cid
+)
+SELECT
+    TO_CHAR(cl.tb, 'YYYY-MM-DD') AS dia,
+    cl.inbox_id,
+    i.name AS caixa,
+    CASE WHEN i.channel_type = 'Channel::Email' THEN 'E-mail'
+         WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
+         WHEN i.channel_type = 'Channel::WebWidget' THEN 'Chat web'
+         ELSE 'Outros' END AS canal,
+    EXTRACT(HOUR FROM cl.tb)::int AS hora,
+    cl.tipo,
+    COUNT(*)::int AS aberturas,
+    COUNT(DISTINCT cl.cid)::int AS conversas,
+    COUNT(cl.w_seg)::int AS com_contato,
+    COUNT(*) FILTER (WHERE cl.w_seg IS NULL)::int AS sem_contato,
+    COALESCE(SUM(cl.w_seg), 0)::bigint AS w_soma_seg,
+    COUNT(*) FILTER (WHERE cl.w_seg <= 300)::int AS w_ate5,
+    COUNT(*) FILTER (WHERE cl.w_seg > 300 AND cl.w_seg <= 900)::int AS w_5_15,
+    COUNT(*) FILTER (WHERE cl.w_seg > 900 AND cl.w_seg <= 1800)::int AS w_15_30,
+    COUNT(*) FILTER (WHERE cl.w_seg > 1800 AND cl.w_seg <= 3600)::int AS w_30_60,
+    COUNT(*) FILTER (WHERE cl.w_seg > 3600 AND cl.w_seg <= 14400)::int AS w_1_4h,
+    COUNT(*) FILTER (WHERE cl.w_seg > 14400 AND cl.w_seg <= 86400)::int AS w_4_24h,
+    COUNT(*) FILTER (WHERE cl.w_seg > 86400)::int AS w_24h_mais
+FROM cl JOIN inboxes i ON i.id = cl.inbox_id
+GROUP BY 1, 2, 3, 4, 5, 6`;
+const abCache = new Map();   // cache próprio do helper: chave "ini|fim" → { t, dados }
+// Base das aberturas agregada por dia × caixa × hora × tipo (+ faixas de w para o SLA). Guarda em cache por período.
+async function abAberturas(ini, fim, forcar) {
+    const chave = ini + '|' + fim;
+    const hojeBR = formatarDataSQL(new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })));
+    const ttl = (fim >= hojeBR ? 10 : 60) * 60 * 1000;   // período que inclui hoje muda sozinho → 10 min; período fechado → 60 min
+    const guardado = abCache.get(chave);
+    if (!forcar && guardado && Date.now() - guardado.t < ttl) return guardado.dados;
+    const t0 = Date.now();
+    const { rows } = await pool.query(AB_SQL, [ini, fim]);
+    const num = (v) => (v === null || v === undefined) ? 0 : Number(v);
+    const dados = rows.map(r => ({
+        dia: r.dia, inbox_id: num(r.inbox_id), caixa: r.caixa, canal: r.canal, hora: num(r.hora), tipo: r.tipo,
+        aberturas: num(r.aberturas), conversas: num(r.conversas), com_contato: num(r.com_contato), sem_contato: num(r.sem_contato),
+        w_soma_seg: num(r.w_soma_seg),
+        w: [num(r.w_ate5), num(r.w_5_15), num(r.w_15_30), num(r.w_30_60), num(r.w_1_4h), num(r.w_4_24h), num(r.w_24h_mais)]   // ≤5min · 5–15 · 15–30 · 30–60 · 1–4h · 4–24h · >24h (para a Tarefa 2)
+    }));
+    abCache.set(chave, { t: Date.now(), dados });
+    if (abCache.size > 40) for (const [k, v] of abCache) if (Date.now() - v.t > 60 * 60 * 1000) abCache.delete(k);   // trava simples: limpa os velhos
+    console.log(`📥 abAberturas ${ini}..${fim}: ${rows.length} linhas em ${Date.now() - t0} ms`);
+    return dados;
+}
+// Rota da Tarefa 1: período atual + período anterior do mesmo tamanho (até 31 dias). O cacheMiddleware guarda a resposta 30 min; fresh=1 (🔄 Atualizar) fura os dois caches.
+app.get('/api/recebimento-aberturas', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        let ini, fim;
+        if (req.query.since && req.query.until) {
+            ini = unixParaYYYYMMDD(req.query.since);
+            fim = unixParaYYYYMMDD(req.query.until);
+        } else {   // padrão: do dia 1º do mês até hoje
+            const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1));
+            fim = formatarDataSQL(agora);
+        }
+        const DIA_MS = 86400000, ymd = d => d.toISOString().slice(0, 10);
+        const dIni = new Date(ini + 'T00:00:00Z'), dFim = new Date(fim + 'T00:00:00Z');
+        const dias = Math.round((dFim - dIni) / DIA_MS) + 1;
+        if (!(dias >= 1)) return res.status(400).json({ success: false, error: 'Período inválido.' });
+        if (dias > AB_MAX_DIAS) return res.status(400).json({ success: false, error: `Período máximo de ${AB_MAX_DIAS} dias (o escolhido tem ${dias}).` });
+        const comparar = dias <= AB_MAX_DIAS_COMPARACAO;
+        const antIni = new Date(dIni.getTime() - dias * DIA_MS), antFim = new Date(dIni.getTime() - DIA_MS);
+        const forcar = req.query.fresh === '1';   // 🔄 Atualizar: pede dado fresco também no cache do helper
+        const t0 = Date.now();
+        const atual = await abAberturas(ini, fim, forcar);
+        const anterior = comparar ? await abAberturas(ymd(antIni), ymd(antFim), forcar) : null;
+        res.json({
+            success: true,
+            periodo: { inicio: ini, fim: fim, dias: dias },
+            anterior: comparar ? { inicio: ymd(antIni), fim: ymd(antFim), dias: dias } : null,
+            comparacao: comparar, max_dias: AB_MAX_DIAS, max_dias_comparacao: AB_MAX_DIAS_COMPARACAO,
+            gerado_em: new Date().toISOString(), ms: Date.now() - t0,
+            linhas: atual, linhas_anterior: anterior
+        });
+    } catch (error) {
+        console.error('Erro Recebimento aberturas:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+// ==========================================
+// 15.6 🤖 PERGUNTE AO DASH (14/10/2026) — Fase 1 · SOMENTE ADMIN
+// O gestor pergunta em português. O Claude (API da Anthropic) só ESCOLHE uma consulta pronta deste catálogo e escreve
+// a leitura do resultado: quem calcula é o banco (só leitura, consultas fixas daqui) ou as próprias rotas do Dash
+// (mesmos números das telas, aproveitando o cache de 30 min). Para a API vão só totais e nomes de caixa e de time;
+// nome de agente vai como "Agente N" e volta trocado na resposta. Nenhum dado de cliente sai do Dash.
+// Catálogo: recebimento · etiquetas 48H/Painel · TMC/TMR justos por agente · espera do cliente (só quando perguntarem)
+// Precisa da variável ANTHROPIC_API_KEY (sem ela a tela avisa e nada mais muda). Abrir um gráfico fixado não usa a API.
+// Responde com "ok" (e não "success") de propósito: o cache do Dash não guarda resposta de pergunta.
+// ==========================================
+const PD_MODELO = 'claude-haiku-5-5';   // 14/10/2026: o Sonnet 5.5 recusa tool_choice "any"/"tool" (erro 400) e o robô usa os dois; o Haiku 5.5 aceita e, com a ferramenta forçada, responde direto pela ferramenta
+const PD_API_URL = 'https://api.anthropic.com/v1/messages';
+const PD_LIMITE_HORA = 40;   // perguntas por admin por hora (só as que usam a API)
+const PD_MAX_DIAS = { recebimento: 92, etiquetas_48h_painel: 92, tmc_tmr_agentes: 62, espera_cliente: 31 };
+const PD_TIMES = ['RET', 'SAC', 'BKO', 'SMS', '48H', 'OUTROS'];
+const PD_NOME_TIME = { TODOS: 'Todos', RET: 'Retenção', SAC: 'SAC', BKO: 'BackOffice', SMS: 'SMS', '48H': '48H', OUTROS: 'Sem time' };
+const PD_DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const PD_COR = { a: '#22a7f0', b: '#fb923c', azul: '#1b52af', cinza: '#64748b' };
+const pdUso = {}, pdRodando = {}, pdCache = {};
+
+const pdD = (s) => new Date(s + 'T00:00:00Z');
+const pdS = (d) => d.toISOString().slice(0, 10);
+const pdSoma = (s, n) => pdS(new Date(pdD(s).getTime() + n * 86400000));
+const pdBR = (s) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}`;
+const pdUnix = (s, fim) => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10), 3) / 1000 + (fim ? 86399 : 0);   // dia de Brasília → unix, igual ao calendário das telas
+const pdDataOk = (s) => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !isNaN(pdD(String(s)).getTime())) ? String(s) : null;
+const pdHoje = () => formatarDataSQL(new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })));
+const pdDias = (ini, fim) => Math.round((pdD(fim) - pdD(ini)) / 86400000) + 1;
+const pdPeriodoTxt = (per) => per.ini === per.fim ? `${pdBR(per.ini)} (${PD_DIAS[pdD(per.ini).getUTCDay()]})` : `${pdBR(per.ini).slice(0, 5)} a ${pdBR(per.fim)}`;
+const pdNum = (v, casas) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: casas || 0, maximumFractionDigits: casas || 0 });
+const pdPct = (v) => (v > 0 ? '+' : '') + pdNum(v, 1) + '%';
+const pdPl = (n, um, varios) => `${pdNum(n)} ${Number(n) === 1 ? um : varios}`;
+const pdMin = (seg) => (seg === null || seg === undefined || !isFinite(seg)) ? null : Math.round(Number(seg) / 6) / 10;   // segundos → minutos (1 casa)
+function pdTempo(min) {
+    if (min === null || min === undefined || !isFinite(min)) return '—';
+    if (min < 1) return Math.round(min * 60) + 's';
+    if (min < 60) return Math.round(min) + ' min';
+    const h = Math.floor(min / 60), m = Math.round(min % 60);
+    return h < 24 ? `${h}h ${String(m).padStart(2, '0')}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
+// período pedido → datas de Brasília (prefere os relativos: o gráfico fixado se atualiza sozinho)
+function pdPeriodo(p, hoje, maxDias) {
+    const ontem = pdSoma(hoje, -1), dow = pdD(hoje).getUTCDay(), segunda = pdSoma(hoje, -((dow + 6) % 7));
+    const mesIni = hoje.slice(0, 8) + '01', mesPassFim = pdSoma(mesIni, -1);
+    const P = {
+        hoje: [hoje, hoje], ontem: [ontem, ontem], esta_semana: [segunda, hoje], semana_passada: [pdSoma(segunda, -7), pdSoma(segunda, -1)],
+        este_mes: [mesIni, hoje], mes_passado: [mesPassFim.slice(0, 8) + '01', mesPassFim], ultimos_7_dias: [pdSoma(hoje, -7), ontem], ultimos_30_dias: [pdSoma(hoje, -30), ontem]
+    };
+    let tipo = String((p && p.periodo) || 'ultimos_7_dias'), ini, fim;
+    if (tipo === 'personalizado' && pdDataOk(p.inicio)) { ini = pdDataOk(p.inicio); fim = pdDataOk(p.fim) || ini; }
+    else { if (!P[tipo]) tipo = 'ultimos_7_dias'; [ini, fim] = P[tipo]; }
+    if (fim > hoje) fim = hoje;
+    if (ini > hoje) ini = hoje;
+    if (ini > fim) [ini, fim] = [fim, ini];
+    const avisos = [];
+    let dias = pdDias(ini, fim);
+    if (maxDias && dias > maxDias) { ini = pdSoma(fim, -(maxDias - 1)); dias = maxDias; avisos.push(`Período limitado aos últimos ${maxDias} dias para não pesar no banco.`); }
+    return { ini, fim, dias, avisos };
+}
+function pdPeriodoComparar(p, per, hoje) {
+    const c = String((p && p.comparar) || 'nao');
+    let ini, fim;
+    if (c === 'periodo_anterior') { fim = pdSoma(per.ini, -1); ini = pdSoma(fim, -(per.dias - 1)); }
+    else if (c === 'semana_anterior') { ini = pdSoma(per.ini, -7); fim = pdSoma(per.fim, -7); }
+    else if (c === 'personalizado' && pdDataOk(p.comparar_inicio)) {
+        ini = pdDataOk(p.comparar_inicio); fim = pdDataOk(p.comparar_fim) || ini;
+        if (fim > hoje) fim = hoje;
+        if (ini > hoje) ini = hoje;
+        if (ini > fim) [ini, fim] = [fim, ini];
+    } else return null;
+    const dias = pdDias(ini, fim);
+    return dias > PD_MAX_DIAS.recebimento ? null : { ini, fim, dias };
+}
+
+// rotas do próprio Dash, SEM fresh=1: usa o cache de 30 min das telas (o tgGetInterno sempre busca de novo)
+function pdGetInterno(caminho, timeoutMs) {
+    return new Promise((resolve) => {
+        const rq = http.get({ host: '127.0.0.1', port: PORT, path: caminho, headers: { 'x-warm-token': WARM_TOKEN } }, (r) => {
+            let b = ''; r.setEncoding('utf8'); r.on('data', c => { b += c; });
+            r.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { resolve(null); } });
+        });
+        rq.on('error', () => resolve(null));
+        rq.setTimeout(timeoutMs || 150000, () => { try { rq.destroy(); } catch (e) {} resolve(null); });
+    });
+}
+async function pdRota(caminho, avisos) {
+    const j = await pdGetInterno(caminho, 150000);
+    if (!j || !j.success) throw new Error((j && j.error) || 'a tela de origem não respondeu');
+    if (j.dados_guardados && avisos) avisos.push(`O banco falhou agora: números guardados de ${j.dados_guardados_min} min atrás.`);
+    return j;
+}
+// consultas próprias do robô: guardadas 10 min (período com hoje) ou 60 min (período fechado)
+async function pdCacheado(chave, hoje, fim, fn) {
+    const ttl = (fim >= hoje ? 10 : 60) * 60000, c = pdCache[chave];
+    if (c && Date.now() - c.em < ttl) return c.dados;
+    const dados = await fn();
+    const ks = Object.keys(pdCache);
+    if (ks.length >= 60) ks.forEach(k => { delete pdCache[k]; });
+    pdCache[chave] = { em: Date.now(), dados };
+    return dados;
+}
+
+// mesma regra do 📥 Recebimento (15.5): time da conversa e se ela conta ou fica à parte · $1/$2 = período (AAAA-MM-DD, Brasília)
+const PD_SQL_BASE = `
+    WITH Conv48 AS (
+        SELECT tg.taggable_id AS conv_id, MIN(tg.created_at) AS etiquetada_em
+        FROM taggings tg
+        JOIN tags t2 ON t2.id = tg.tag_id
+        WHERE tg.taggable_type = 'Conversation' AND (t2.name ILIKE '%time-48h%' OR t2.name ILIKE 'painel-do-pedido%')
+        GROUP BY tg.taggable_id
+    ),
+    Rb AS (
+        SELECT c.id AS conv_id, c.created_at, COALESCE(i.name, 'Sem caixa') AS caixa,
+            (c.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') AS criado_br,
+            CASE
+                WHEN c48.etiquetada_em <= c.created_at + interval '10 minutes' THEN '48H'
+                WHEN i.name = '[GEX] SMS Support' THEN 'SMS'
+                WHEN t.name ILIKE '%reten%' THEN 'RET'
+                WHEN t.name ILIKE '%sac%' THEN 'SAC'
+                WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
+                WHEN t.name ILIKE '%sms%' THEN 'SMS'
+                WHEN c48.conv_id IS NOT NULL THEN '48H'
+                ELSE 'OUTROS'
+            END AS setor,
+            CASE
+                WHEN COALESCE(c.cached_label_list, '') ILIKE '%duplicado%' THEN 'duplicado'
+                WHEN pm.message_type IS NULL THEN 'sem_mensagem'
+                WHEN pm.message_type IN (1, 3) THEN 'aberto_por_nos'
+                ELSE 'valido'
+            END AS tipo
+        FROM conversations c
+        LEFT JOIN teams t ON t.id = c.team_id
+        LEFT JOIN inboxes i ON i.id = c.inbox_id
+        LEFT JOIN Conv48 c48 ON c48.conv_id = c.id
+        LEFT JOIN LATERAL (
+            SELECT m.message_type FROM messages m
+            WHERE m.conversation_id = c.id AND m.private = FALSE AND m.message_type IN (0, 1, 3)
+            ORDER BY m.created_at, m.id LIMIT 1
+        ) pm ON TRUE
+        WHERE c.account_id = 1
+          AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+          AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+          AND (i.name IS NULL OR i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste'))
+    )`;
+const PD_REGRAS_REC = [
+    'Conversas novas abertas pelo cliente (a 1ª mensagem pública é dele), no horário de Brasília',
+    'Duplicadas (etiqueta "duplicado"), abertas por nós e sem mensagem ficam à parte',
+    'Caixas Atendimento | Brasil e Pitaco Teste ficam fora',
+    'Time pela regra da tela: etiqueta 48H/Painel colocada na chegada (até 10 min) → 48H · caixa de SMS → SMS · senão, o time do Chatwoot'
+];
+
+// ---------- 1) RECEBIMENTO ----------
+// 14/10/2026: período com hoje (o dia ainda não acabou). Antes a % comparava o dia incompleto com dias inteiros e mostrava queda falsa
+// (ex.: hoje às 10h × ontem inteiro = -60%). Agora: 1 dia × 1 dia compara só as horas já fechadas dos dois dias; com mais dias, a média dos dias completos;
+// sem base justa (por caixa não há a hora de cada ticket aqui, ou ainda é 0h), fica sem a % e avisa.
+function pdAjustarHoje(out, a, b, per, cmp, K, nomeB, avisos) {
+    const kpi = out.kpis.find(x => x.rot === 'Comparação');
+    if (!kpi) return;
+    const h = parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' }).format(new Date()), 10) % 24;
+    const ateHora = (r) => (r.por_hora || []).slice(0, h).reduce((s, x) => s + (x[K] || 0), 0);
+    const mediaCompletos = (r) => { const ds = (r.por_dia || []).filter(d => !d.parcial); return ds.length ? ds.reduce((s, d) => s + (d[K] || 0), 0) / ds.length : null; };
+    const umDia = !!(a && b && per.dias === 1 && cmp.dias === 1);
+    let vr = null, base = '';
+    if (umDia) { if (h > 0) { const sa = ateHora(a), sb = ateHora(b); vr = sb > 0 ? ((sa - sb) / sb) * 100 : null; base = `até as ${h}h`; } }
+    else if (a && b) { const ma = mediaCompletos(a), mb = mediaCompletos(b); vr = (ma !== null && mb) ? ((ma - mb) / mb) * 100 : null; base = 'na média/dia dos dias completos'; }
+    kpi.sub = nomeB + (vr === null ? ' · sem % (hoje ainda não acabou)' : ` · ${pdPct(vr)} ${base}`);
+    out.destaques.variacao_media_dia_pct = vr === null ? null : Math.round(vr * 10) / 10;
+    out.destaques.comparacao_base = vr === null ? 'sem comparação: hoje ainda não acabou' : base;
+    avisos.push(vr === null ? 'Hoje ainda não acabou: a % da comparação ficou de fora para não mostrar queda falsa.'
+        : (umDia ? `Hoje ainda não acabou: a % compara só as horas fechadas dos dois dias (0h às ${h}h).` : 'Hoje ainda não acabou: a % compara só a média dos dias completos.'));
+}
+async function pdExecRecebimento(p, hoje) {
+    const per = pdPeriodo(p, hoje, PD_MAX_DIAS.recebimento), cmp = pdPeriodoComparar(p, per, hoje), avisos = per.avisos.slice();
+    const ag = ['time', 'caixa', 'dia', 'hora', 'dia_da_semana'].includes(p.agrupar_por) ? p.agrupar_por : 'time';
+    const time = PD_TIMES.includes(String(p.time || '').toUpperCase()) ? String(p.time).toUpperCase() : 'TODOS';
+    const K = time === 'TODOS' ? 'total' : time;
+    const regras = PD_REGRAS_REC.slice();
+    if (time !== 'TODOS' && ag !== 'time') regras.push(`Só o time ${PD_NOME_TIME[time]}`);
+    const nomeA = pdPeriodoTxt(per), nomeB = cmp ? pdPeriodoTxt(cmp) : '';
+    const out = { fonte: 'Chatwoot · conversas novas', periodo_txt: nomeA + (cmp ? ` × ${nomeB}` : ''), regras, avisos, kpis: [], destaques: {}, nomes: {} };
+    const variacao = (a, b, da, db) => { const ma = a / da, mb = b / db; return mb > 0 ? ((ma - mb) / mb) * 100 : null; };
+
+    if (ag === 'caixa') {
+        const sqlFinal = `
+    SELECT caixa, tipo, COUNT(*)::int AS qtd
+    FROM Rb
+    WHERE ($3 = 'TODOS' OR setor = $3)
+    GROUP BY 1, 2`;
+        const buscar = (x) => pdCacheado(`rec-caixa|${x.ini}|${x.fim}|${time}`, hoje, x.fim, async () => (await pool.query(PD_SQL_BASE + sqlFinal, [x.ini, x.fim, time])).rows);
+        const somar = (linhas) => { const C = {}; linhas.forEach(r => { const c = C[r.caixa] = C[r.caixa] || { v: 0, d: 0, n: 0 }; const q = parseInt(r.qtd) || 0; if (r.tipo === 'valido') c.v += q; else if (r.tipo === 'duplicado') c.d += q; else c.n += q; }); return C; };
+        const A = somar(await buscar(per)), B = cmp ? somar(await buscar(cmp)) : null;
+        let caixas = Object.keys(A).concat(B ? Object.keys(B) : []).filter((c, i, l) => l.indexOf(c) === i);
+        const tot = (c) => (A[c] ? A[c].v + A[c].d + A[c].n : 0);
+        caixas.sort((x, y) => (B ? ((A[y] ? A[y].v : 0) - (A[x] ? A[x].v : 0)) : (tot(y) - tot(x))) || x.localeCompare(y));
+        caixas = caixas.slice(0, 20);
+        const v = (M, c, k) => (M && M[c] ? M[c][k] : 0);
+        const totV = Object.values(A).reduce((s, c) => s + c.v, 0), totD = Object.values(A).reduce((s, c) => s + c.d, 0), totN = Object.values(A).reduce((s, c) => s + c.n, 0);
+        out.titulo = 'Tickets recebidos por caixa';
+        out.grafico = B
+            ? { tipo: 'barras_h', eixo: 'Caixa', formato: 'num', empilhado: false, rotulos: caixas, series: [{ nome: nomeA, cor: PD_COR.a, valores: caixas.map(c => v(A, c, 'v')) }, { nome: nomeB, cor: PD_COR.b, valores: caixas.map(c => v(B, c, 'v')) }] }
+            : { tipo: 'barras_h', eixo: 'Caixa', formato: 'num', empilhado: true, rotulos: caixas, series: [{ nome: 'Recebidos (contam)', cor: PD_COR.a, valores: caixas.map(c => v(A, c, 'v')) }, { nome: 'Duplicadas', cor: PD_COR.cinza, valores: caixas.map(c => v(A, c, 'd')) }, { nome: 'Abertas por nós ou sem mensagem', cor: PD_COR.b, valores: caixas.map(c => v(A, c, 'n')) }] };
+        out.kpis.push({ rot: 'Recebidos', val: pdNum(totV), sub: nomeA }, { rot: 'À parte', val: pdNum(totD + totN), sub: `${pdPl(totD, 'duplicada', 'duplicadas')} · ${pdPl(totN, 'aberta por nós', 'abertas por nós')}` });
+        if (B) { const totVB = Object.values(B).reduce((s, c) => s + c.v, 0), vr = variacao(totV, totVB, per.dias, cmp.dias); out.kpis.push({ rot: 'Comparação', val: pdNum(totVB), sub: nomeB + (vr === null ? '' : ` · ${pdPct(vr)} na média/dia`) }); out.destaques.variacao_media_dia_pct = vr === null ? null : Math.round(vr * 10) / 10; }
+        if (B && (per.fim === hoje || cmp.fim === hoje)) pdAjustarHoje(out, null, null, per, cmp, K, nomeB, avisos);   // 14/10/2026: hoje no período: por caixa fica sem a % (evita queda falsa)
+        out.kpis.push({ rot: 'Caixas', val: pdNum(caixas.length), sub: 'com ticket no período' });
+        out.sql = `-- recebidos = conversas novas do período pela regra do Recebimento (CTE "Rb")\nSELECT caixa, tipo, COUNT(*) AS qtd\nFROM recebidos\nWHERE (:time = 'TODOS' OR setor = :time)   -- time: ${time}\nGROUP BY caixa, tipo;   -- tipo: valido · duplicado · aberto_por_nos · sem_mensagem`;
+        out.resumo = { agrupado_por: 'caixa', periodo: nomeA, comparacao: nomeB || null, time: PD_NOME_TIME[time], itens: caixas.map(c => ({ caixa: c, recebidos: v(A, c, 'v'), duplicadas: v(A, c, 'd'), abertas_por_nos_ou_sem_mensagem: v(A, c, 'n'), recebidos_comparacao: B ? v(B, c, 'v') : undefined })), total_recebidos: totV, total_a_parte: totD + totN };
+        if (caixas.length) { const top = caixas.slice().sort((x, y) => v(A, y, 'v') - v(A, x, 'v'))[0]; out.destaques.maior = { caixa: top, recebidos: v(A, top, 'v'), pct_do_total: totV ? Math.round(v(A, top, 'v') / totV * 1000) / 10 : 0 }; }
+        return out;
+    }
+
+    // time · dia · hora · dia da semana: a própria rota da tela (mesmos números, cache de 30 min)
+    const rota = (x) => pdRota(`/api/recebimento-tickets?since=${pdUnix(x.ini)}&until=${pdUnix(x.fim, true)}`, avisos);
+    const a = await rota(per), b = cmp ? await rota(cmp) : null;
+    const completos = (r) => (r.por_dia || []).filter(d => !d.parcial);
+    const mediaDia = (r, k) => { const ds = completos(r).length ? completos(r) : (r.por_dia || []); return ds.length ? ds.reduce((s, d) => s + (d[k] || 0), 0) / ds.length : 0; };
+    const totA = (a.por_time && a.por_time[K]) || 0, totB = b ? ((b.por_time && b.por_time[K]) || 0) : 0;
+    const fo = (a.fora && a.fora[time]) || { duplicados: 0, abertos_por_nos: 0, sem_mensagem: 0 };
+    out.kpis.push({ rot: 'Recebidos', val: pdNum(totA), sub: nomeA + (time !== 'TODOS' ? ` · ${PD_NOME_TIME[time]}` : '') });
+    out.kpis.push({ rot: 'Média por dia', val: pdNum(mediaDia(a, K), 1), sub: (a.por_dia || []).some(d => d.parcial) ? 'hoje fora da média (dia parcial)' : 'dias completos' });
+    if (b) { const vr = variacao(totA, totB, per.dias, cmp.dias); out.kpis.push({ rot: 'Comparação', val: pdNum(totB), sub: nomeB + (vr === null ? '' : ` · ${pdPct(vr)} na média/dia`) }); out.destaques.variacao_media_dia_pct = vr === null ? null : Math.round(vr * 10) / 10; }
+    if (b && (per.fim === hoje || cmp.fim === hoje)) pdAjustarHoje(out, a, b, per, cmp, K, nomeB, avisos);   // 14/10/2026: hoje ainda não acabou: compara até a mesma hora (ou só os dias completos)
+    out.kpis.push({ rot: 'À parte', val: pdNum(fo.duplicados + fo.abertos_por_nos + fo.sem_mensagem), sub: `${pdPl(fo.duplicados, 'duplicada', 'duplicadas')} · ${pdPl(fo.abertos_por_nos + fo.sem_mensagem, 'aberta por nós', 'abertas por nós')}` });
+    out.sql = `-- mesma consulta da tela Recebimento de Tickets (/api/recebimento-tickets), período ${nomeA}${b ? ' e ' + nomeB : ''}\nSELECT setor, dia, hora, COUNT(*) AS qtd\nFROM recebidos   -- conversas novas do período pela regra do Recebimento\nWHERE tipo = 'valido'\nGROUP BY setor, dia, hora;`;
+    let rot = [], sA = [], sB = [], tipo = 'colunas', eixo = '';
+    if (ag === 'time') {
+        rot = PD_TIMES.map(t => PD_NOME_TIME[t]); sA = PD_TIMES.map(t => (a.por_time && a.por_time[t]) || 0); sB = b ? PD_TIMES.map(t => (b.por_time && b.por_time[t]) || 0) : [];
+        tipo = 'barras_h'; eixo = 'Time'; out.titulo = 'Tickets recebidos por time';
+        if (time !== 'TODOS') avisos.push('No gráfico por time aparecem todos os times.');
+    } else if (ag === 'dia') {
+        rot = (a.por_dia || []).map(d => pdBR(d.dia).slice(0, 5) + (d.parcial ? ' (parcial)' : '')); sA = (a.por_dia || []).map(d => d[K] || 0);
+        sB = b ? (a.por_dia || []).map((_, i) => (b.por_dia && b.por_dia[i]) ? (b.por_dia[i][K] || 0) : null) : [];
+        tipo = b ? 'linhas' : 'colunas'; eixo = 'Dia'; out.titulo = 'Tickets recebidos por dia';
+        if (b) regras.push('Comparação dia a dia na ordem dos períodos (1º dia com 1º dia)');
+    } else if (ag === 'hora') {
+        rot = Array.from({ length: 24 }, (_, h) => h + 'h'); sA = (a.por_hora || []).map(h => h[K] || 0); sB = b ? (b.por_hora || []).map(h => h[K] || 0) : [];
+        tipo = 'linhas'; eixo = 'Hora'; out.titulo = 'Tickets recebidos por hora';
+        regras.push(per.dias > 1 ? 'Por hora: soma do período' : 'Por hora: o dia inteiro, de 0h às 23h59');
+    } else {
+        const ordem = [1, 2, 3, 4, 5, 6, 0];
+        const porDow = (r) => ordem.map(w => { const ds = completos(r).filter(d => d.dow === w); return ds.length ? Math.round(ds.reduce((s, d) => s + (d[K] || 0), 0) / ds.length * 10) / 10 : null; });
+        rot = ordem.map(w => PD_DIAS[w].slice(0, 3)); sA = porDow(a); sB = b ? porDow(b) : [];
+        tipo = b ? 'linhas' : 'colunas'; eixo = 'Dia da semana'; out.titulo = 'Média de tickets por dia da semana';
+        regras.push('Dia da semana: média dos dias completos do período');
+    }
+    out.grafico = { tipo, eixo, formato: 'num', empilhado: false, rotulos: rot, series: [{ nome: nomeA, cor: PD_COR.a, valores: sA }].concat(b ? [{ nome: nomeB, cor: PD_COR.b, valores: sB }] : []) };
+    const idx = sA.reduce((m, v, i) => ((v || 0) > (sA[m] || 0) ? i : m), 0);
+    out.destaques.maior = { rotulo: rot[idx], valor: sA[idx] };
+    if (ag === 'time') out.destaques.maior.pct_do_total = totA ? Math.round((sA[idx] || 0) / totA * 1000) / 10 : 0;
+    out.resumo = { agrupado_por: ag, periodo: nomeA, comparacao: nomeB || null, time: PD_NOME_TIME[time], itens: rot.map((r, i) => ({ rotulo: r, valor: sA[i], comparacao: b ? sB[i] : undefined })), total: totA, total_comparacao: b ? totB : undefined, a_parte: fo };
+    return out;
+}
+
+// ---------- 2) ETIQUETAS 48H E PAINEL ----------
+async function pdExecEtiquetas(p, hoje) {
+    const per = pdPeriodo(p, hoje, PD_MAX_DIAS.etiquetas_48h_painel), avisos = per.avisos.slice();
+    const et = ['ambos', '48h', 'painel'].includes(p.etiqueta) ? p.etiqueta : 'ambos';
+    const ag = p.agrupar_por === 'dia' ? 'dia' : 'caixa';
+    const grupo = ag === 'dia' ? `TO_CHAR(e.criado_br, 'YYYY-MM-DD')` : 'e.caixa';
+    const sqlFinal = `,
+    Etq AS (   -- 1 linha por conversa recebida com etiqueta: quando cada etiqueta foi colocada
+        SELECT rb.conv_id, rb.created_at, rb.caixa, rb.criado_br,
+               MIN(tg.created_at) FILTER (WHERE t.name ILIKE '%time-48h%') AS em_48h,
+               MIN(tg.created_at) FILTER (WHERE t.name ILIKE 'painel-do-pedido%') AS em_painel
+        FROM Rb rb
+        JOIN taggings tg ON tg.taggable_type = 'Conversation' AND tg.taggable_id = rb.conv_id
+        JOIN tags t ON t.id = tg.tag_id AND (t.name ILIKE '%time-48h%' OR t.name ILIKE 'painel-do-pedido%')
+        WHERE rb.tipo = 'valido'
+        GROUP BY 1, 2, 3, 4
+    )
+    SELECT ${grupo} AS grupo,
+           COUNT(*) FILTER (WHERE e.em_48h <= e.created_at + interval '10 minutes')::int AS h_cheg,
+           COUNT(*) FILTER (WHERE e.em_48h > e.created_at + interval '10 minutes')::int AS h_dep,
+           COUNT(*) FILTER (WHERE e.em_painel <= e.created_at + interval '10 minutes')::int AS p_cheg,
+           COUNT(*) FILTER (WHERE e.em_painel > e.created_at + interval '10 minutes')::int AS p_dep,
+           COUNT(*) FILTER (WHERE e.em_painel <= e.created_at + interval '10 minutes' AND NOT COALESCE(e.em_48h <= e.created_at + interval '10 minutes', FALSE))::int AS a_p,
+           COUNT(*) FILTER (WHERE LEAST(e.em_48h, e.em_painel) > e.created_at + interval '10 minutes')::int AS a_dep
+    FROM Etq e
+    GROUP BY 1`;
+    const linhas = await pdCacheado(`etq|${ag}|${per.ini}|${per.fim}`, hoje, per.fim, async () => (await pool.query(PD_SQL_BASE + sqlFinal, [per.ini, per.fim])).rows);
+    const G = {};
+    linhas.forEach(r => { G[r.grupo] = r; });
+    const val = (g) => { const r = G[g] || {}; if (et === '48h') return [r.h_cheg || 0, r.h_dep || 0]; if (et === 'painel') return [r.p_cheg || 0, r.p_dep || 0]; return [r.h_cheg || 0, r.a_p || 0, r.a_dep || 0]; };
+    let rot;
+    if (ag === 'dia') { rot = []; for (let d = per.ini; d <= per.fim; d = pdSoma(d, 1)) rot.push(d); }
+    else rot = Object.keys(G).filter(g => val(g).some(x => x > 0)).sort((x, y) => val(y).reduce((s, n) => s + n, 0) - val(x).reduce((s, n) => s + n, 0) || x.localeCompare(y)).slice(0, 20);
+    const nomes = et === 'ambos' ? [['48H na chegada', PD_COR.azul], ['Painel na chegada', PD_COR.a], ['Etiqueta colocada depois', PD_COR.b]] : [['Na chegada (até 10 min)', et === '48h' ? PD_COR.azul : PD_COR.a], ['Colocada depois', PD_COR.b]];
+    const series = nomes.map(([nome, cor], k) => ({ nome, cor, valores: rot.map(g => val(g)[k]) }));
+    const tot = series.reduce((s, x) => s + x.valores.reduce((a, n) => a + n, 0), 0), dep = series[series.length - 1].valores.reduce((a, n) => a + n, 0);
+    const NOME_ET = { ambos: '48H e Painel', '48h': '48H', painel: 'Painel' };
+    return {
+        titulo: `Tickets com etiqueta ${NOME_ET[et]} por ${ag === 'dia' ? 'dia' : 'caixa'}`,
+        fonte: 'Chatwoot · etiquetas time-48h e painel-do-pedido', periodo_txt: pdPeriodoTxt(per), avisos,
+        grafico: { tipo: ag === 'dia' ? 'colunas' : 'barras_h', eixo: ag === 'dia' ? 'Dia' : 'Caixa', formato: 'num', empilhado: true, rotulos: ag === 'dia' ? rot.map(d => pdBR(d).slice(0, 5)) : rot, series },
+        kpis: [
+            { rot: 'Com etiqueta', val: pdNum(tot), sub: `tickets recebidos · ${NOME_ET[et]}` },
+            { rot: 'Na chegada', val: tot ? pdNum((tot - dep) / tot * 100, 1) + '%' : '—', sub: 'etiqueta até 10 min da abertura' },
+            { rot: 'Colocada depois', val: pdNum(dep), sub: 'contam no time que recebeu' }
+        ],
+        regras: PD_REGRAS_REC.slice(0, 3).concat([`Etiqueta: ${et === '48h' ? 'time-48h' : (et === 'painel' ? 'painel-do-pedido' : 'time-48h ou painel-do-pedido (a que veio primeiro)')}`, 'Na chegada = etiqueta colocada até 10 min depois da abertura · colocada depois: o ticket conta no time que recebeu']),
+        sql: `-- recebidos = conversas novas do período pela regra do Recebimento (CTE "Rb")\nSELECT ${ag === 'dia' ? 'dia' : 'caixa'},\n       COUNT(*) FILTER (WHERE etiqueta - abertura <= interval '10 minutes') AS na_chegada,\n       COUNT(*) FILTER (WHERE etiqueta - abertura >  interval '10 minutes') AS depois\nFROM recebidos JOIN etiquetas_48h_painel USING (conversa)   -- ${NOME_ET[et]}\nGROUP BY ${ag === 'dia' ? 'dia' : 'caixa'};`,
+        destaques: { total: tot, na_chegada_pct: tot ? Math.round((tot - dep) / tot * 1000) / 10 : null, colocada_depois: dep },
+        resumo: { etiqueta: NOME_ET[et], agrupado_por: ag, periodo: pdPeriodoTxt(per), itens: rot.map((g, i) => { const o = { rotulo: ag === 'dia' ? pdBR(g).slice(0, 5) : g }; series.forEach(s => { o[s.nome] = s.valores[i]; }); return o; }), total: tot, colocada_depois: dep },
+        nomes: {}
+    };
+}
+
+// ---------- 3) TMC E TMR JUSTOS POR AGENTE (a mesma conta da tela de Atendimento por Agente) ----------
+async function pdExecAgentes(p, hoje) {
+    const per = pdPeriodo(p, hoje, PD_MAX_DIAS.tmc_tmr_agentes), avisos = per.avisos.slice();
+    const time = PD_TIMES.includes(String(p.time || '').toUpperCase()) && String(p.time).toUpperCase() !== 'OUTROS' ? String(p.time).toUpperCase() : 'TODOS';
+    const medida = ['tmc', 'tmr', 'ambos'].includes(p.medida) ? p.medida : 'ambos';
+    const j = await pdRota(`/api/atendimento-agentes?since=${pdUnix(per.ini)}&until=${pdUnix(per.fim, true)}`, avisos);
+    const ord = medida === 'tmr' ? 'tmr' : 'tmc';
+    let ags = (j.dados || []).filter(d => (time === 'TODOS' || d.time === time) && (d[ord + '_qtd'] || 0) > 0);
+    ags.sort((x, y) => (x[ord + '_medio_minutos'] - y[ord + '_medio_minutos']) || String(x.agente).localeCompare(String(y.agente)));   // menor tempo primeiro
+    const totalAg = ags.length;
+    if (ags.length > 25) { avisos.push(`Mostrando os 25 agentes com menor ${ord.toUpperCase()} de ${totalAg}.`); ags = ags.slice(0, 25); }
+    const media = (k) => { const base = (j.dados || []).filter(d => (time === 'TODOS' || d.time === time) && (d[k + '_qtd'] || 0) > 0); const n = base.reduce((s, d) => s + d[k + '_qtd'], 0); return n ? base.reduce((s, d) => s + d[k + '_medio_minutos'] * d[k + '_qtd'], 0) / n : null; };
+    const mTmc = media('tmc'), mTmr = media('tmr');
+    const val = (d, k) => (d[k + '_qtd'] || 0) > 0 ? Math.round(d[k + '_medio_minutos'] * 10) / 10 : null;
+    const series = [];
+    if (medida !== 'tmr') series.push({ nome: 'TMC (1º contato)', cor: PD_COR.a, valores: ags.map(d => val(d, 'tmc')) });
+    if (medida !== 'tmc') series.push({ nome: 'TMR (resposta)', cor: PD_COR.b, valores: ags.map(d => val(d, 'tmr')) });
+    const nomes = {}; ags.forEach((d, i) => { nomes[`Agente ${i + 1}`] = d.agente; });
+    const kpis = [];
+    if (medida !== 'tmr') kpis.push({ rot: 'TMC do time', val: pdTempo(mTmc), sub: 'média de todas as 1ªs respostas' });
+    if (medida !== 'tmc') kpis.push({ rot: 'TMR do time', val: pdTempo(mTmr), sub: 'média de todas as respostas' });
+    kpis.push({ rot: 'Agentes', val: pdNum(totalAg), sub: time === 'TODOS' ? 'todos os times' : PD_NOME_TIME[time] });
+    const melhor = ags[0], pior = ags[ags.length - 1];
+    return {
+        titulo: `${medida === 'ambos' ? 'TMC e TMR' : ord.toUpperCase()} justos por agente`,
+        fonte: 'Chatwoot · mensagens e atribuições (conta justa)', periodo_txt: pdPeriodoTxt(per), avisos,
+        grafico: { tipo: 'barras_h', eixo: 'Agente', formato: 'min', empilhado: false, rotulos: ags.map(d => d.agente), series },
+        kpis,
+        regras: ['Mesma conta da tela Atendimento por Agente (TMC/TMR justos)', 'Só conta o tempo em que o caso estava com o agente: fila e tempo com outro agente não contam', 'TMC = da atribuição (ou da mensagem do cliente, se chegou depois) até a 1ª resposta na vez · TMR = as demais respostas na vez', 'Tempo corrido · ordem: menor tempo primeiro'],
+        sql: `-- mesma rota da tela de Atendimento por Agente (/api/atendimento-agentes), período ${pdPeriodoTxt(per)}\n-- TMC/TMR justos: calculados em Node sobre as mensagens públicas e as atribuições de cada ticket (15.3.2)`,
+        destaques: { tmc_time_min: mTmc === null ? null : Math.round(mTmc * 10) / 10, tmr_time_min: mTmr === null ? null : Math.round(mTmr * 10) / 10, melhor: melhor ? 'Agente 1' : null, pior: pior ? `Agente ${ags.length}` : null, ordenado_por: ord.toUpperCase() + ' (menor primeiro)' },
+        resumo: { periodo: pdPeriodoTxt(per), time: PD_NOME_TIME[time], itens: ags.map((d, i) => ({ agente: `Agente ${i + 1}`, time: d.time, tmc_min: val(d, 'tmc'), base_tmc: d.tmc_qtd || 0, tmr_min: val(d, 'tmr'), base_tmr: d.tmr_qtd || 0 })), tmc_time_min: mTmc, tmr_time_min: mTmr },
+        nomes
+    };
+}
+
+// ---------- 4) ESPERA DO CLIENTE (o lado do cliente: só quando perguntarem) ----------
+async function pdExecEspera(p, hoje) {
+    const per = pdPeriodo(p, hoje, PD_MAX_DIAS.espera_cliente), avisos = per.avisos.slice();
+    const ag = ['caixa', 'time', 'dia', 'hora'].includes(p.agrupar_por) ? p.agrupar_por : 'caixa';
+    const medida = ['primeiro_contato', 'resposta', 'ambos'].includes(p.medida) ? p.medida : 'ambos';
+    const grupo = { caixa: 'e.caixa', time: 'e.setor', dia: `TO_CHAR(e.criado_br, 'YYYY-MM-DD')`, hora: `EXTRACT(HOUR FROM (e.inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo'))::int::text` }[ag];
+    const sqlFinal = `,
+    Seq AS (   -- mensagens públicas do cliente e de agente (pessoa); robô e automação não contam como contato · caixa/time/dia vêm junto (sem juntar com Rb de novo)
+        SELECT m.conversation_id AS conv_id, m.id, m.created_at, (m.message_type = 0) AS cli, rb.caixa, rb.setor, rb.criado_br
+        FROM Rb rb
+        JOIN messages m ON m.conversation_id = rb.conv_id
+        WHERE rb.tipo = 'valido' AND m.private = FALSE
+          AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+          AND (m.message_type = 0 OR (m.message_type = 1 AND m.sender_type = 'User' AND m.sender_id IS NOT NULL AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE))
+    ),
+    Marc AS (
+        SELECT conv_id, created_at, cli, caixa, setor, criado_br,
+               LAG(cli) OVER (PARTITION BY conv_id ORDER BY created_at, id) AS antes,
+               MIN(created_at) FILTER (WHERE NOT cli) OVER (PARTITION BY conv_id ORDER BY created_at DESC, id DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS resposta
+        FROM Seq
+    ),
+    Esperas AS (   -- cada espera começa na 1ª mensagem do cliente depois de uma resposta (ou na 1ª da conversa)
+        SELECT conv_id, caixa, setor, criado_br, created_at AS inicio, (antes IS NULL) AS primeira, resposta, EXTRACT(EPOCH FROM resposta - created_at) AS seg
+        FROM Marc
+        WHERE cli AND (antes IS NULL OR antes = FALSE)
+    )
+    SELECT ${grupo} AS grupo,
+           COUNT(*) FILTER (WHERE e.primeira AND e.resposta IS NOT NULL)::int AS n1,
+           AVG(e.seg) FILTER (WHERE e.primeira AND e.resposta IS NOT NULL) AS media1,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY e.seg) FILTER (WHERE e.primeira AND e.resposta IS NOT NULL) AS mediana1,
+           COUNT(*) FILTER (WHERE e.primeira AND e.resposta IS NULL)::int AS sem1,
+           COUNT(*) FILTER (WHERE NOT e.primeira AND e.resposta IS NOT NULL)::int AS n2,
+           AVG(e.seg) FILTER (WHERE NOT e.primeira AND e.resposta IS NOT NULL) AS media2,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY e.seg) FILTER (WHERE NOT e.primeira AND e.resposta IS NOT NULL) AS mediana2
+    FROM Esperas e
+    GROUP BY GROUPING SETS ((${grupo}), ())`;
+    const linhas = await pdCacheado(`espera|${ag}|${per.ini}|${per.fim}`, hoje, per.fim, async () => (await pool.query(PD_SQL_BASE + sqlFinal, [per.ini, per.fim])).rows);
+    const geral = linhas.find(r => r.grupo === null) || {}, G = {};
+    linhas.filter(r => r.grupo !== null).forEach(r => { G[r.grupo] = r; });
+    let rot;
+    if (ag === 'hora') rot = Array.from({ length: 24 }, (_, h) => String(h));
+    else if (ag === 'dia') { rot = []; for (let d = per.ini; d <= per.fim; d = pdSoma(d, 1)) rot.push(d); }
+    else if (ag === 'time') rot = PD_TIMES.filter(t => G[t]);
+    else rot = Object.keys(G).sort((x, y) => ((G[y].n1 || 0) + (G[y].n2 || 0)) - ((G[x].n1 || 0) + (G[x].n2 || 0)) || x.localeCompare(y)).slice(0, 20);
+    const nomeRot = (g) => ag === 'hora' ? g + 'h' : (ag === 'dia' ? pdBR(g).slice(0, 5) : (ag === 'time' ? PD_NOME_TIME[g] : g));
+    const series = [];
+    if (medida !== 'resposta') series.push({ nome: '1º contato (média)', cor: PD_COR.a, valores: rot.map(g => G[g] && G[g].n1 ? pdMin(G[g].media1) : null) });
+    if (medida !== 'primeiro_contato') series.push({ nome: 'Resposta (média)', cor: PD_COR.b, valores: rot.map(g => G[g] && G[g].n2 ? pdMin(G[g].media2) : null) });
+    const kpis = [];
+    if (medida !== 'resposta') kpis.push({ rot: 'Espera até o 1º contato', val: pdTempo(pdMin(geral.media1)), sub: `média · metade em até ${pdTempo(pdMin(geral.mediana1))}` });
+    if (medida !== 'primeiro_contato') kpis.push({ rot: 'Espera por resposta', val: pdTempo(pdMin(geral.media2)), sub: `média · metade em até ${pdTempo(pdMin(geral.mediana2))}` });
+    kpis.push({ rot: 'Conversas medidas', val: pdNum(geral.n1 || 0), sub: pdPl(geral.n2 || 0, 'espera por resposta', 'esperas por resposta') });
+    kpis.push({ rot: 'Sem contato de agente', val: pdNum(geral.sem1 || 0), sub: 'até agora · fora da média' });
+    const s0 = series[0], idxPior = s0 ? s0.valores.reduce((m, v, i) => (v !== null && (s0.valores[m] === null || v > s0.valores[m]) ? i : m), 0) : 0;
+    return {
+        titulo: `Espera do cliente por ${{ caixa: 'caixa', time: 'time', dia: 'dia', hora: 'hora' }[ag]}`,
+        fonte: 'Chatwoot · mensagens (lado do cliente)', periodo_txt: pdPeriodoTxt(per), avisos,
+        grafico: { tipo: (ag === 'dia' || ag === 'hora') ? 'linhas' : 'barras_h', eixo: { caixa: 'Caixa', time: 'Time', dia: 'Dia', hora: 'Hora' }[ag], formato: 'min', empilhado: false, rotulos: rot.map(nomeRot), series },
+        kpis,
+        regras: ['Lado do cliente: quanto ele esperou, com qualquer agente ou fila (tempo corrido)', '1º contato = da 1ª mensagem do cliente até a 1ª resposta de um agente (pessoa) · robô e automação não contam', 'Resposta = de cada nova mensagem do cliente (depois de uma resposta) até a próxima resposta de agente', 'Conversas abertas pelo cliente no período, pela regra do Recebimento (sem duplicadas, sem Brasil e Pitaco Teste)', 'Quem ainda não teve contato fica fora da média e aparece à parte'],
+        sql: `-- recebidos = conversas novas do período pela regra do Recebimento (CTE "Rb")\n-- esperas = cada mensagem do cliente que abre uma espera → próxima resposta de agente (pessoa)\nSELECT ${ag},\n       AVG(resposta - inicio) FILTER (WHERE primeira)     AS espera_1o_contato,\n       AVG(resposta - inicio) FILTER (WHERE NOT primeira) AS espera_resposta\nFROM esperas JOIN recebidos USING (conversa)\nGROUP BY ${ag};`,
+        destaques: { primeiro_contato_media_min: pdMin(geral.media1), primeiro_contato_mediana_min: pdMin(geral.mediana1), resposta_media_min: pdMin(geral.media2), resposta_mediana_min: pdMin(geral.mediana2), sem_contato: geral.sem1 || 0, maior_espera: s0 && rot.length ? { rotulo: nomeRot(rot[idxPior]), minutos: s0.valores[idxPior], medida: s0.nome } : null },
+        resumo: { agrupado_por: ag, periodo: pdPeriodoTxt(per), itens: rot.map(g => ({ rotulo: nomeRot(g), primeiro_contato_min: G[g] && G[g].n1 ? pdMin(G[g].media1) : null, base_1o_contato: G[g] ? G[g].n1 : 0, resposta_min: G[g] && G[g].n2 ? pdMin(G[g].media2) : null, base_resposta: G[g] ? G[g].n2 : 0 })), geral: { primeiro_contato_min: pdMin(geral.media1), resposta_min: pdMin(geral.media2), sem_contato: geral.sem1 || 0 } },
+        nomes: {}
+    };
+}
+
+const PD_EXEC = { recebimento: pdExecRecebimento, etiquetas_48h_painel: pdExecEtiquetas, tmc_tmr_agentes: pdExecAgentes, espera_cliente: pdExecEspera };
+
+// ---------- catálogo que o Claude enxerga (ferramentas) ----------
+const PD_PERIODO_PROPS = {
+    periodo: { type: 'string', enum: ['hoje', 'ontem', 'esta_semana', 'semana_passada', 'este_mes', 'mes_passado', 'ultimos_7_dias', 'ultimos_30_dias', 'personalizado'], description: 'Período. Prefira os relativos; personalizado só para datas citadas.' },
+    inicio: { type: 'string', description: 'Só com periodo=personalizado: AAAA-MM-DD' },
+    fim: { type: 'string', description: 'Só com periodo=personalizado: AAAA-MM-DD (igual ao início para 1 dia)' },
+    titulo: { type: 'string', description: 'Título curto do gráfico, em português, até 60 caracteres' }
+};
+const PD_FERRAMENTAS = [
+    { name: 'recebimento', description: 'Tickets recebidos: conversas novas abertas pelo cliente (duplicadas, abertas por nós e sem mensagem ficam à parte; caixas Atendimento | Brasil e Pitaco Teste fora). Mesma regra da tela Recebimento de Tickets. Serve para volume, entrada, chegada de tickets, por time, caixa, dia, hora ou dia da semana, e para comparar dois períodos (ex.: dia X × dia Y por hora).',
+        input_schema: { type: 'object', properties: Object.assign({}, PD_PERIODO_PROPS, {
+            agrupar_por: { type: 'string', enum: ['time', 'caixa', 'dia', 'hora', 'dia_da_semana'] },
+            time: { type: 'string', enum: ['TODOS'].concat(PD_TIMES), description: 'Filtra um time (não vale para agrupar_por=time)' },
+            comparar: { type: 'string', enum: ['nao', 'periodo_anterior', 'semana_anterior', 'personalizado'], description: 'semana_anterior = mesmos dias 7 dias antes; personalizado usa comparar_inicio/comparar_fim' },
+            comparar_inicio: { type: 'string', description: 'AAAA-MM-DD' }, comparar_fim: { type: 'string', description: 'AAAA-MM-DD' }
+        }), required: ['periodo', 'agrupar_por', 'titulo'] } },
+    { name: 'etiquetas_48h_painel', description: 'Tickets recebidos com etiqueta 48H (time-48h) e/ou Painel (painel-do-pedido), separando a etiqueta colocada na chegada (até 10 min da abertura) da colocada depois. Por caixa ou por dia.',
+        input_schema: { type: 'object', properties: Object.assign({}, PD_PERIODO_PROPS, {
+            etiqueta: { type: 'string', enum: ['ambos', '48h', 'painel'], description: 'ambos = 48H e Painel; "só 48h" = 48h; "só painel" = painel' },
+            agrupar_por: { type: 'string', enum: ['caixa', 'dia'] }
+        }), required: ['periodo', 'etiqueta', 'agrupar_por', 'titulo'] } },
+    { name: 'tmc_tmr_agentes', description: 'TMC (1º contato) e TMR (resposta) de cada agente pela conta justa do Dash: só conta o tempo em que o caso estava com o agente; tempo corrido. É a resposta padrão para TMC, TMR e tempo de resposta dos agentes.',
+        input_schema: { type: 'object', properties: Object.assign({}, PD_PERIODO_PROPS, {
+            time: { type: 'string', enum: ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'] },
+            medida: { type: 'string', enum: ['tmc', 'tmr', 'ambos'] }
+        }), required: ['periodo', 'medida', 'titulo'] } },
+    { name: 'espera_cliente', description: 'Quanto o cliente esperou, do lado dele: até o 1º contato de um agente (pessoa) e entre a mensagem dele e a próxima resposta, com qualquer agente ou fila; tempo corrido. Use SÓ quando a pergunta falar do cliente: "quanto tempo o cliente esperou", "espera do cliente", "TMC/TMR do cliente".',
+        input_schema: { type: 'object', properties: Object.assign({}, PD_PERIODO_PROPS, {
+            agrupar_por: { type: 'string', enum: ['caixa', 'time', 'dia', 'hora'] },
+            medida: { type: 'string', enum: ['primeiro_contato', 'resposta', 'ambos'] }
+        }), required: ['periodo', 'agrupar_por', 'medida', 'titulo'] } },
+    { name: 'fora_do_escopo', description: 'Use quando a pergunta não couber nas outras ferramentas (ex.: reembolso, produto, retenção, procedimento, motivo de contato: chegam na próxima fase).',
+        input_schema: { type: 'object', properties: {
+            motivo: { type: 'string', description: 'Explicação curta para o gestor, em português' },
+            sugestoes: { type: 'array', items: { type: 'string' }, description: 'Até 3 perguntas parecidas que o catálogo responde' }
+        }, required: ['motivo'] } }
+];
+const PD_FERRAMENTA_RESPONDER = { name: 'responder', description: 'Entrega a leitura do gráfico.',
+    input_schema: { type: 'object', properties: {
+        insight: { type: 'string', description: 'Até 2 frases curtas (máximo 280 caracteres) com o achado principal, só com os números enviados' },
+        seguir: { type: 'array', items: { type: 'string' }, description: '2 ou 3 perguntas curtas de continuação (até 60 caracteres cada)' }
+    }, required: ['insight', 'seguir'] } };
+function pdSistemaEscolher(hoje) {
+    return `Você é o robô do Dash GEX, o painel de atendimento ao cliente da empresa. Seu trabalho: escolher UMA consulta do catálogo (ferramentas) que responde à pergunta do gestor, com os parâmetros certos. Você não calcula números.
+Hoje é ${pdBR(hoje)} (${PD_DIAS[pdD(hoje).getUTCDay()]}), horário de Brasília. Semana = segunda a domingo. Datas sem ano são de ${hoje.slice(0, 4)}.
+Período: prefira os relativos (hoje, ontem, esta_semana, semana_passada, este_mes, mes_passado, ultimos_7_dias, ultimos_30_dias), porque o gráfico pode ser fixado e se atualizar depois. Use personalizado (inicio e fim em AAAA-MM-DD) só para datas citadas. Sem período na pergunta: ultimos_7_dias.
+Times: RET = Retenção, SAC, BKO = BackOffice, SMS, 48H, OUTROS = sem time.
+Como escolher:
+- Tickets recebidos, volume, entrada, chegada → recebimento. "Dia X e dia Y", "hoje x ontem", "ontem x semana passada" → recebimento com agrupar_por=hora e comparar.
+- Etiqueta 48H, Painel, "48h e painel", "só 48h", "só painel" → etiquetas_48h_painel.
+- TMC, TMR, tempo de 1ª resposta ou de resposta dos agentes → tmc_tmr_agentes (conta justa).
+- Só quando a pergunta falar do lado do cliente ("quanto tempo o cliente esperou", "espera do cliente", "TMC/TMR do cliente") → espera_cliente.
+- Reembolso, produto, retenção, procedimento, motivo de contato ou qualquer outra coisa → fora_do_escopo.
+Se vier uma pergunta anterior e a nova for continuação dela ("e só o SAC?", "e ontem?", "agora por hora"), repita a consulta anterior mudando só o que foi pedido.
+Título: curto, em português, sem ponto final.`;
+}
+const PD_SISTEMA_LER = `Você escreve a leitura de um gráfico do Dash GEX para gestores de atendimento. Português do Brasil, frases curtas, tom direto.
+Use só os números enviados em "dados" e "destaques": não faça contas novas e não invente causas. Agentes aparecem como "Agente N": escreva exatamente assim, sem artigo antes (ex.: "Agente 3 tem o menor TMC").
+insight: até 2 frases (máximo 280 caracteres) com o achado principal.
+seguir: 2 ou 3 perguntas curtas de continuação que caibam no catálogo: recebimento (por time, caixa, dia, hora, dia da semana, comparando períodos), etiquetas 48H e Painel, TMC/TMR justos por agente e espera do cliente.`;
+
+async function pdClaude(corpo) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
+    try {
+        const r = await fetch(PD_API_URL, { method: 'POST', signal: ctl.signal,
+            headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+            body: JSON.stringify(Object.assign({ model: PD_MODELO }, corpo)) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error((j && j.error && j.error.message) || ('HTTP ' + r.status)), { api: true });
+        return j;
+    } catch (e) {
+        if (e.api) throw e;
+        throw Object.assign(new Error(e.name === 'AbortError' ? 'demorou mais de 45 s' : (e.message || 'falha de conexão')), { api: true });
+    } finally { clearTimeout(timer); }
+}
+const pdTrocarNomes = (txt, nomes) => String(txt || '').replace(/\bAgente (\d+)\b/g, (m) => nomes[m] || m);
+function pdResposta(pergunta, consulta, r, insight, seguir, t0, semRobo) {
+    const tit = String((consulta.parametros && consulta.parametros.titulo) || '').trim().slice(0, 80) || r.titulo;
+    return { ok: true, pergunta, consulta, titulo: tit, periodo_txt: r.periodo_txt, fonte: r.fonte, grafico: r.grafico, kpis: r.kpis, insight, seguir, regras: r.regras, sql: r.sql, avisos: r.avisos, sem_robo: !!semRobo, modelo: semRobo ? '' : PD_MODELO, ms: Date.now() - t0 };
+}
+
+app.post('/api/pergunte-dash', express.json({ limit: '64kb' }), async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito para Administradores.' });
+    const email = ((req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value : '').toLowerCase();
+    const b = req.body || {}, hoje = pdHoje(), t0 = Date.now();
+    let segurando = false;
+    try {
+        // a) abrir um gráfico fixado: roda a mesma consulta de novo, sem usar a API
+        if (b.consulta && typeof b.consulta === 'object' && PD_EXEC[b.consulta.ferramenta]) {
+            const consulta = { ferramenta: b.consulta.ferramenta, parametros: (b.consulta.parametros && typeof b.consulta.parametros === 'object') ? b.consulta.parametros : {} };
+            const r = await PD_EXEC[consulta.ferramenta](consulta.parametros, hoje);
+            return res.json(pdResposta(String(b.pergunta || '').slice(0, 300), consulta, r, '', [], t0, true));
+        }
+        const pergunta = String(b.pergunta || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+        if (pergunta.length < 3) return res.status(400).json({ ok: false, erro: 'Escreva a pergunta.' });
+        if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ ok: false, sem_chave: true, erro: 'O robô ainda não está ligado: falta a variável ANTHROPIC_API_KEY no servidor. Os gráficos fixados continuam abrindo.' });
+        if (pdRodando[email]) return res.status(429).json({ ok: false, erro: 'Espere a pergunta anterior terminar.' });
+        const uso = (pdUso[email] || []).filter(t => Date.now() - t < 3600000);
+        if (uso.length >= PD_LIMITE_HORA) return res.status(429).json({ ok: false, erro: `Limite de ${PD_LIMITE_HORA} perguntas por hora atingido. Tente de novo em alguns minutos.` });
+        uso.push(Date.now()); pdUso[email] = uso; pdRodando[email] = true; segurando = true;
+
+        // b) o robô escolhe a consulta (com a pergunta anterior, para continuações)
+        const ant = (b.anterior && b.anterior.consulta && PD_EXEC[b.anterior.consulta.ferramenta]) ? b.anterior : null;
+        const texto = (ant ? `Pergunta anterior: "${String(ant.pergunta || '').slice(0, 300)}" → consulta usada: ${JSON.stringify(ant.consulta).slice(0, 900)}\n` : '') + `Pergunta: "${pergunta}"`;
+        const r1 = await pdClaude({ max_tokens: 800, system: pdSistemaEscolher(hoje), tools: PD_FERRAMENTAS, tool_choice: { type: 'any' }, messages: [{ role: 'user', content: texto }] });
+        const escolha = (r1.content || []).find(x => x && x.type === 'tool_use');
+        if (!escolha) throw Object.assign(new Error('o robô não escolheu uma consulta'), { api: true });
+        if (!PD_EXEC[escolha.name]) {
+            const inp = escolha.input || {};
+            console.log(`🤖 Pergunte ao Dash: fora do catálogo em ${Date.now() - t0} ms`);
+            return res.json({ ok: true, fora_do_escopo: true, pergunta, motivo: String(inp.motivo || 'Essa pergunta ainda não está no catálogo do robô.').slice(0, 400), seguir: (Array.isArray(inp.sugestoes) ? inp.sugestoes : []).slice(0, 3).map(s => String(s).slice(0, 90)), ms: Date.now() - t0 });
+        }
+        const consulta = { ferramenta: escolha.name, parametros: escolha.input || {} };
+
+        // c) o banco calcula (consulta pronta, só leitura)
+        const r = await PD_EXEC[consulta.ferramenta](consulta.parametros, hoje);
+
+        // d) o robô lê o resultado: só totais; agente vai como "Agente N"
+        let insight = '', seguir = [];
+        try {
+            const r2 = await pdClaude({ max_tokens: 500, system: PD_SISTEMA_LER, tools: [PD_FERRAMENTA_RESPONDER], tool_choice: { type: 'tool', name: 'responder' },
+                messages: [{ role: 'user', content: JSON.stringify({ pergunta, titulo: r.titulo, periodo: r.periodo_txt, dados: r.resumo, destaques: r.destaques }) }] });
+            const lido = (r2.content || []).find(x => x && x.type === 'tool_use');
+            if (lido && lido.input) {
+                insight = pdTrocarNomes(String(lido.input.insight || '').slice(0, 400), r.nomes);
+                seguir = (Array.isArray(lido.input.seguir) ? lido.input.seguir : []).slice(0, 3).map(s => pdTrocarNomes(String(s).slice(0, 90), r.nomes));
+            }
+        } catch (e) { r.avisos.push('A leitura do robô não veio agora; o gráfico e os números estão certos.'); }
+        console.log(`🤖 Pergunte ao Dash: ${consulta.ferramenta} em ${Date.now() - t0} ms`);
+        res.json(pdResposta(pergunta, consulta, r, insight, seguir, t0, false));
+    } catch (e) {
+        console.error('Erro Pergunte ao Dash:', e.message);
+        res.status(e.api ? 502 : 500).json({ ok: false, erro: e.api ? `O robô não respondeu agora (${e.message}). Tente de novo em instantes.` : `Não consegui buscar os números agora (${e.message}).` });
+    } finally {
+        if (segurando) delete pdRodando[email];
+    }
+});
+
+// ==========================================
 // 16.1 ROTA DE URGÊNCIA: REEMBOLSOS BUYGOODS (COM GOOGLE SHEETS)
 // ==========================================
+// 14/10/2026: chamada externa com tempo limite (AbortController, como no pdClaude/trChatwoot): Apps Script ou Chatwoot travado não segura a rota por minutos
+function fetchComLimite(url, opcoes, ms) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+    return fetch(url, Object.assign({}, opcoes, { signal: ctl.signal }))
+        .catch(e => { throw (e && e.name === 'AbortError') ? new Error(`sem resposta em ${Math.round(ms / 1000)} s`) : e; })
+        .finally(() => clearTimeout(timer));
+}
 app.get('/api/reembolsos-buygoods', async (req, res) => {
+    const fetch = (url, opcoes) => fetchComLimite(url, opcoes, 30000);   // 14/10/2026: o log de reembolso (Apps Script) tem 30 s para responder
     // 🔥 COLE O MESMO LINK DO GOOGLE AQUI:
     const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbxLqWTExvo0824oEpWUJYbDIzVdK4q9S3eeElIo0n8eliTCYueQjOJIB0AOCPuDnl1LSw/exec";
 
@@ -3494,7 +5378,21 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
-        const _pLog = lerLogReembolso(URL_PLANILHA, req.query.fresh === '1');   // 08/10/2026: leitura protegida do log (ver 16.0): confere a resposta, tenta de novo e guarda a última cópia boa
+        const _pLog = (async () => {
+            let logMap = {};
+            try {
+                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+                const _t = (await _r.text()).trim();
+                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
+                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                    const tk = String(l.ticket || l[0] || '').trim();
+                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
+                    const dl = new Date(l.data_hora || l[1]);
+                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+                });
+            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+            return logMap;
+        })();
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -3502,8 +5400,8 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
             dFim = new Date(parseInt(req.query.until) * 1000);
         } else {
             const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-            dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
-            dFim = agora;
+            dInicio = new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), 1, 3));        // 14/10/2026: dia 1 às 00:00 de Brasília (03:00 UTC), com o servidor em qualquer fuso
+            dFim = new Date(Date.UTC(agora.getFullYear(), agora.getMonth() + 1, 1, 3) - 1);   // 14/10/2026: fim do mês 23:59:59 de Brasília (antes "agora" ficava 3 h atrasado com o servidor em UTC)
         }
         const dCorte = new Date(dInicio); dCorte.setDate(dCorte.getDate() - 90); const dCorteSQL = dCorte.toISOString().slice(0, 10); // E: filtro de data movido pro banco (periodo + 90 dias de margem) — reduz o scan sem cortar resultado
 
@@ -3541,7 +5439,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const [{ logMap, info: logInfo }, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
+        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -3581,8 +5479,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
 
-        if (logInfo.situacao !== 'ok') res.locals.naoGuardarCache = true;   // 08/10/2026: com o log falho, a resposta não fica no cache (a próxima abertura tenta de novo)
-        res.json({ success: true, dados: arrayFinal, log: logInfo });
+        res.json({ success: true, dados: arrayFinal });
     } catch (error) { 
         console.error("Erro BuyGoods:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
@@ -3590,6 +5487,7 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
 });
 
 app.get('/api/reembolsos-cartpanda', async (req, res) => {
+    const fetch = (url, opcoes) => fetchComLimite(url, opcoes, 30000);   // 14/10/2026: o log de reembolso (Apps Script) tem 30 s para responder
     // 🔥 COLE O MESMO LINK DO GOOGLE AQUI:
     const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbxLqWTExvo0824oEpWUJYbDIzVdK4q9S3eeElIo0n8eliTCYueQjOJIB0AOCPuDnl1LSw/exec";
 
@@ -3604,7 +5502,21 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         // 1. LER O COFRE DO GOOGLE SHEETS (O mesmo cofre serve para todos!)
         // LOG (prioridade). Imutável: 1 por ticket, mantém o antigo.
         // OTIMIZACAO: o log do Google (fetch) roda em PARALELO com a query do banco (antes era sequencial) — tempo total cai p/ o maior dos dois, nao a soma
-        const _pLog = lerLogReembolso(URL_PLANILHA, req.query.fresh === '1');   // 08/10/2026: leitura protegida do log (ver 16.0): confere a resposta, tenta de novo e guarda a última cópia boa
+        const _pLog = (async () => {
+            let logMap = {};
+            try {
+                const _r = await fetch(URL_PLANILHA, { redirect: 'follow' });
+                const _t = (await _r.text()).trim();
+                const dadosPlanilha = (_t.startsWith('[') || _t.startsWith('{')) ? JSON.parse(_t) : [];
+                if (Array.isArray(dadosPlanilha)) dadosPlanilha.forEach(l => {
+                    const tk = String(l.ticket || l[0] || '').trim();
+                    if (!tk || logMap[tk] || /sem reembolso/i.test(String(l.tipo || l[2] || ''))) return;
+                    const dl = new Date(l.data_hora || l[1]);
+                    logMap[tk] = { data: isNaN(dl) ? null : dl, tipo: l.tipo || '', pedido: l.pedido || '', produto: l.produto || '', cliente: l.cliente || '', email: l.email || '' };
+                });
+            } catch (err) { console.log("Aviso: falha ao ler o log de reembolso.", err.message); }
+            return logMap;
+        })();
 
         let dInicio, dFim;
         if (req.query.since && req.query.until) {
@@ -3612,8 +5524,8 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
             dFim = new Date(parseInt(req.query.until) * 1000);
         } else {
             const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-            dInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
-            dFim = agora;
+            dInicio = new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), 1, 3));        // 14/10/2026: dia 1 às 00:00 de Brasília (03:00 UTC), com o servidor em qualquer fuso
+            dFim = new Date(Date.UTC(agora.getFullYear(), agora.getMonth() + 1, 1, 3) - 1);   // 14/10/2026: fim do mês 23:59:59 de Brasília (antes "agora" ficava 3 h atrasado com o servidor em UTC)
         }
         const dCorte = new Date(dInicio); dCorte.setDate(dCorte.getDate() - 90); const dCorteSQL = dCorte.toISOString().slice(0, 10); // E: filtro de data movido pro banco (periodo + 90 dias de margem) — reduz o scan sem cortar resultado
 
@@ -3651,7 +5563,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') != ''
           AND COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') NOT ILIKE '%sem reembolso%'
         `;
-        const [{ logMap, info: logInfo }, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
+        const [logMap, result] = await Promise.all([_pLog, pool.query(q, [dCorteSQL])]);
 
         // 4. CRUZAMENTO DE DADOS (Exatamente a mesma lógica)
         const resumoAgentes = {};
@@ -3691,8 +5603,7 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
 
-        if (logInfo.situacao !== 'ok') res.locals.naoGuardarCache = true;   // 08/10/2026: com o log falho, a resposta não fica no cache (a próxima abertura tenta de novo)
-        res.json({ success: true, dados: arrayFinal, log: logInfo });
+        res.json({ success: true, dados: arrayFinal });
     } catch (error) { 
         console.error("Erro CartPanda:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
@@ -3852,6 +5763,9 @@ app.get('/api/raio-x', async (req, res) => {
                 `SELECT column_name, data_type, is_nullable FROM information_schema.columns
                  WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`, [tabela]);
             const amostra = await pool.query(`SELECT * FROM "${tabela}" LIMIT 20`); // tabela já validada = seguro
+            // 🛡️ 16/10/2026: coluna de senha, token, chave ou segredo aparece mascarada (ex.: access_tokens, users, canais do Chatwoot) — o Raio-X mostra a estrutura, não as credenciais
+            const COL_SENSIVEL = /pass|senha|token|secret|segredo|key|chave|otp|salt|hash|crypt|credential|cert|private|hmac|signature|cookie|session|webhook|provider_config|serialized_value|settings/i;
+            const valorRaioX = (col, v) => (v !== null && v !== undefined && v !== '' && (COL_SENSIVEL.test(col) || tabela === 'access_tokens')) ? '<i style="color:#fbbf24">•••• oculto</i>' : esc(v);
 
             html += `<p><a href="/api/raio-x">&larr; voltar pra lista</a></p>`;
             html += `<h2>Tabela: ${tabela} — ${cols.rows.length} colunas</h2>`;
@@ -3864,7 +5778,7 @@ app.get('/api/raio-x', async (req, res) => {
             else {
                 const ck = Object.keys(amostra.rows[0]);
                 html += '<table><tr>' + ck.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
-                for (const row of amostra.rows) html += '<tr>' + ck.map(c => `<td>${esc(row[c])}</td>`).join('') + '</tr>';
+                for (const row of amostra.rows) html += '<tr>' + ck.map(c => `<td>${valorRaioX(c, row[c])}</td>`).join('') + '</tr>';   // 16/10/2026: valorRaioX (mascara as colunas sensíveis)
                 html += '</table>';
             }
         } else {
@@ -3991,6 +5905,7 @@ app.get('/api/resumo-recorrencia', async (req, res) => {
                    FROM conversations WHERE account_id = 1 AND id NOT IN ${JUNK} AND ${JAN} GROUP BY 1, 2`)
         ]);
 
+        if ([cont, sla, porDia, fila, entre, prod, heat].some(x => x === null)) return res.status(500).json({ success: false, error: 'O banco não respondeu a todas as consultas do resumo agora. Tente de novo em instantes.' });   // 14/10/2026: consulta que falhou não vira zero com success (o cache guardava os zeros por 30 min); com 500 o Dash entrega o último dado bom, marcado
         const c = (cont && cont[0]) || {}, s = (sla && sla[0]) || {}, f = (fila && fila[0]) || {}, pr = (prod && prod[0]) || {};
         const total = parseInt(c.total) || 0, comResp = parseInt(c.com_resp) || 0;
         const convDias = parseInt(pr.conv_dias) || 0, agDias = parseInt(pr.ag_dias) || 0;
@@ -4062,6 +5977,8 @@ app.get('/api/tickets-diario', async (req, res) => {
             ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1));
             fim = formatarDataSQL(agora);
         }
+        const _errPer = tkPeriodoValido(ini, fim);   // 26/10/2026: teto de período
+        if (_errPer) return res.status(400).json({ success: false, error: _errPer });
         const result = await pool.query(queryTickets, [ini, fim]);
         const dias = [];
         let d = new Date(ini + 'T12:00:00Z'); const dEnd = new Date(fim + 'T12:00:00Z');
@@ -4070,7 +5987,7 @@ app.get('/api/tickets-diario', async (req, res) => {
         result.rows.forEach(r => {
             const nome = r.agente || 'SEM ATRIBUIR';
             const diaStr = r.dia instanceof Date ? r.dia.toISOString().split('T')[0] : String(r.dia).split('T')[0];
-            if (!mapa[nome]) mapa[nome] = { nome, porDia: {}, total: 0 };
+            if (!mapa[nome]) mapa[nome] = { nome, lider: tkLiderDe(nome), porDia: {}, total: 0 };
             const v = parseInt(r.tickets) || 0;
             mapa[nome].porDia[diaStr] = (mapa[nome].porDia[diaStr] || 0) + v;
             mapa[nome].total += v;
@@ -4169,9 +6086,10 @@ function agruparCasosAdiar(rows) {
         if (!mapa[nome]) mapa[nome] = { nome, retornos: 0, aguardando: 0, fora_sla: 0, total: 0, detalhes: [] };
         const base = r.last_msg_at ? new Date(r.last_msg_at) : (r.last_activity_at ? new Date(r.last_activity_at) : new Date(r.created_at));
         const diffHoras = (agora - base) / (1000 * 60 * 60);
+        const horasFaixa = Math.round(diffHoras);   // 14/10/2026: a faixa usa as mesmas horas arredondadas que aparecem ("parado há Xh") e que o filtro do adiamento (detalhePassaFaixa) usa
         let statusLabel, ordem;
-        if (diffHoras > 48) { mapa[nome].fora_sla += 1; statusLabel = '\u{1F534} +48h'; ordem = 1; }
-        else if (diffHoras >= 24) { mapa[nome].aguardando += 1; statusLabel = '\u{1F7E1} 24-48h'; ordem = 2; }
+        if (horasFaixa > 48) { mapa[nome].fora_sla += 1; statusLabel = '\u{1F534} +48h'; ordem = 1; }   // 14/10/2026: horasFaixa
+        else if (horasFaixa >= 24) { mapa[nome].aguardando += 1; statusLabel = '\u{1F7E1} 24-48h'; ordem = 2; }   // 14/10/2026: horasFaixa
         else { mapa[nome].retornos += 1; statusLabel = '\u{1F7E2} < 24h'; ordem = 3; }
         mapa[nome].total += 1;
         mapa[nome].detalhes.push({
@@ -4227,6 +6145,7 @@ app.get('/api/casos-para-adiar', async (req, res) => {
 });
 
 async function snoozeConversa(displayId, snoozedUntil) {
+    const fetch = (url, opcoes) => fetchComLimite(url, opcoes, 30000);   // 14/10/2026: o Chatwoot tem 30 s para responder (antes um toggle_status travado segurava o Adiar por minutos)
     const url = `${CHATWOOT_URL}/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/conversations/${displayId}/toggle_status`;
     const body = { status: 'snoozed' };
     if (snoozedUntil) body.snoozed_until = snoozedUntil;
@@ -4275,6 +6194,421 @@ app.post('/api/adiar-casos', express.json(), async (req, res) => {
         }
         res.json({ success: true, total: idsUnicos.length, ok, falhas: erros.length, erros: erros.slice(0, 50), snoozed_until: snoozedUntil });
     } catch (e) { console.error('[adiar-casos]', e.message); res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ==========================================
+// 20.5 🔀 TRANSFERIR E ATRIBUIR TICKETS (14/10/2026) — SÓ O DONO (mesma trava do Adiar Casos)
+// Transfere casos de agente(s) ou da fila para 1 ou mais agentes, ou atribui qualquer ticket pelo número.
+// 2+ agentes = distribui: cada ticket vai para quem tem MENOS casos abertos no momento (equilibra a carga).
+// O time do ticket muda junto para o time do agente que recebe (só para um time do qual ele é membro).
+// Só manda para quem tem acesso à caixa do ticket (membro da caixa ou administrador no Chatwoot).
+// Escreve SÓ pela API REST do Chatwoot (como o Adiar); no banco o Dash só lê: monta a lista, a prévia e confere o resultado.
+// Responde com "ok" (e não "success") de propósito: o cache do Dash não guarda estas respostas (casos e cargas mudam a cada transferência).
+// ==========================================
+const TR_MAX_ITENS = 300;              // tickets por transferência
+const TR_SETORES = [['RET', /reten/i], ['SAC', /sac/i], ['BKO', /back ?office|bko/i], ['SMS', /sms/i], ['48H', /48/]];
+const trHistorico = [];                // últimas transferências (memória do servidor; zera quando o Dash reinicia)
+let trRodando = false;
+const trSetorDe = (nome) => { const s = TR_SETORES.find(([, re]) => re.test(String(nome || ''))); return s ? s[0] : ''; };
+const trSiglaNome = (nome) => { const m = String(nome || '').toUpperCase().match(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b/); return m ? m[1] : ''; };   // 14/10/2026: sigla do time no nome, a mesma regra do resto do Dash ("Ana - RET", "ANA RET 2")
+const trIds = (v) => [...new Set((Array.isArray(v) ? v : String(v || '').split(/[^0-9]+/)).map(x => parseInt(x, 10)).filter(x => Number.isInteger(x) && x > 0))];
+
+async function trTabelaExiste(nome) {
+    try { return (await pool.query(`SELECT to_regclass($1) IS NOT NULL AS ok`, ['public.' + nome])).rows[0].ok; } catch (e) { return false; }
+}
+// agentes da conta, times, caixas e a carga de cada um (casos abertos agora)
+async function trBase() {
+    const [agentes, times, caixas, membrosTime, carga, fila] = await Promise.all([
+        pool.query(`SELECT u.id, u.name AS nome, au.role FROM account_users au JOIN users u ON u.id = au.user_id WHERE au.account_id = 1 ORDER BY u.name`),
+        pool.query(`SELECT id, name AS nome FROM teams WHERE account_id = 1 ORDER BY name`),
+        pool.query(`SELECT id, name AS nome FROM inboxes WHERE account_id = 1 ORDER BY name`),
+        pool.query(`SELECT team_id, user_id FROM team_members`),
+        pool.query(`SELECT assignee_id, status, COUNT(*)::int AS qtd FROM conversations WHERE account_id = 1 AND status IN (0, 2, 3) AND assignee_id IS NOT NULL GROUP BY 1, 2`),
+        pool.query(`SELECT team_id, COUNT(*)::int AS qtd FROM conversations WHERE account_id = 1 AND status = 0 AND assignee_id IS NULL GROUP BY 1`)   // fila por time do caso (14/10/2026)
+    ]);
+    const temCaixas = await trTabelaExiste('inbox_members');
+    const membrosCaixa = temCaixas ? (await pool.query(`SELECT inbox_id, user_id FROM inbox_members`)).rows : [];
+    const nomeTime = {}; times.rows.forEach(t => { nomeTime[t.id] = t.nome; });
+    const porAgente = {};
+    agentes.rows.forEach(a => {
+        porAgente[a.id] = { id: Number(a.id), nome: a.nome, admin: Number(a.role) === 1, times: [], caixas: [], abertos: 0, pendentes: 0, adiados: 0 };
+    });
+    membrosTime.rows.forEach(m => { const a = porAgente[m.user_id]; if (a && nomeTime[m.team_id] !== undefined) a.times.push(Number(m.team_id)); });
+    membrosCaixa.forEach(m => { const a = porAgente[m.user_id]; if (a) a.caixas.push(Number(m.inbox_id)); });
+    carga.rows.forEach(r => { const a = porAgente[r.assignee_id]; if (!a) return; const st = Number(r.status); if (st === 0) a.abertos += r.qtd; else if (st === 2) a.pendentes += r.qtd; else a.adiados += r.qtd; });
+    Object.values(porAgente).forEach(a => {   // time do agente para os filtros (14/10/2026): a sigla do nome, como no resto do Dash ("Ana - RET"); sem sigla no nome, o 1º time dele no Chatwoot
+        const doTime = a.times.map(id => trSetorDe(nomeTime[id])).filter(Boolean);
+        a.setor = trSiglaNome(a.nome) || doTime[0] || '';
+    });
+    const filaSetor = {};   // fila (abertos sem agente) por time, pelo time do caso no Chatwoot (14/10/2026)
+    fila.rows.forEach(r => { const s = r.team_id !== null && nomeTime[r.team_id] !== undefined ? trSetorDe(nomeTime[r.team_id]) : ''; if (s) filaSetor[s] = (filaSetor[s] || 0) + r.qtd; });
+    return {
+        agentes: Object.values(porAgente),
+        times: times.rows.map(t => ({ id: Number(t.id), nome: t.nome, setor: trSetorDe(t.nome) })),
+        caixas: caixas.rows.map(c => ({ id: Number(c.id), nome: c.nome })),
+        fila: fila.rows.reduce((s, r) => s + r.qtd, 0),
+        fila_setor: filaSetor,
+        controle_de_caixa: temCaixas
+    };
+}
+// tickets com o que a tela e a prévia precisam (sem conteúdo de mensagem)
+const TR_SQL_TICKETS = `
+    SELECT c.id AS conv_id, c.display_id, c.status, c.assignee_id, c.team_id, c.inbox_id,
+           TO_CHAR(c.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI') AS criado_br,
+           i.name AS caixa, t.name AS time_nome, u.name AS agente, ct.name AS cliente, COALESCE(c.cached_label_list, '') AS etiquetas,
+           CASE WHEN lm.message_type = 0 THEN FLOOR(EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - lm.created_at)) / 60)::int END AS esperando_min
+    FROM conversations c
+    LEFT JOIN inboxes i ON i.id = c.inbox_id
+    LEFT JOIN teams t ON t.id = c.team_id
+    LEFT JOIN users u ON u.id = c.assignee_id
+    LEFT JOIN contacts ct ON ct.id = c.contact_id
+    LEFT JOIN LATERAL (
+        SELECT m.message_type, m.created_at FROM messages m
+        WHERE m.conversation_id = c.id AND m.private = FALSE AND m.message_type IN (0, 1, 3)
+          AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
+        ORDER BY m.created_at DESC, m.id DESC LIMIT 1
+    ) lm ON TRUE
+    WHERE c.account_id = 1`;
+function trTicket(r) {   // esperando_min: cliente esperando resposta há X min (a última mensagem pública é dele)
+    return {
+        display_id: Number(r.display_id), status: Number(r.status), assignee_id: r.assignee_id === null ? null : Number(r.assignee_id), agente: r.agente || '',
+        team_id: r.team_id === null ? null : Number(r.team_id), time: r.time_nome || '', inbox_id: Number(r.inbox_id), caixa: r.caixa || '',
+        cliente: r.cliente || 'Cliente sem nome', etiquetas: r.etiquetas || '', criado_em: r.criado_br, esperando_min: r.esperando_min === null || r.esperando_min === undefined ? null : Math.max(0, Number(r.esperando_min))
+    };
+}
+const trTemAcesso = (agente, inboxId, controle) => !controle || agente.admin || agente.caixas.includes(Number(inboxId));
+// time que o ticket ganha com o agente: o time atual se ele já é membro; senão o único time dele; com 2+ times, o do sufixo do nome ("Ana - SAC")
+function trTimeDestino(agente, ticket, times) {
+    if (ticket.team_id !== null && agente.times.includes(ticket.team_id)) return { team_id: ticket.team_id, aviso: '' };
+    if (agente.times.length === 1) return { team_id: agente.times[0], aviso: '' };
+    if (agente.times.length > 1) {
+        const suf = trSiglaNome(agente.nome);   // 14/10/2026: a sigla do nome (antes a sigla RET não era reconhecida)
+        const certo = agente.times.filter(id => { const t = times.find(x => x.id === id); return t && suf && t.setor === suf; });
+        if (certo.length === 1) return { team_id: certo[0], aviso: '' };
+        return { team_id: ticket.team_id, aviso: 'agente em mais de 1 time: o time do ticket não mudou' };
+    }
+    return { team_id: ticket.team_id, aviso: 'agente sem time no Chatwoot: o time do ticket não mudou' };
+}
+// prévia: distribui pela carga (quem tem menos abertos recebe o próximo ticket), respeitando o acesso à caixa
+function trPlanejar(tickets, destinos, base) {
+    const carga = {}; destinos.forEach(a => { carga[a.id] = a.abertos; });
+    const recebe = {}; destinos.forEach(a => { recebe[a.id] = 0; });
+    const nomeTime = {}; base.times.forEach(t => { nomeTime[t.id] = t.nome; });
+    const itens = tickets.slice().sort((x, y) => String(x.criado_em).localeCompare(String(y.criado_em)) || x.display_id - y.display_id).map(tk => {   // o mais antigo primeiro
+        const item = { display_id: tk.display_id, cliente: tk.cliente, caixa: tk.caixa, status: tk.status, de_id: tk.assignee_id, de: tk.agente || 'Sem agente', time_de_id: tk.team_id, time_de: tk.time || 'Sem time' };
+        if (tk.assignee_id !== null && destinos.some(a => a.id === tk.assignee_id)) return Object.assign(item, { acao: 'ja_esta', para_id: tk.assignee_id, para: tk.agente, time_para_id: tk.team_id, time_para: item.time_de, aviso: 'já está com este agente' });
+        const pode = destinos.filter(a => trTemAcesso(a, tk.inbox_id, base.controle_de_caixa));
+        if (!pode.length) return Object.assign(item, { acao: 'sem_acesso', aviso: 'nenhum agente escolhido tem acesso à caixa ' + tk.caixa });
+        pode.sort((x, y) => (carga[x.id] - carga[y.id]) || (recebe[x.id] - recebe[y.id]) || String(x.nome).localeCompare(String(y.nome)));
+        const ag = pode[0]; carga[ag.id] += 1; recebe[ag.id] += 1;
+        const tm = trTimeDestino(ag, tk, base.times);
+        return Object.assign(item, { acao: 'transferir', para_id: ag.id, para: ag.nome, time_para_id: tm.team_id, time_para: tm.team_id === null ? 'Sem time' : (nomeTime[tm.team_id] || ''), aviso: tm.aviso });
+    });
+    return {
+        itens,
+        destinos: destinos.map(a => ({ id: a.id, nome: a.nome, setor: a.setor, carga_antes: a.abertos, recebe: recebe[a.id], carga_depois: a.abertos + recebe[a.id] })),
+        resumo: { total: itens.length, transferir: itens.filter(i => i.acao === 'transferir').length, ja_esta: itens.filter(i => i.acao === 'ja_esta').length, sem_acesso: itens.filter(i => i.acao === 'sem_acesso').length, time_muda: itens.filter(i => i.acao === 'transferir' && i.time_para_id !== i.time_de_id).length }
+    };
+}
+async function trChatwoot(displayId, corpo) {   // POST .../conversations/{display_id}/assignments  { assignee_id } ou { team_id } (0 = tira)
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+    try {
+        const resp = await fetch(`${CHATWOOT_URL}/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/conversations/${displayId}/assignments`, {
+            method: 'POST', signal: ctl.signal,
+            headers: { 'Content-Type': 'application/json', 'api_access_token': CHATWOOT_API_TOKEN },
+            body: JSON.stringify(corpo)
+        });
+        if (!resp.ok) { let txt = ''; try { txt = await resp.text(); } catch (e) {} throw new Error(`HTTP ${resp.status} ${String(txt).slice(0, 120)}`); }
+        return true;
+    } catch (e) { throw new Error(e.name === 'AbortError' ? 'o Chatwoot não respondeu em 15 s' : e.message); }
+    finally { clearTimeout(timer); }
+}
+
+// tela: agentes, times, caixas, carga e a fila
+app.get('/api/transferir/base', async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    try {
+        const b = await trBase();
+        res.json(Object.assign({ ok: true, token_ok: !!CHATWOOT_API_TOKEN, chatwoot_url: CHATWOOT_URL, conta: CHATWOOT_ACCOUNT_ID, historico: trHistorico.map(h => ({ id: h.id, em: h.em, origem: h.origem, total: h.total, feitos: h.feitos, falhas: h.falhas, desfeito: h.desfeito, detalhe: h.detalhe || '' })) }, b));
+    } catch (e) { console.error('[transferir/base]', e.message); res.status(500).json({ ok: false, erro: e.message }); }
+});
+// tela: casos de 1 ou mais agentes e/ou da fila (sem agente), por status e caixa
+app.get('/api/transferir/casos', async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    try {
+        const agentes = trIds(req.query.agentes), fila = req.query.fila === '1';
+        if (!agentes.length && !fila) return res.json({ ok: true, tickets: [], cortado: false });
+        const ST = { abertos: [0], pendentes: [2], adiados: [3], todos: [0, 2, 3] };
+        const status = ST[String(req.query.status || 'abertos')] || ST.abertos;
+        const caixa = /^\d+$/.test(String(req.query.caixa || '')) ? parseInt(req.query.caixa, 10) : null;
+        const setorFila = String(req.query.time || '').toUpperCase(), timesFila = ['RET', 'SAC', 'BKO', 'SMS', '48H'].includes(setorFila)   // 14/10/2026: com time no filtro, a fila é só a daquele time
+            ? (await pool.query(`SELECT id, name FROM teams WHERE account_id = 1`)).rows.filter(t => trSetorDe(t.name) === setorFila).map(t => Number(t.id)) : null;
+        const r = await pool.query(`${TR_SQL_TICKETS}
+      AND c.status = ANY($1::int[])
+      AND (c.assignee_id = ANY($2::bigint[]) OR ($3::boolean AND c.assignee_id IS NULL AND ($5::bigint[] IS NULL OR c.team_id = ANY($5::bigint[]))))
+      AND ($4::int IS NULL OR c.inbox_id = $4::int)
+    ORDER BY c.created_at
+    LIMIT 1001`, [status, agentes, fila, caixa, timesFila]);
+        res.json({ ok: true, tickets: r.rows.slice(0, 1000).map(trTicket), cortado: r.rows.length > 1000 });
+    } catch (e) { console.error('[transferir/casos]', e.message); res.status(500).json({ ok: false, erro: e.message }); }
+});
+// tela: qualquer ticket pelo número (qualquer status)
+app.get('/api/transferir/tickets', async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    try {
+        const ids = trIds(req.query.ids);
+        if (ids.length > TR_MAX_ITENS) return res.status(400).json({ ok: false, erro: `No máximo ${TR_MAX_ITENS} tickets por vez.` });
+        if (!ids.length) return res.json({ ok: true, tickets: [], nao_achados: [] });
+        const r = await pool.query(`${TR_SQL_TICKETS}
+      AND c.display_id = ANY($1::int[])
+    ORDER BY c.display_id`, [ids]);
+        const achados = r.rows.map(trTicket);
+        res.json({ ok: true, tickets: achados, nao_achados: ids.filter(id => !achados.some(t => t.display_id === id)) });
+    } catch (e) { console.error('[transferir/tickets]', e.message); res.status(500).json({ ok: false, erro: e.message }); }
+});
+// prévia: quem recebe cada ticket (não muda nada)
+app.post('/api/transferir/previa', express.json({ limit: '256kb' }), async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    try {
+        const b = req.body || {}, ids = trIds(b.ids), destIds = trIds(b.destinos);
+        if (!ids.length) return res.status(400).json({ ok: false, erro: 'Escolha pelo menos 1 ticket.' });
+        if (ids.length > TR_MAX_ITENS) return res.status(400).json({ ok: false, erro: `No máximo ${TR_MAX_ITENS} tickets por vez.` });
+        if (b.desatribuir === true) {   // 🚫 Desatribuir (14/10/2026): o caso fica sem agente e volta para a fila do time dele (o time não muda)
+            const rd = await pool.query(`${TR_SQL_TICKETS}
+      AND c.display_id = ANY($1::int[])`, [ids]);
+            const tks = rd.rows.map(trTicket);
+            const itens = tks.slice().sort((x, y) => String(x.criado_em).localeCompare(String(y.criado_em)) || x.display_id - y.display_id).map(tk => ({
+                display_id: tk.display_id, cliente: tk.cliente, caixa: tk.caixa, status: tk.status, de_id: tk.assignee_id, de: tk.agente || 'Sem agente', time_de_id: tk.team_id, time_de: tk.time || 'Sem time',
+                acao: tk.assignee_id === null ? 'ja_esta' : 'desatribuir', para_id: 0, para: 'Fila (sem agente)', time_para_id: tk.team_id, time_para: tk.time || 'Sem time', aviso: tk.assignee_id === null ? 'já está sem agente' : '' }));
+            return res.json({ ok: true, desatribuir: true, itens, destinos: [], nao_achados: ids.filter(id => !tks.some(t => t.display_id === id)), token_ok: !!CHATWOOT_API_TOKEN,
+                resumo: { total: itens.length, desatribuir: itens.filter(i => i.acao === 'desatribuir').length, ja_esta: itens.filter(i => i.acao === 'ja_esta').length, transferir: 0, sem_acesso: 0, time_muda: 0 } });
+        }
+        if (!destIds.length) return res.status(400).json({ ok: false, erro: 'Escolha pelo menos 1 agente para receber.' });
+        const base = await trBase();
+        const destinos = base.agentes.filter(a => destIds.includes(a.id));
+        if (destinos.length !== destIds.length) return res.status(400).json({ ok: false, erro: 'Algum agente escolhido não está mais na conta do Chatwoot. Atualize a tela.' });
+        const r = await pool.query(`${TR_SQL_TICKETS}
+      AND c.display_id = ANY($1::int[])`, [ids]);
+        const tickets = r.rows.map(trTicket);
+        const plano = trPlanejar(tickets, destinos, base);
+        const nao = ids.filter(id => !tickets.some(t => t.display_id === id));
+        res.json(Object.assign({ ok: true, nao_achados: nao, controle_de_caixa: base.controle_de_caixa, token_ok: !!CHATWOOT_API_TOKEN }, plano));
+    } catch (e) { console.error('[transferir/previa]', e.message); res.status(500).json({ ok: false, erro: e.message }); }
+});
+// executa: cada item = { display_id, assignee_id, team_id } (team_id null = não mexe no time · 0 = tira; assignee_id 0 = sem agente, só no Desfazer)
+app.post('/api/transferir/executar', express.json({ limit: '256kb' }), async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    if (!CHATWOOT_API_TOKEN) return res.status(400).json({ ok: false, erro: 'CHATWOOT_API_TOKEN não configurado no servidor.' });
+    if (trRodando) return res.status(429).json({ ok: false, erro: 'Já tem uma transferência rodando. Espere ela terminar.' });
+    const email = ((req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value : '').toLowerCase();
+    const b = req.body || {}, origem = ['transferir', 'atribuir', 'desfazer', 'desatribuir'].includes(b.origem) ? b.origem : 'transferir';
+    const lista = Array.isArray(b.itens) ? b.itens : [];
+    if (!lista.length) return res.status(400).json({ ok: false, erro: 'Nada para transferir.' });
+    if (lista.length > TR_MAX_ITENS) return res.status(400).json({ ok: false, erro: `No máximo ${TR_MAX_ITENS} tickets por vez.` });
+    trRodando = true;
+    const t0 = Date.now();
+    try {
+        const base = await trBase(), ag = {}; base.agentes.forEach(a => { ag[a.id] = a; });
+        const timesOk = new Set(base.times.map(t => t.id));
+        const itens = [], erros = [];
+        lista.forEach(x => {
+            const d = parseInt(x && x.display_id, 10), a = parseInt(x && x.assignee_id, 10);
+            const t = (x && x.team_id !== null && x.team_id !== undefined && x.team_id !== '') ? parseInt(x.team_id, 10) : null;
+            if (!(d > 0)) return erros.push({ id: x && x.display_id, erro: 'número de ticket inválido' });
+            if (!(Number.isInteger(a) && (a > 0 ? (!!ag[a] && origem !== 'desatribuir') : (a === 0 && (origem === 'desfazer' || origem === 'desatribuir'))))) return erros.push({ id: d, erro: 'agente inválido ou fora da conta' });
+            if (t !== null && (origem === 'desatribuir' || !(Number.isInteger(t) && (t === 0 ? origem === 'desfazer' : timesOk.has(t))))) return erros.push({ id: d, erro: 'time inválido' });
+            itens.push({ display_id: d, assignee_id: a, team_id: t });
+        });
+        const ids = [...new Set(itens.map(i => i.display_id))];
+        const antes = {};
+        if (ids.length) (await pool.query(`${TR_SQL_TICKETS}
+      AND c.display_id = ANY($1::int[])`, [ids])).rows.map(trTicket).forEach(tk => { antes[tk.display_id] = tk; });
+        const fazer = [];
+        itens.forEach(i => {
+            const tk = antes[i.display_id];
+            if (!tk) return erros.push({ id: i.display_id, erro: 'ticket não existe no Chatwoot' });
+            if (i.assignee_id > 0 && origem !== 'desfazer' && !trTemAcesso(ag[i.assignee_id], tk.inbox_id, base.controle_de_caixa)) return erros.push({ id: i.display_id, erro: `${ag[i.assignee_id].nome} não tem acesso à caixa ${tk.caixa}` });
+            fazer.push(Object.assign({ tk }, i));
+        });
+        // ordem das chamadas: agente e depois time quando o agente é membro do time novo (o Chatwoot mantém o agente);
+        // senão time e depois agente (ao trocar o time o Chatwoot tira o agente que não é do time — o agente vem por último)
+        let feitos = 0;
+        const desfazer = [];
+        const CONC = 4;
+        for (let k = 0; k < fazer.length; k += CONC) {
+            await Promise.all(fazer.slice(k, k + CONC).map(async (i) => {
+                const tk = i.tk, mudaAg = i.assignee_id !== (tk.assignee_id || 0), mudaTime = i.team_id !== null && i.team_id !== (tk.team_id || 0);
+                try {
+                    const agDoTime = i.team_id > 0 && i.assignee_id > 0 && ag[i.assignee_id].times.includes(i.team_id);
+                    const passos = [];
+                    if (mudaAg) passos.push({ assignee_id: i.assignee_id });
+                    if (mudaTime) { if (agDoTime || !mudaAg) passos.push({ team_id: i.team_id }); else passos.unshift({ team_id: i.team_id }); }
+                    if (mudaTime && !mudaAg && !(tk.assignee_id && ag[tk.assignee_id] && ag[tk.assignee_id].times.includes(i.team_id))) passos.push({ assignee_id: tk.assignee_id || 0 });   // o Chatwoot tiraria o agente: põe de volta
+                    for (const p of passos) await trChatwoot(i.display_id, p);
+                    feitos++;
+                    desfazer.push({ display_id: i.display_id, assignee_id: tk.assignee_id || 0, team_id: tk.team_id || 0 });
+                } catch (e) { erros.push({ id: i.display_id, erro: e.message }); }
+            }));
+            if (k + CONC < fazer.length) await new Promise(rs => setTimeout(rs, 150));
+        }
+        // confere no banco: cada ticket ficou com o agente e o time pedidos?
+        await new Promise(rs => setTimeout(rs, 800));
+        const depois = {};
+        if (ids.length) (await pool.query(`SELECT display_id, assignee_id, team_id FROM conversations WHERE account_id = 1 AND display_id = ANY($1::int[])`, [ids])).rows.forEach(r => { depois[Number(r.display_id)] = r; });
+        const divergentes = [];
+        let conferidos = 0;
+        fazer.filter(i => !erros.some(e => e.id === i.display_id)).forEach(i => {
+            const d = depois[i.display_id] || {}, agOk = Number(d.assignee_id || 0) === i.assignee_id, timeOk = i.team_id === null || Number(d.team_id || 0) === i.team_id;
+            if (agOk && timeOk) conferidos++;
+            else divergentes.push({ id: i.display_id, agente: d.assignee_id && ag[d.assignee_id] ? ag[d.assignee_id].nome : 'Sem agente', time: d.team_id ? (base.times.find(t => t.id === Number(d.team_id)) || {}).nome || '' : 'Sem time' });
+        });
+        const lote = { id: Date.now().toString(36), em: new Date().toISOString(), por: email, origem, total: lista.length, feitos, falhas: erros.length, desfazer, desfeito: false };
+        if (origem === 'desfazer' && b.lote) { const h = trHistorico.find(x => x.id === String(b.lote)); if (h) h.desfeito = true; }
+        if (feitos > 0) { trHistorico.unshift(lote); if (trHistorico.length > 20) trHistorico.length = 20; }
+        console.log(`🔀 Transferir (${origem}) por ${email}: ${feitos} de ${lista.length} em ${Date.now() - t0} ms · ${erros.length} falha(s) · conferidos ${conferidos}`);
+        res.json({ ok: true, lote: feitos > 0 ? lote.id : null, origem, total: lista.length, feitos, falhas: erros.length, erros: erros.slice(0, 100), conferidos, divergentes: divergentes.slice(0, 100), desfazer, ms: Date.now() - t0 });
+    } catch (e) {
+        console.error('[transferir/executar]', e.message);
+        res.status(500).json({ ok: false, erro: e.message });
+    } finally { trRodando = false; }
+});
+// histórico: a lista para desfazer uma transferência (fica na memória do servidor)
+app.get('/api/transferir/desfazer', async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    const h = trHistorico.find(x => x.id === String(req.query.lote || ''));
+    if (!h) return res.status(404).json({ ok: false, erro: 'Transferência não encontrada (o Dash pode ter reiniciado).' });
+    res.json({ ok: true, lote: h.id, desfeito: h.desfeito, itens: h.desfazer, tipo: h.tipo || 'transferir' });
+});
+
+// 🏷️ ETIQUETAS (14/10/2026): coloca ou tira 1 ou mais etiquetas dos casos marcados (dos agentes escolhidos ou da fila) — SÓ O DONO
+// Escreve SÓ pela API do Chatwoot. O POST de etiquetas troca a lista inteira do caso: o Dash lê a lista atual na API na hora e manda a lista nova.
+// No banco o Dash só lê (etiquetas da conta, prévia e conferência). Desfazer = cada caso volta para as etiquetas de antes.
+const trEtqNorm = (s) => String(s || '').trim().toLowerCase();
+const trEtqDoCaso = (txt) => String(txt || '').split(',').map(s => s.trim()).filter(Boolean);
+function trEtqNova(atuais, escolhidas, acao) {   // lista nova do caso: sem repetir e sem diferenciar maiúscula de minúscula
+    if (acao === 'remover') { const tirar = new Set(escolhidas.map(trEtqNorm)); return atuais.filter(e => !tirar.has(trEtqNorm(e))); }
+    const tem = new Set(atuais.map(trEtqNorm));
+    return atuais.concat(escolhidas.filter(e => !tem.has(trEtqNorm(e))));
+}
+function trEtqIguais(a, b) { const x = [...new Set(a.map(trEtqNorm))].sort(), y = [...new Set(b.map(trEtqNorm))].sort(); return x.length === y.length && x.every((v, i) => v === y[i]); }
+async function trEtqChatwoot(displayId, novas) {   // novas = null: GET (lista atual) · novas = [...]: POST (troca a lista) — .../conversations/{display_id}/labels
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+    try {
+        const resp = await fetch(`${CHATWOOT_URL}/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/conversations/${displayId}/labels`, {
+            method: novas ? 'POST' : 'GET', signal: ctl.signal,
+            headers: { 'Content-Type': 'application/json', 'api_access_token': CHATWOOT_API_TOKEN },
+            body: novas ? JSON.stringify({ labels: novas }) : undefined
+        });
+        if (!resp.ok) { let txt = ''; try { txt = await resp.text(); } catch (e) {} throw new Error(`HTTP ${resp.status} ${String(txt).slice(0, 120)}`); }
+        const j = await resp.json().catch(() => null);
+        if (!j || !Array.isArray(j.payload)) throw new Error('o Chatwoot não devolveu a lista de etiquetas');
+        return j.payload.map(String);
+    } catch (e) { throw new Error(e.name === 'AbortError' ? 'o Chatwoot não respondeu em 15 s' : e.message); }
+    finally { clearTimeout(timer); }
+}
+async function trEtqDaConta() {   // etiquetas cadastradas na conta do Chatwoot
+    return (await pool.query(`SELECT title, color, description FROM labels WHERE account_id = 1 ORDER BY title`)).rows
+        .map(l => ({ titulo: String(l.title || '').trim(), cor: l.color || '', descricao: l.description || '' })).filter(l => l.titulo);
+}
+async function trEtqValidar(pedidas) {   // só vale etiqueta que existe na conta, com o nome como está no Chatwoot
+    const mapa = {}; (await trEtqDaConta()).forEach(l => { mapa[trEtqNorm(l.titulo)] = l.titulo; });
+    const lista = [...new Set((Array.isArray(pedidas) ? pedidas : []).map(trEtqNorm).filter(Boolean))].slice(0, 30);
+    return { ok: lista.filter(e => mapa[e]).map(e => mapa[e]), nao: lista.filter(e => !mapa[e]) };
+}
+// tela: etiquetas da conta (a busca pelo nome é feita na tela, como no Chatwoot)
+app.get('/api/transferir/etiquetas', async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    try { res.json({ ok: true, etiquetas: await trEtqDaConta() }); }
+    catch (e) { console.error('[transferir/etiquetas]', e.message); res.status(500).json({ ok: false, erro: e.message }); }
+});
+// prévia: o que muda em cada caso (não muda nada)
+app.post('/api/transferir/etiquetas/previa', express.json({ limit: '256kb' }), async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    try {
+        const b = req.body || {}, ids = trIds(b.ids), acao = b.acao === 'remover' ? 'remover' : 'adicionar';
+        if (!ids.length) return res.status(400).json({ ok: false, erro: 'Marque pelo menos 1 caso na lista.' });
+        if (ids.length > TR_MAX_ITENS) return res.status(400).json({ ok: false, erro: `No máximo ${TR_MAX_ITENS} casos por vez.` });
+        const v = await trEtqValidar(b.etiquetas);
+        if (v.nao.length) return res.status(400).json({ ok: false, erro: `Etiqueta que não existe no Chatwoot: ${v.nao.join(', ')}` });
+        if (!v.ok.length) return res.status(400).json({ ok: false, erro: 'Escolha pelo menos 1 etiqueta.' });
+        const r = await pool.query(`${TR_SQL_TICKETS}
+      AND c.display_id = ANY($1::int[])`, [ids]);
+        const tks = r.rows.map(trTicket);
+        const itens = tks.slice().sort((x, y) => String(x.criado_em).localeCompare(String(y.criado_em)) || x.display_id - y.display_id).map(tk => {
+            const antes = trEtqDoCaso(tk.etiquetas), depois = trEtqNova(antes, v.ok, acao);
+            return { display_id: tk.display_id, cliente: tk.cliente, caixa: tk.caixa, agente: tk.agente || 'Sem agente', antes, depois, acao: trEtqIguais(antes, depois) ? 'igual' : 'muda' };
+        });
+        res.json({ ok: true, etiquetas: true, acao, escolhidas: v.ok, itens, token_ok: !!CHATWOOT_API_TOKEN, nao_achados: ids.filter(id => !tks.some(t => t.display_id === id)),
+            resumo: { total: itens.length, muda: itens.filter(i => i.acao === 'muda').length, igual: itens.filter(i => i.acao === 'igual').length } });
+    } catch (e) { console.error('[transferir/etiquetas/previa]', e.message); res.status(500).json({ ok: false, erro: e.message }); }
+});
+// executa: { ids, etiquetas, acao: 'adicionar' | 'remover' } · Desfazer: { itens: [{ display_id, etiquetas }], acao: 'restaurar', lote }
+app.post('/api/transferir/etiquetas/executar', express.json({ limit: '512kb' }), async (req, res) => {
+    if (!ehDonoAdiar(req)) return res.status(403).json({ ok: false, erro: 'Acesso restrito.' });
+    if (!CHATWOOT_API_TOKEN) return res.status(400).json({ ok: false, erro: 'CHATWOOT_API_TOKEN não configurado no servidor.' });
+    if (trRodando) return res.status(429).json({ ok: false, erro: 'Já tem uma ação rodando. Espere ela terminar.' });
+    const email = ((req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value : '').toLowerCase();
+    const b = req.body || {}, acao = ['adicionar', 'remover', 'restaurar'].includes(b.acao) ? b.acao : '';
+    if (!acao) return res.status(400).json({ ok: false, erro: 'Ação inválida.' });
+    let alvos = [], escolhidas = [];
+    try {
+        if (acao === 'restaurar') {
+            const porId = new Map();
+            (Array.isArray(b.itens) ? b.itens : []).forEach(x => {
+                const d = parseInt(x && x.display_id, 10);
+                if (d > 0) porId.set(d, { display_id: d, etiquetas: (Array.isArray(x.etiquetas) ? x.etiquetas : []).map(e => String(e).trim().slice(0, 100)).filter(Boolean).slice(0, 50) });
+            });
+            alvos = [...porId.values()];
+        } else {
+            const v = await trEtqValidar(b.etiquetas);
+            if (v.nao.length) return res.status(400).json({ ok: false, erro: `Etiqueta que não existe no Chatwoot: ${v.nao.join(', ')}` });
+            if (!v.ok.length) return res.status(400).json({ ok: false, erro: 'Escolha pelo menos 1 etiqueta.' });
+            escolhidas = v.ok; alvos = trIds(b.ids).map(id => ({ display_id: id }));
+        }
+    } catch (e) { console.error('[transferir/etiquetas/executar]', e.message); return res.status(500).json({ ok: false, erro: e.message }); }
+    if (!alvos.length) return res.status(400).json({ ok: false, erro: 'Nada para mudar.' });
+    if (alvos.length > TR_MAX_ITENS) return res.status(400).json({ ok: false, erro: `No máximo ${TR_MAX_ITENS} casos por vez.` });
+    trRodando = true;
+    const t0 = Date.now();
+    try {
+        const ids = alvos.map(a => a.display_id);
+        const existe = new Set((await pool.query(`SELECT display_id FROM conversations WHERE account_id = 1 AND display_id = ANY($1::int[])`, [ids])).rows.map(r => Number(r.display_id)));
+        const erros = [], desfazer = [], esperado = {}, fazer = [];
+        alvos.forEach(a => { if (existe.has(a.display_id)) fazer.push(a); else erros.push({ id: a.display_id, erro: 'ticket não existe no Chatwoot' }); });
+        let feitos = 0, iguais = 0;
+        const CONC = 4;
+        for (let k = 0; k < fazer.length; k += CONC) {
+            await Promise.all(fazer.slice(k, k + CONC).map(async (a) => {
+                try {
+                    const atuais = await trEtqChatwoot(a.display_id, null);   // a lista de agora, direto do Chatwoot (não apaga o que alguém pôs depois da prévia)
+                    const novas = acao === 'restaurar' ? a.etiquetas : trEtqNova(atuais, escolhidas, acao);
+                    if (trEtqIguais(atuais, novas)) { iguais++; return; }
+                    await trEtqChatwoot(a.display_id, novas);
+                    feitos++; esperado[a.display_id] = novas;
+                    desfazer.push({ display_id: a.display_id, etiquetas: atuais });
+                } catch (e) { erros.push({ id: a.display_id, erro: e.message }); }
+            }));
+            if (k + CONC < fazer.length) await new Promise(rs => setTimeout(rs, 150));
+        }
+        // confere no banco: cada caso ficou com as etiquetas pedidas?
+        await new Promise(rs => setTimeout(rs, 800));
+        const mudados = Object.keys(esperado).map(Number), divergentes = [];
+        let conferidos = 0;
+        if (mudados.length) (await pool.query(`SELECT display_id, COALESCE(cached_label_list, '') AS etiquetas FROM conversations WHERE account_id = 1 AND display_id = ANY($1::int[])`, [mudados])).rows.forEach(r => {
+            const tem = trEtqDoCaso(r.etiquetas);
+            if (trEtqIguais(tem, esperado[Number(r.display_id)])) conferidos++; else divergentes.push({ id: Number(r.display_id), etiquetas: tem.join(', ') || 'nenhuma' });
+        });
+        const origem = acao === 'restaurar' ? 'desfazer' : 'etiquetas';
+        const detalhe = acao === 'restaurar' ? 'etiquetas de antes' : `${acao === 'remover' ? 'tirou' : 'colocou'}: ${escolhidas.join(', ')}`;
+        const lote = { id: Date.now().toString(36), em: new Date().toISOString(), por: email, origem, tipo: 'etiquetas', detalhe, total: alvos.length, feitos, falhas: erros.length, desfazer, desfeito: false };
+        if (acao === 'restaurar' && b.lote) { const h = trHistorico.find(x => x.id === String(b.lote)); if (h) h.desfeito = true; }
+        if (feitos > 0) { trHistorico.unshift(lote); if (trHistorico.length > 20) trHistorico.length = 20; }
+        console.log(`🏷️ Etiquetas (${acao}) por ${email}: ${feitos} de ${alvos.length} em ${Date.now() - t0} ms · ${iguais} já estavam assim · ${erros.length} falha(s) · conferidos ${conferidos}`);
+        res.json({ ok: true, lote: feitos > 0 ? lote.id : null, origem, acao, detalhe, total: alvos.length, feitos, iguais, falhas: erros.length, erros: erros.slice(0, 100), conferidos, divergentes: divergentes.slice(0, 100), ms: Date.now() - t0 });
+    } catch (e) {
+        console.error('[transferir/etiquetas/executar]', e.message);
+        res.status(500).json({ ok: false, erro: e.message });
+    } finally { trRodando = false; }
 });
 
 // ==========================================
@@ -4401,6 +6735,9 @@ setInterval(async () => {
 // Guarda vínculos, comandos, envios, cientes, configuração e a foto diária na planilha de log do Adiar Casos (abas tg_*).
 // ==========================================
 const TG_TOKEN = (process.env.TELEGRAM_TOKEN || '').trim();
+// 26/10/2026: BOT DESLIGADO a pedido — nenhum aviso, nenhuma rodada agendada e nenhum timer consultando dado
+// enquanto ele não for reformulado. Para religar: TELEGRAM_ATIVO=1 no Render (nenhuma linha precisa ser mexida).
+const TG_ATIVO = String(process.env.TELEGRAM_ATIVO || '').trim() === '1';
 const TG_FUSO = 'America/Sao_Paulo';
 const TG_URL_CASO = (id) => `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(id)}`;
 const TG_TURNOS = {
@@ -4552,14 +6889,15 @@ async function tgLerAba(sheets, aba) {
     return (r.data.values || []).filter(l => l && l.some(v => v !== '' && v != null)).map(l => { const o = {}; cab.forEach((k, i) => { o[k] = l[i] != null ? String(l[i]) : ''; }); return o; });
 }
 async function tgReescreverAba(aba, linhas) {   // vínculos e configuração: poucas linhas, regrava a aba inteira
+    if (!tgBot.carregado) return false;   // 14/10/2026: nunca regrava sem ter lido a planilha (a lista vazia de um boot com falha apagaria todos os vínculos)
     const sheets = tgSheets();
     if (!sheets) return false;
     try {
         await tgGarantirAbas(sheets);
-        await sheets.spreadsheets.values.clear({ spreadsheetId: SNOOZE_SHEET_ID, range: `${aba}!A2:K` });
         if (linhas.length) {
             await sheets.spreadsheets.values.update({ spreadsheetId: SNOOZE_SHEET_ID, range: `${aba}!A2`, valueInputOption: 'RAW', requestBody: { values: linhas.map(o => TG_CAB[aba].map(k => o[k] != null ? String(o[k]) : '')) } });
         }
+        await sheets.spreadsheets.values.clear({ spreadsheetId: SNOOZE_SHEET_ID, range: `${aba}!A${linhas.length + 2}:K` });   // 14/10/2026: grava por cima primeiro e só depois limpa as linhas que sobraram (antes limpava a aba antes de gravar: falha no meio = aba vazia)
         tgBot.planilhaOk = true;
         return true;
     } catch (e) { console.error(`[telegram] falha ao gravar ${aba}:`, e.message); tgBot.planilhaOk = false; return false; }
@@ -4611,7 +6949,7 @@ async function tgCarregarPlanilha() {
         tgBot.fotos.forEach(f => tgBot.marcos.add(`foto|-|${f.data}`));
         tgBot.planilhaOk = true;
         console.log(`[telegram] planilha carregada: ${tgBot.vinculos.length} vínculos, ${tgBot.envios.length} envios, ${tgBot.comandos.length} comandos`);
-    } catch (e) { console.error('[telegram] não consegui ler a planilha de log:', e.message); tgBot.planilhaOk = false; }
+    } catch (e) { console.error('[telegram] não consegui ler a planilha de log:', e.message); tgBot.planilhaOk = false; return; }   // 14/10/2026: sem ler a planilha o bot não começa a atender (o tgTick tenta de novo a cada minuto)
     tgBot.carregado = true;
 }
 
@@ -4627,13 +6965,33 @@ async function tgApi(metodo, corpo, timeoutMs) {
     finally { clearTimeout(t); }
 }
 const tgIdEnvio = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+// 14/10/2026: o limite do Telegram (4096) é do texto visível, sem as marcações. O corte antigo (4090 caracteres contando as marcações) caía no meio
+// de <a href…> e o Telegram recusava a mensagem inteira (400). Agora só corta se o texto visível passar do limite, e sempre no fim de uma linha.
+const tgVisivel = (s) => String(s == null ? '' : s).replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+function tgCortarHtml(texto, max) {
+    const t = String(texto == null ? '' : texto), fim = '\n<i>… mensagem cortada</i>';
+    if (tgVisivel(t).length <= max) return t;
+    let out = '';
+    for (const l of t.split('\n')) { const c = out ? out + '\n' + l : l; if (tgVisivel(c + fim).length > max) break; out = c; }
+    return out + fim;
+}
+// 14/10/2026: se mesmo assim o Telegram recusar a formatação (400 "can't parse entities"), manda de novo sem formatação: a mensagem chega
+async function tgMandarMensagem(corpo) {
+    const r = await tgApi('sendMessage', corpo);
+    if (r && !r.ok && r.error_code === 400 && /parse entities/i.test(String(r.description || ''))) {
+        const simples = Object.assign({}, corpo, { text: tgVisivel(corpo.text).slice(0, 4096) });
+        delete simples.parse_mode;
+        return tgApi('sendMessage', simples);
+    }
+    return r;
+}
 // Envio "proativo" (aviso, resumo, relatório, teste): vai para a aba tg_envios — é o que a sub-aba Entregas & Leitura mostra
 async function tgEnviar(destino, texto, meta) {
     meta = meta || {};
     const envioId = tgIdEnvio();
-    const corpo = { chat_id: destino.chat_id, text: String(texto).slice(0, 4090), parse_mode: 'HTML', disable_web_page_preview: true };
+    const corpo = { chat_id: destino.chat_id, text: tgCortarHtml(texto, 4090), parse_mode: 'HTML', disable_web_page_preview: true };   // 14/10/2026: corta sem quebrar a marcação
     if (TG_TIPOS_CIENTE.includes(meta.tipo)) corpo.reply_markup = { inline_keyboard: [[{ text: '✅ Ciente', callback_data: `ok:${envioId}` }]] };
-    const r = await tgApi('sendMessage', corpo);
+    const r = await tgMandarMensagem(corpo);   // 14/10/2026: reenvia sem formatação se o Telegram recusar o HTML
     const linha = {
         envio_id: envioId, data_hora: tgAgoraBR().texto, tipo: meta.tipo || 'outro', chat_id: String(destino.chat_id),
         destino: destino.agente_chatwoot || destino.nome_telegram || '', papel: destino.papel || '', turno: destino.turno || '',
@@ -4644,7 +7002,7 @@ async function tgEnviar(destino, texto, meta) {
     if (r.ok && meta.tipo) tgBot.marcos.add(`${meta.tipo}|${destino.chat_id}|${linha.data_hora.slice(0, 10)}`);
     return r;
 }
-async function tgResponder(chatId, texto) { return tgApi('sendMessage', { chat_id: chatId, text: String(texto).slice(0, 4090), parse_mode: 'HTML', disable_web_page_preview: true }); }
+async function tgResponder(chatId, texto) { return tgMandarMensagem({ chat_id: chatId, text: tgCortarHtml(texto, 4090), parse_mode: 'HTML', disable_web_page_preview: true }); }   // 14/10/2026: corta sem quebrar a marcação e reenvia sem formatação se o Telegram recusar
 
 // ---------- dados: Status de Casos (mesma rota do Dash) ----------
 async function tgSnapshot(maxIdadeMs) {
@@ -4653,7 +7011,7 @@ async function tgSnapshot(maxIdadeMs) {
     if (tgBot.snapPromessa) return tgBot.snapPromessa;
     tgBot.snapPromessa = (async () => {
         const d = await tgGetInterno('/api/distribuicao', 90000);
-        if (d && d.success && Array.isArray(d.casos)) { tgBot.snap = d; tgBot.snapEm = Date.now(); }
+        if (d && d.success && Array.isArray(d.casos)) { tgBot.snap = d; tgBot.snapEm = Date.now() - (d.dados_guardados ? (Number(d.dados_guardados_min) || 0) * 60000 : 0); }   // 14/10/2026: dado guardado (o banco falhou) fica com a idade real: "Atualizado às" certo e, com mais de 30 min, não é usado
         const idade = Date.now() - tgBot.snapEm;
         return tgBot.snap && idade >= 0 && idade < 30 * 60 * 1000 ? tgBot.snap : null;
     })();
@@ -4709,6 +7067,7 @@ async function tgMensagensPorAgente(ini, fim) {   // semana: mensagens por agent
           AND (m.content_attributes->>'deleted')::boolean IS NOT TRUE
           AND m.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
           AND m.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
+          AND m.content IS NOT NULL   -- 14/10/2026: mesma regra do Tickets Atual e do /eu (anexo sozinho, sem texto, não conta)
         GROUP BY u.name`, [ini, fim]);
     return r.rows;
 }
@@ -4762,7 +7121,8 @@ async function tgDesempenho48(ini, fim) {
     let tks = 0, rets = 0, msgs = 0, tmcW = 0, tmrW = 0;
     (d.dados || []).forEach(x => { const t = parseInt(x.tickets) || 0; tks += t; rets += parseInt(x.retornos) || 0; msgs += parseInt(x.mensagens) || 0; tmcW += (parseFloat(x.tmc_medio_minutos) || 0) * t; tmrW += (parseFloat(x.tmr_medio_minutos) || 0) * t; });
     const r = d.resumo || {};   // tickets e retornos sem repetir ticket, como nos cards da Visão Geral do Dash
-    return { tickets: r.tickets != null ? r.tickets : tks, retornos: r.retornos != null ? r.retornos : rets, mensagens: r.mensagens != null ? r.mensagens : msgs, tmc: tks ? tmcW / tks : 0, tmr: tks ? tmrW / tks : 0 };
+    const mediaTj = (k) => { let s = 0, p = 0; (d.dados || []).forEach(x => { const v = parseFloat(x[k + '_medio_minutos']) || 0, q = x[k + '_qtd'], peso = q != null ? (parseInt(q) || 0) : (v > 0 ? (parseInt(x.tickets) || 0) : 0); if (peso > 0) { s += v * peso; p += peso; } }); return p ? s / p : 0; };   // 14/10/2026: TMC/TMR do time = média só de quem tem a medida, pesada pela base de respostas (tmc_qtd/tmr_qtd), como nos cards do Dash (antes o agente sem medida contava como zero)
+    return { tickets: r.tickets != null ? r.tickets : tks, retornos: r.retornos != null ? r.retornos : rets, mensagens: r.mensagens != null ? r.mensagens : msgs, tmc: mediaTj('tmc'), tmr: mediaTj('tmr') };   // 14/10/2026: tmc/tmr pela mediaTj
 }
 function tgResumoBot(ini, fim) {   // como o bot rodou no período: avisos, entregas e ✅ Ciente (por turno)
     const dentro = (txt) => { const d = String(txt || '').slice(0, 10); return d >= ini && d <= fim; };
@@ -5005,6 +7365,7 @@ async function tgFotoDiaria(a) {
     TG_SIGLAS.forEach(s => { const o = { data: a.data, hora: a.hhmm, time: s, sem_agente: t[s].sem, em_aberto: t[s].em_aberto, retornos: t[s].retornos, aguardando: t[s].aguardando, fora_sla: t[s].fora, total: t[s].total }; tgBot.fotos.push(o); tgEnfileirar('tg_fotos', o); });
 }
 async function tgAgendados(a) {
+    if (Date.now() < FREIO.ate) return;   // 14/10/2026: banco com freio: os envios agendados esperam o freio passar (as janelas são de 15 min) em vez de sair com dado guardado
     const c = tgBot.config;
     const ativos = tgBot.vinculos.filter(v => v.status === 'ativo');
     const janela = (ini) => a.minutos >= ini && a.minutos < ini + 15;
@@ -5045,7 +7406,8 @@ async function tgRodadaAvisos(a) {
             const lista = tgCasosTexto(n48);
             const r = await tgEnviar(v, `🔴 <b>${n48.length > 1 ? `${n48.length} casos fora` : 'Caso fora'} do SLA (mais de 48h)</b>\n\n${lista}\n\n<i>O cliente está esperando a sua resposta.</i>`, { tipo: 'aviso_48h', casos: n48.map(d => `${d.id}:48`) });
             if (r.ok || tgFalhaDefinitiva(r)) n48.forEach(d => tgBot.avisados.set(`${v.chat_id}|${d.id}|48`, Date.now()));
-            for (const l of lideres.filter(x => x.turno === v.turno && tgNoTurno(x.turno, a))) {   // escalonamento: líder do MESMO turno, só no horário dele
+            // 14/10/2026: só escala depois que o aviso do agente foi confirmado (falha passageira repete o aviso na rodada seguinte sem escalar o líder em dobro)
+            for (const l of lideres.filter(x => x.turno === v.turno && tgNoTurno(x.turno, a) && (r.ok || tgFalhaDefinitiva(r)))) {   // escalonamento: líder do MESMO turno, só no horário dele
                 await tgEnviar(l, `🔴 <b>Escalonamento — ${tgEsc(tgNomeBonito(e.nome))}</b>\n${n48.length > 1 ? `${n48.length} casos passaram` : '1 caso passou'} de 48h:\n\n${lista}`, { tipo: 'escalonamento', casos: n48.map(d => `${d.id}:48`) });
             }
         }
@@ -5057,6 +7419,7 @@ async function tgRodadaAvisos(a) {
     for (const k of Array.from(tgBot.avisados.keys())) if (!presentes.has(k)) tgBot.avisados.delete(k);   // saiu da faixa: se voltar, avisa de novo
 }
 async function tgTick() {
+    if (tgBot.ligado && !tgBot.carregado && !tgBot.rodando) { tgBot.rodando = true; try { await tgCarregarPlanilha(); } finally { tgBot.rodando = false; } return; }   // 14/10/2026: a planilha não foi lida ao ligar: tenta de novo a cada minuto (sem ler, o bot não atende nem regrava a aba)
     if (!tgBot.ligado || !tgBot.carregado || tgBot.rodando) return;
     tgBot.rodando = true;
     try {
@@ -5070,6 +7433,7 @@ async function tgTick() {
 }
 async function tgLoop() {   // polling: o Dash fica acordado pelo UptimeRobot
     while (tgBot.ligado) {
+        if (!tgBot.carregado) { await tgEsperar(5000); continue; }   // 14/10/2026: só lê as mensagens depois de carregar os vínculos (antes, um agente já vinculado virava pedido novo e regravava a aba só com ele)
         const r = await tgApi('getUpdates', { offset: tgBot.offset, timeout: 25, allowed_updates: ['message', 'callback_query'] }, 35000);
         tgBot.ultimoPoll = Date.now();
         if (r && r.ok) {
@@ -5138,7 +7502,7 @@ app.get('/api/telegram/painel', async (req, res) => {
         Object.keys(TG_TURNOS).forEach(t => { porTurno[t] = { rotulo: TG_TURNOS[t].rotulo, equipe: TG_EQUIPE.filter(x => x[2] === t).length, vinculados: tgBot.vinculos.filter(v => v.status === 'ativo' && v.papel === 'agente' && v.turno === t).length, lider: (tgBot.vinculos.find(v => v.status === 'ativo' && v.papel === 'lider' && v.turno === t) || {}).agente_chatwoot || '' }; });
         res.json({
             success: true,
-            bot: { configurado: !!TG_TOKEN, ligado: tgBot.ligado, usuario: tgBot.usuario, nome: tgBot.nome, ultimo_poll: tgBot.ultimoPoll, ultimo_erro: tgBot.ultimoErro, erro_em: tgBot.erroEm, planilha_ok: tgBot.planilhaOk, planilha_configurada: !!tgSheets(), iniciado_em: tgBot.iniciadoEm, agora: tgAgoraBR().texto, fila_planilha: Object.values(tgBot.fila).reduce((s, l) => s + l.length, 0) },
+            bot: { configurado: !!TG_TOKEN, desativado: !TG_ATIVO, ligado: tgBot.ligado, usuario: tgBot.usuario, nome: tgBot.nome, ultimo_poll: tgBot.ultimoPoll, ultimo_erro: tgBot.ultimoErro, erro_em: tgBot.erroEm, planilha_ok: tgBot.planilhaOk, planilha_configurada: !!tgSheets(), iniciado_em: tgBot.iniciadoEm, agora: tgAgoraBR().texto, fila_planilha: Object.values(tgBot.fila).reduce((s, l) => s + l.length, 0) },
             config: tgBot.config, turnos: TG_TURNOS, por_turno: porTurno, gestores: TG_GESTORES,
             comandos: TG_COMANDOS.map(c => Object.assign({}, c, { usos_7d: usos['/' + c.cmd] || 0 })),
             vinculos, agentes: usuarios.map(u => ({ id: u.id, name: u.name, sugestao: tgSugerirTurno(u.name) }))
@@ -5259,4 +7623,16 @@ app.post('/api/telegram/teste', express.json(), async (req, res) => {
         res.json({ ok: !!r.ok, erro: r.ok ? '' : (r.description || 'não entregue') });
     } catch (e) { res.status(500).json({ ok: false, erro: e.message }); }
 });
-setTimeout(() => { tgIniciar().catch(e => console.error('[telegram] falha ao iniciar:', e.message)); }, 5000);
+setTimeout(() => {
+    if (!TG_ATIVO) { console.warn('[telegram] bot DESATIVADO: sem avisos, sem rodadas e sem consulta por tempo. Religar: TELEGRAM_ATIVO=1 no Render.'); return; }
+    tgIniciar().catch(e => console.error('[telegram] falha ao iniciar:', e.message));
+}, 5000);
+// 🛡️ 16/10/2026: erro inesperado (URL malformada, JSON inválido, falha não tratada) não mostra pilha nem caminho de arquivo — o detalhe fica só no log
+app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const st = Number(err && (err.status || err.statusCode)) || 500;
+    console.error('[erro]', req.method, req.originalUrl.slice(0, 120), '→', st, err && err.message);
+    const msg = st >= 500 ? 'Erro interno do servidor.' : 'Pedido inválido.';
+    if (req.originalUrl.startsWith('/api/')) return res.status(st).json({ success: false, ok: false, error: msg, erro: msg });
+    res.status(st).type('text').send(msg);
+});
