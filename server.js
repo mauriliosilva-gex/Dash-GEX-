@@ -2296,6 +2296,61 @@ app.get('/api/qualidade-tickets', async (req, res) => {
 // ==========================================
 // 16. ROTA DE URGÊNCIA: REEMBOLSOS PAGAMERICAN (COM GOOGLE SHEETS)
 // ==========================================
+// ==========================================
+// ⚠️ 27/10/2026 — NO LOG MAS NÃO NO PAINEL
+// A planilha de log só CORRIGE a data e os campos de um ticket que a consulta do Chatwoot já trouxe: ela nunca
+// traz um ticket novo. Se o reembolso foi lançado na planilha mas no Chatwoot ainda falta a plataforma ou o
+// "tipo de retenção", o ticket some da extração daquele dia e só aparece dias depois, com a data certa do log.
+// Esta função acha esses tickets e diz, para cada um, POR QUE ele não entrou. Só LEITURA, e só roda se houver pendente.
+// ==========================================
+const RB_MARCAS = {
+    pagamerican: ['pagamerican', 'pagamerica', 'pag american', 'pag_american'],
+    buygoods: ['buygoods', 'buy goods', 'buy_goods'],
+    cartpanda: ['cartpanda', 'cart panda', 'cart_panda'],
+};
+const RB_ROTULO = { pagamerican: 'PagAmerican', buygoods: 'BuyGoods', cartpanda: 'CartPanda' };
+async function rbPendentesDoLog(logMap, idsNoPainel, dInicio, dFim, plataforma) {
+    const alvo = [];
+    for (const tk in logMap) {
+        const L = logMap[tk];
+        if (!L || !L.data || idsNoPainel.has(String(tk))) continue;
+        if (!(L.data >= dInicio && L.data <= dFim)) continue;
+        const n = parseInt(String(tk).replace(/\D/g, ''), 10);
+        if (n > 0) alvo.push({ ticket: String(tk), n, L });
+    }
+    if (!alvo.length) return [];
+    const base = (a, motivo, agente) => ({ ticket: a.ticket, data: a.L.data, tipo: a.L.tipo || '', pedido: a.L.pedido || '', produto: a.L.produto || '', agente: agente || '', motivo });
+    let achados = {};
+    try {
+        const r = await pool.query(`
+            SELECT c.display_id,
+                   COALESCE(u.name, 'SEM ATRIBUIR') AS agente,
+                   COALESCE(c.custom_attributes->>'tipo_de_retencao_de_reembolso', ct.custom_attributes->>'tipo_de_retencao_de_reembolso', '') AS tipo,
+                   LOWER(COALESCE(c.custom_attributes::text, '') || ' ' || COALESCE(ct.custom_attributes::text, '')) AS atributos
+            FROM conversations c
+            LEFT JOIN users u ON u.id = c.assignee_id
+            LEFT JOIN contacts ct ON ct.id = c.contact_id
+            WHERE c.account_id = 1 AND c.display_id = ANY($1::int[])`, [alvo.map(a => a.n)]);
+        r.rows.forEach(x => { achados[String(x.display_id)] = x; });
+    } catch (e) {
+        return alvo.map(a => base(a, 'Não deu para conferir no Chatwoot agora (' + String(e.message || e).slice(0, 60) + ')'));
+    }
+    const marcas = RB_MARCAS[plataforma] || [];
+    const outras = Object.keys(RB_MARCAS).filter(x => x !== plataforma);
+    return alvo.map(a => {
+        const c = achados[a.ticket];
+        if (!c) return base(a, 'Este número de ticket não existe no Chatwoot — confira o número lançado na planilha');
+        const tipo = String(c.tipo || '').trim(), attrs = String(c.atributos || '');
+        if (!tipo) return base(a, 'No Chatwoot falta preencher o campo "Tipo de retenção de reembolso"', c.agente);
+        if (/sem reembolso/i.test(tipo)) return base(a, 'No Chatwoot o tipo está como "sem reembolso" — o painel não conta esses', c.agente);
+        if (!marcas.some(m => attrs.includes(m))) {
+            const outra = outras.find(x => RB_MARCAS[x].some(m => attrs.includes(m)));
+            return base(a, outra ? `A conversa está marcada como ${RB_ROTULO[outra]} no Chatwoot, não como ${RB_ROTULO[plataforma]}`
+                                 : 'A conversa não tem a plataforma preenchida no Chatwoot', c.agente);
+        }
+        return base(a, 'Passou a valer no Chatwoot depois desta consulta — use o 🔄 Atualizar', c.agente);
+    });
+}
 app.get('/api/reembolsos-pagamerican', async (req, res) => {
     // 🔥 COLE SEU LINK DO GOOGLE AQUI DENTRO DAS ASPAS:
     const URL_PLANILHA = "https://script.google.com/macros/s/AKfycbxLqWTExvo0824oEpWUJYbDIzVdK4q9S3eeElIo0n8eliTCYueQjOJIB0AOCPuDnl1LSw/exec";
@@ -2423,7 +2478,8 @@ app.get('/api/reembolsos-pagamerican', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos); // Ordena o ranking de agentes
 
-        res.json(Object.assign({ success: true, dados: arrayFinal }, avisoLogPag ? { aviso_log: avisoLogPag, sem_cache: true } : {}));   // 14/10/2026: log com falha → aviso_log na tela e sem_cache (o cache não guarda)
+        const pendentesLog = await rbPendentesDoLog(logMap, new Set(result.rows.map(x => String(x.display_id))), dInicio, dFim, 'pagamerican');   // 27/10/2026
+        res.json(Object.assign({ success: true, dados: arrayFinal, pendentes_log: pendentesLog }, avisoLogPag ? { aviso_log: avisoLogPag, sem_cache: true } : {}));   // 14/10/2026: log com falha → aviso_log na tela e sem_cache (o cache não guarda)
     } catch (error) { 
         console.error("Erro PagAmerican:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
@@ -4184,6 +4240,7 @@ app.get('/api/atendimento-agentes', async (req, res) => {
                 agente: a.agente,
                 user_id: a.user_id,
                 time: a.time,
+                lider: tkLiderDe(a.agente),   // 27/10/2026: abas por lider na tela de Atendimento por Agente (fonte unica: TK_EQUIPE)
                 tickets: a.tickets,
                 em_aberto: a.em_aberto,
                 retornos: a.retornos,
@@ -4215,7 +4272,26 @@ app.get('/api/atendimento-agentes', async (req, res) => {
             porTime[t] = { agentes: ags.size, tickets: tks.size, em_aberto: abs.size, retornos: rets.size, mensagens: msgs };
         });
 
-        res.json({ success: true, dados: dados, por_time: porTime, periodo: { inicio: dataInicioSQL, fim: dataFimSQL } });
+        // 27/10/2026: mesmo resumo cruzando time x lider (chave "TIME::lider"), sem repetir ticket — para as abas por lider da tela
+        const porCombo = {};
+        ['todos', 'flavia', 'adevania', 'camila'].forEach(ld => {
+            ['TODOS', ...TIMES].forEach(t => {
+                const tks = new Set(), abs = new Set(), rets = new Set(), ags = new Set();
+                let msgs = 0;
+                linhas.forEach(r => {
+                    if (t !== 'TODOS' && r.time !== t) return;
+                    if (ld !== 'todos' && tkLiderDe(r.agente) !== ld) return;
+                    const id = String(r.conv_id);
+                    tks.add(id); ags.add(r.agente);
+                    if (parseInt(r.status) === 0) abs.add(id);
+                    if (r.ultimo_retorno) rets.add(id);
+                    msgs += parseInt(r.msgs) || 0;
+                });
+                porCombo[t + '::' + ld] = { agentes: ags.size, tickets: tks.size, em_aberto: abs.size, retornos: rets.size, mensagens: msgs };
+            });
+        });
+
+        res.json({ success: true, dados: dados, por_time: porTime, por_combo: porCombo, periodo: { inicio: dataInicioSQL, fim: dataFimSQL } });
     } catch (error) {
         console.error("Erro Atendimento por Agente:", error);
         res.status(500).json({ success: false, error: error.message });
@@ -4442,6 +4518,18 @@ SELECT 'robo' AS bloco, periodo, coalesce(canal, 'Geral') AS setor, NULL::text A
   round((percentile_cont(0.5) WITHIN GROUP (ORDER BY w_ia))::numeric, 0) AS v3,
   NULL::numeric AS v4, NULL::numeric AS v5, NULL::numeric AS v6, NULL::numeric AS v7, NULL::numeric AS v8, NULL::numeric AS v9, NULL::numeric AS v10
 FROM c GROUP BY GROUPING SETS ((periodo, canal), (periodo))
+UNION ALL
+-- 1c) COMPOSIÇÃO (27/10/2026): de onde veio cada abertura, ANTES do filtro de clientes —
+-- N = caso novo (o cliente abriu) · R = retorno do cliente (reabriu escrevendo) · S = follow-up nosso (reabrimos sem msg dele) · F = aberta por nós.
+-- Clientes = N + R (é o que o resto do SLA conta); S e F ficam de fora da espera, mas aqui aparecem para dar o contexto.
+SELECT 'tipos' AS bloco, periodo, coalesce(canal, 'Geral') AS setor, NULL::text AS k,
+  count(*)::numeric AS n,
+  count(*) FILTER (WHERE tipo = 'N')::numeric AS v1,
+  count(*) FILTER (WHERE tipo = 'R')::numeric AS v2,
+  count(*) FILTER (WHERE tipo = 'S')::numeric AS v3,
+  count(*) FILTER (WHERE tipo = 'F')::numeric AS v4,
+  NULL::numeric AS v5, NULL::numeric AS v6, NULL::numeric AS v7, NULL::numeric AS v8, NULL::numeric AS v9, NULL::numeric AS v10
+FROM cli GROUP BY GROUPING SETS ((periodo, canal), (periodo))
 UNION ALL
 -- 2) por CAIXA (setor = nome da caixa, k = canal)
 SELECT 'caixa', periodo, caixa, canal, count(*)::numeric,
@@ -5479,7 +5567,8 @@ app.get('/api/reembolsos-buygoods', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
 
-        res.json({ success: true, dados: arrayFinal });
+        const pendentesLog = await rbPendentesDoLog(logMap, new Set(result.rows.map(x => String(x.display_id))), dInicio, dFim, 'buygoods');   // 27/10/2026
+        res.json({ success: true, dados: arrayFinal, pendentes_log: pendentesLog });
     } catch (error) { 
         console.error("Erro BuyGoods:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
@@ -5603,7 +5692,8 @@ app.get('/api/reembolsos-cartpanda', async (req, res) => {
         });
         arrayFinal.sort((a, b) => b.total_reembolsos - a.total_reembolsos);
 
-        res.json({ success: true, dados: arrayFinal });
+        const pendentesLog = await rbPendentesDoLog(logMap, new Set(result.rows.map(x => String(x.display_id))), dInicio, dFim, 'cartpanda');   // 27/10/2026
+        res.json({ success: true, dados: arrayFinal, pendentes_log: pendentesLog });
     } catch (error) { 
         console.error("Erro CartPanda:", error);
         res.status(500).json({ success: false, error: "Erro interno no servidor." }); 
