@@ -6455,7 +6455,8 @@
                 
                 if (data.success) {
                     dadosPagAmerican = data.dados || [];
-                    window._pagamAvisoLog = data.aviso_log || '';   // 14/10/2026: a planilha de log falhou (o servidor manda aviso_log): a tabela mostra o aviso em amarelo
+                    window._pagamAvisoLog = data.aviso_log || '';
+                    rbGuardaPendentes('pagamerican', data);   // 27/10/2026   // 14/10/2026: a planilha de log falhou (o servidor manda aviso_log): a tabela mostra o aviso em amarelo
                     if (plataformaAtual === 'pagamerican') renderTabelaPagAmerican();
                 } else {
                     if(tb && plataformaAtual === 'pagamerican') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro no Banco de Dados: ${data.error}</td></tr>`;
@@ -6467,19 +6468,67 @@
             }
         }
 
+        // 27/10/2026: ⚠️ NO LOG MAS NÃO NO PAINEL — o servidor manda pendentes_log (reembolso lançado na planilha
+        // que ainda não entrou na consulta do Chatwoot). Vira um aviso laranja com "Ver mais" explicando o motivo de cada um.
+        window._rbPendentes = window._rbPendentes || {};
+        const RB_NOME_PLAT = { pagamerican: 'PagAmerican', buygoods: 'BuyGoods', cartpanda: 'CartPanda' };
+        function rbGuardaPendentes(plat, data) { window._rbPendentes[plat] = (data && Array.isArray(data.pendentes_log)) ? data.pendentes_log : []; }
+        function rbLinhaPendentes(plat) {
+            const l = window._rbPendentes[plat] || [];
+            if (!l.length) return '';
+            const um = l.length === 1;
+            return `<tr><td colspan="8" class="py-2 px-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 text-[11px] font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 py-2">
+                    <span>⚠️ ${l.length} ${um ? 'reembolso está' : 'reembolsos estão'} na planilha de log deste período, mas ${um ? 'não entrou' : 'não entraram'} no painel.</span>
+                    <button onclick="rbVerPendentes('${plat}')" class="bg-orange-500 hover:bg-orange-400 text-white text-[10px] font-bold px-3 py-1 rounded-full transition-colors shadow-sm whitespace-nowrap">Ver mais</button>
+                </div></td></tr>`;
+        }
+        function rbVerPendentes(plat) {
+            const l = window._rbPendentes[plat] || [];
+            const tit = document.getElementById('modal-pagam-titulo'), cor = document.getElementById('modal-pagam-conteudo');
+            if (!tit || !cor) return;
+            tit.innerText = `Na planilha mas fora do painel · ${RB_NOME_PLAT[plat] || plat} · ${l.length} ticket(s)`;
+            let html = `<p class="text-[11px] font-bold text-gray-500 bg-gray-100 dark:bg-black/30 border border-lightBorder dark:border-white/5 rounded-lg px-3 py-2 mb-3">
+                O painel só conta o que está no Chatwoot. A planilha de log corrige a data e os campos, mas não traz o ticket sozinho.
+                Abaixo, o que foi lançado na planilha neste período e o motivo de cada um não ter entrado.</p><div class="space-y-3">`;
+            if (!l.length) html += '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nada pendente neste período.</p>';
+            l.forEach(p => {
+                const dt = p.data ? new Date(p.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+                const url = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(String(p.ticket || ''))}`;
+                const chip = (t, c) => t ? `<span class="text-[10px] ${c} px-2 py-0.5 rounded font-bold shadow-sm">${t48xEsc(t)}</span>` : '';
+                html += `<div class="flex items-start justify-between gap-3 bg-white/60 dark:bg-black/20 border border-orange-500/30 rounded-xl p-3">
+                    <div class="min-w-0">
+                        <p class="text-sm font-black text-gray-800 dark:text-white">Ticket #${t48xEsc(String(p.ticket || ''))}</p>
+                        <p class="text-[11px] font-bold text-orange-600 dark:text-orange-400 mt-1">🛈 ${t48xEsc(p.motivo || '')}</p>
+                        <div class="flex flex-wrap items-center gap-2 mt-2">
+                            ${chip(dt, 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300')}
+                            ${chip(p.tipo, 'bg-blue-500/10 text-blue-500 border border-blue-500/30')}
+                            ${chip(p.agente ? '👤 ' + p.agente : '', 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300')}
+                            ${chip(p.pedido ? '📦 ' + p.pedido : '', 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30')}
+                            ${chip(p.produto, 'bg-purple-500/10 text-purple-400 border border-purple-500/30')}
+                        </div>
+                    </div>
+                    <a href="${url}" target="_blank" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm whitespace-nowrap shrink-0">Abrir Conversa ↗️</a>
+                </div>`;
+            });
+            cor.innerHTML = html + '</div>';
+            document.getElementById('modal-pagamerican').classList.remove('hidden');
+        }
+
         function renderTabelaPagAmerican() {
             const tb = document.getElementById('tabela-pagamerican-body');
             if(!tb) return;
 
-            const avisoLog = window._pagamAvisoLog ? `<tr><td colspan="8" class="py-2 px-4 text-center text-[11px] font-bold text-yellow-600 dark:text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">⚠️ Planilha de log dos reembolsos indisponível agora (${t48xEsc(window._pagamAvisoLog)}): os números vêm só do Chatwoot e podem estar incompletos. Tente o 🔄 Atualizar daqui a pouco.</td></tr>` : '';   // 14/10/2026: aviso do log (aviso_log da rota)
+            const avisoLog = window._pagamAvisoLog ? `<tr><td colspan="8" class="py-2 px-4 text-center text-[11px] font-bold text-yellow-600 dark:text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">⚠️ Planilha de log dos reembolsos indisponível agora (${t48xEsc(window._pagamAvisoLog)}): os números vêm só do Chatwoot e podem estar incompletos. Tente o 🔄 Atualizar daqui a pouco.</td></tr>` : '';
+            const avisoPend = rbLinhaPendentes('pagamerican');   // 27/10/2026   // 14/10/2026: aviso do log (aviso_log da rota)
             if (dadosPagAmerican.length === 0) {
-                tb.innerHTML = avisoLog + `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da PagAmerican encontrado neste período.</td></tr>`;   // 14/10/2026: com o aviso do log, se houver
+                tb.innerHTML = avisoLog + avisoPend + `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da PagAmerican encontrado neste período.</td></tr>`;   // 14/10/2026: com o aviso do log, se houver
                 return;
             }
 
             window.mapaPagAmerican = {}; 
 
-            tb.innerHTML = avisoLog + dadosPagAmerican.map((d, i) => {   // 14/10/2026: aviso do log (se houver) na 1ª linha
+            tb.innerHTML = avisoLog + avisoPend + dadosPagAmerican.map((d, i) => {   // 14/10/2026: aviso do log (se houver) na 1ª linha
                 window.mapaPagAmerican[i] = d; 
                 
                 const f = v => v > 0 ? `<span class="font-bold text-gray-800 dark:text-white">${v}</span>` : `<span class="text-gray-400 opacity-50">-</span>`;
@@ -6764,6 +6813,7 @@ async function carregarBuyGoods(parametrosUrl = '') {
         
         if (data.success) {
             dadosBuyGoods = data.dados || [];
+            rbGuardaPendentes('buygoods', data);   // 27/10/2026
             if (plataformaAtual === 'buygoods') renderTabelaBuyGoods();
         } else {
             if(tb && plataformaAtual === 'buygoods') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
@@ -6779,15 +6829,16 @@ async function carregarBuyGoods(parametrosUrl = '') {
 function renderTabelaBuyGoods() {
     const tb = document.getElementById('tabela-pagamerican-body');
     if(!tb) return;
+    const avisoPend = rbLinhaPendentes('buygoods');   // 27/10/2026
 
     if (dadosBuyGoods.length === 0) {
-        tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da BuyGoods encontrado neste período.</td></tr>`;
+        tb.innerHTML = avisoPend + `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da BuyGoods encontrado neste período.</td></tr>`;
         return;
     }
 
     window.mapaBuyGoods = {}; 
 
-    tb.innerHTML = dadosBuyGoods.map((d, i) => {
+    tb.innerHTML = avisoPend + dadosBuyGoods.map((d, i) => {
         window.mapaBuyGoods[i] = d; 
         
         const f = v => v > 0 ? `<span class="font-bold text-gray-800 dark:text-white">${v}</span>` : `<span class="text-gray-400 opacity-50">-</span>`;
@@ -6985,6 +7036,7 @@ async function carregarCartPanda(parametrosUrl = '') {
         
         if (data.success) {
             dadosCartPanda = data.dados || [];
+            rbGuardaPendentes('cartpanda', data);   // 27/10/2026
             if (plataformaAtual === 'cartpanda') renderTabelaCartPanda();
         } else {
             if(tb && plataformaAtual === 'cartpanda') tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-red-500 font-bold text-xs uppercase tracking-widest">⚠️ Erro: ${data.error}</td></tr>`;
@@ -7000,15 +7052,16 @@ async function carregarCartPanda(parametrosUrl = '') {
 function renderTabelaCartPanda() {
     const tb = document.getElementById('tabela-pagamerican-body');
     if(!tb) return;
+    const avisoPend = rbLinhaPendentes('cartpanda');   // 27/10/2026
 
     if (dadosCartPanda.length === 0) {
-        tb.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da CartPanda encontrado neste período.</td></tr>`;
+        tb.innerHTML = avisoPend + `<tr><td colspan="8" class="py-8 text-center text-gray-500 font-bold text-xs uppercase tracking-widest">Nenhum reembolso da CartPanda encontrado neste período.</td></tr>`;
         return;
     }
 
     window.mapaCartPanda = {}; 
 
-    tb.innerHTML = dadosCartPanda.map((d, i) => {
+    tb.innerHTML = avisoPend + dadosCartPanda.map((d, i) => {
         window.mapaCartPanda[i] = d; 
         
         const f = v => v > 0 ? `<span class="font-bold text-gray-800 dark:text-white">${v}</span>` : `<span class="text-gray-400 opacity-50">-</span>`;
@@ -10140,7 +10193,66 @@ async function exportarExcelCartPanda() {
                 const g = L.find(y => y.bloco === 'canal' && y.periodo === 'atual' && y.setor === 'Geral'); if (g) { K.pintar(sC, rc, 2, rc, 7, C.totc); linCanalC('GERAL', g, false, C.tot); }
                 K.caixa(sC, 4, 2, rc - 1, 7, C.borda);
 
-                [sR, sH, sC].forEach(sh => { sh.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } }; });
+                // ===================== ABA 4: COMPOSIÇÃO (27/10/2026) =====================
+                // De onde vem cada abertura: caso novo · retorno do cliente · follow-up nosso · aberta por nós.
+                const sT = wb.addWorksheet('Composição', { views: [{ state: 'frozen', ySplit: 4, showGridLines: false }], properties: { tabColor: { argb: C.k3 } } });
+                [2.5, 24, 12, 12, 12, 12, 12, 14, 14, 14].forEach((w, i) => { sT.getColumn(i + 1).width = w; });
+                K.pintar(sT, 1, 1, 40, 10, C.fundo);
+                K.banner(sT, 2, 10, 'DE ONDE VEM CADA ABERTURA', filtroTxt + '  ·  ' + tkPeriodoTxt(r.periodo) + '  ·  Clientes = caso novo + retorno do cliente');
+                const tp = (per, setor) => L.find(x => x.bloco === 'tipos' && x.periodo === per && x.setor === setor);
+                const gT = tp('atual', 'Geral'), gA = r.comparacao ? tp('anterior', 'Geral') : null;
+                const nN = x => x ? +x.v1 : 0, nR = x => x ? +x.v2 : 0, nS = x => x ? +x.v3 : 0, nF = x => x ? +x.v4 : 0;
+                const cliT = x => nN(x) + nR(x), abT = x => x ? +x.n : 0;
+                K.tile(sT, 5, 2, 3, 'CASOS NOVOS', nN(gT), NUM, gA ? 'anterior: ' + tkNum(nN(gA)) : 'o cliente abriu a conversa', C.k1);
+                K.tile(sT, 5, 4, 5, 'RETORNOS DO CLIENTE', nR(gT), NUM, gA ? 'anterior: ' + tkNum(nR(gA)) : 'ele voltou a escrever', C.k2);
+                K.tile(sT, 5, 6, 7, 'FOLLOW-UP NOSSO', nS(gT), NUM, 'nós reabrimos pra cobrar · não é falha de SLA', C.ouro);
+                K.tile(sT, 5, 8, 9, 'ABERTAS POR NÓS', nF(gT), NUM, 'não contam como cliente', C.cinza);
+                sT.getRow(8).height = 10;
+                K.secao(sT, 9, 2, 10, 'Por canal');
+                K.cabTabela(sT, 10, [['CANAL', 2], ['CLIENTES', 3], ['CASOS NOVOS', 4], ['RETORNOS', 5], ['% NOVOS', 6], ['% RETORNOS', 7], ['FOLLOW-UP NOSSO', 8], ['ABERTAS POR NÓS', 9], ['TOTAL DE ABERTURAS', 10]]);
+                let rt = 11;
+                const linTipo = (nome, x, destaque) => {
+                    const cli = cliT(x);
+                    K.pintar(sT, rt, 2, rt, 10, destaque ? C.totc : C.branco); sT.getRow(rt).height = 18;
+                    K.junta(sT, rt, 2, 2, nome, { font: K.fonte(destaque ? 11 : 10, destaque ? C.tot : C.texto, true), alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } });
+                    const por = (col, valor, fmt, cor) => { const c2 = sT.getCell(rt, col); c2.value = valor; if (fmt) c2.numFmt = fmt; c2.font = K.fonte(10, cor || C.texto, !!destaque); c2.alignment = { horizontal: 'center', vertical: 'middle' }; };
+                    por(3, cli, NUM, C.navy); por(4, nN(x), NUM, C.k1); por(5, nR(x), NUM, C.k2);
+                    por(6, cli ? nN(x) / cli : '—', cli ? PCT : null, C.k1); por(7, cli ? nR(x) / cli : '—', cli ? PCT : null, C.k2);
+                    por(8, nS(x), NUM, C.ouro); por(9, nF(x), NUM, C.cinza); por(10, abT(x), NUM, C.cinza);
+                    rt++;
+                };
+                ['E-mail', 'SMS', 'Chat web', 'Outros'].forEach(c2 => { const x = tp('atual', c2); if (x) linTipo(c2, x); });
+                if (gT) linTipo('GERAL', gT, true);
+                K.caixa(sT, 10, 2, rt - 1, 10, C.borda);
+                if (gA) {
+                    rt++; K.secao(sT, rt, 2, 10, 'Comparativo com o período anterior'); rt++;
+                    K.cabTabela(sT, rt, [['MÉTRICA', 2, 4], ['ATUAL', 5, 6], ['ANTERIOR', 7, 8], ['VARIAÇÃO', 9, 10]]); rt++;
+                    const comp = (nome, a2, b2) => {
+                        K.pintar(sT, rt, 2, rt, 10, C.branco); sT.getRow(rt).height = 18;
+                        K.junta(sT, rt, 2, 4, nome, { font: K.fonte(10, C.texto), alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } });
+                        K.junta(sT, rt, 5, 6, a2, { font: K.fonte(10, C.texto, true), numFmt: NUM, alignment: { vertical: 'middle', horizontal: 'center' } });
+                        K.junta(sT, rt, 7, 8, b2, { font: K.fonte(10, C.cinza), numFmt: NUM, alignment: { vertical: 'middle', horizontal: 'center' } });
+                        const d2 = a2 - b2, txt = b2 > 0 ? (d2 >= 0 ? '+' : '') + d2 + '  (' + (d2 >= 0 ? '+' : '') + (d2 / b2 * 100).toFixed(1).replace('.', ',') + '%)' : (d2 ? '+' + d2 + ' (sem base)' : '= 0');
+                        K.junta(sT, rt, 9, 10, txt, { font: K.fonte(10, d2 > 0 ? C.ouro : (d2 < 0 ? C.verde : C.cinza), true), alignment: { vertical: 'middle', horizontal: 'center' } });
+                        rt++;
+                    };
+                    comp('Clientes (novos + retornos)', cliT(gT), cliT(gA));
+                    comp('Casos novos', nN(gT), nN(gA));
+                    comp('Retornos do cliente', nR(gT), nR(gA));
+                    comp('Follow-up nosso', nS(gT), nS(gA));
+                    comp('Abertas por nós', nF(gT), nF(gA));
+                    K.caixa(sT, rt - 6, 2, rt - 1, 10, C.borda);
+                }
+                rt += 1;
+                [['Caso novo', 'o cliente abriu a conversa e a 1ª mensagem é dele'],
+                 ['Retorno do cliente', 'a conversa foi reaberta com mensagem do cliente'],
+                 ['Follow-up nosso', 'nós reabrimos para cobrar o cliente, sem mensagem dele — não é falha de SLA'],
+                 ['Aberta por nós', 'a conversa foi criada por nós — fica à parte, não conta como cliente'],
+                 ['Clientes', 'casos novos + retornos do cliente — é a base de tudo que o SLA mede']].forEach(([t2, d2]) => {
+                    K.junta(sT, rt, 2, 10, t2 + ' — ' + d2, { font: K.fonte(9, C.cinza), alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } }); rt++;
+                });
+
+                [sR, sH, sC, sT].forEach(sh => { sh.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } }; });
                 await tkBaixarExcel(wb, `Metricas_SLA_Recebimento_${(st.canal === 'TODOS' ? 'Geral' : st.canal).replace(/[^\wÀ-ÿ]+/g, '-')}_${r.periodo.inicio}_a_${r.periodo.fim}.xlsx`);
             } catch (e) { console.error(e); alert('Erro ao gerar o Excel.'); }
             finally { if (btn) btn.innerHTML = orig; }
