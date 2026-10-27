@@ -1163,6 +1163,14 @@
 
                 <!-- SUB-ABA 7: ATENDIMENTO POR AGENTE (06/10/2026) — mesma regra e colunas do 👥 Todos os Agentes do Time 48H, com todos os tickets -->
                 <div id="tela-tk-atendimento" class="hidden flex-1 flex flex-col min-h-0 bg-transparent">
+                    <!-- 27/10/2026: abas por lider (esta tela ja esta dentro do par ADMIN-HTML das telas de operacao) -->
+                    <div class="px-5 pt-3 flex items-center gap-2 flex-wrap shrink-0">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
+                        <button onclick="ldFiltrarAtd('todos')" id="btn-ld-atd-todos" class="btn-setor btn-setor-ativo">Todos</button>
+                        <button onclick="ldFiltrarAtd('flavia')" id="btn-ld-atd-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
+                        <button onclick="ldFiltrarAtd('adevania')" id="btn-ld-atd-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
+                        <button onclick="ldFiltrarAtd('camila')" id="btn-ld-atd-camila" class="btn-setor btn-setor-inativo">Camila</button>
+                    </div>
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/10 shrink-0">
                         <div class="flex items-center gap-4 flex-wrap">
                             <h3 class="text-[12px] font-black uppercase tracking-wider text-gray-800 dark:text-white">Atendimento por Agente</h3>
@@ -3885,11 +3893,12 @@
         // 23/10/2026: o servidor manda o campo `lider` em cada agente (fonte única: TK_EQUIPE no server.js)
         // chave 'todos' devolve a MESMA lista — zero mudança no comportamento atual
         function tkFiltraLider(lista, chave) { return (!chave || chave === 'todos') ? lista : (lista || []).filter(a => a && a.lider === chave); }
-        let ldTkGeral = 'todos', ldCasos = 'todos', ldProd = 'todos';
+        let ldTkGeral = 'todos', ldCasos = 'todos', ldProd = 'todos', ldAtd = 'todos';   // 27/10/2026: ldAtd = aba por lider do Atendimento por Agente
         function ldPintarBotoes(pre, ativo) { ['todos'].concat(TK_LIDERES_ORDEM).forEach(k => { const b = document.getElementById(pre + k); if (b) b.className = `btn-setor ${k === ativo ? 'btn-setor-ativo' : 'btn-setor-inativo'}`; }); }
         function ldFiltrarTkGeral(k) { ldTkGeral = k; ldPintarBotoes('btn-ld-tk-', k); renderTabelaTkGeral(); }
         function ldFiltrarCasos(k) { ldCasos = k; ldPintarBotoes('btn-ld-casos-', k); renderTabelaCasos(); }
         function ldFiltrarProd(k) { ldProd = k; ldPintarBotoes('btn-ld-prod-', k); renderTabelaProdutividade(); }
+        function ldFiltrarAtd(k) { ldAtd = k; ldPintarBotoes('btn-ld-atd-', k); renderAtendimentoAgentes(); }   // 27/10/2026
         function filtrarTkGeral(s) { filtroTkGeralSetor=s; ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTkGeral(); }
         function renderTabelaTkGeral() {
             const th=document.getElementById('thead-tk-geral-dinamico'), tb=document.getElementById('tabela-tickets-geral-body'); if(!tb||!th) return;
@@ -9214,7 +9223,7 @@ async function exportarExcelCartPanda() {
         // ==========================================
         const TK_NOME_TIME = { TODOS: 'Todos', RET: 'Retenção', SAC: 'SAC', BKO: 'BackOffice', SMS: 'SMS', '48H': '48H', OUTROS: 'Sem time' };
         const TK_DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-        const tkAtdEstado = { montada: false, dados: [], por_time: null, periodo: null, time: 'TODOS', cal: null, datas: [], seqVer: 0 };
+        const tkAtdEstado = { montada: false, dados: [], por_time: null, por_combo: null, periodo: null, time: 'TODOS', cal: null, datas: [], seqVer: 0 };
         const tkRecEstado = { montada: false, resp: null, canal: 'TODOS', caixa: 'TODAS', cal: null, datas: [], seq: 0 };
 
         function tkParamsPeriodo(st) {   // período do calendário (1 dia ou intervalo); sem data = mês atual (padrão do servidor)
@@ -9297,6 +9306,10 @@ async function exportarExcelCartPanda() {
             if (!usuarioAtual || usuarioAtual.role !== 'admin' || tkAtdEstado.montada) return;
             tkAtdEstado.montada = true;
             tkMontarCalendario('calendario-tk-atd', 'btn-aplicar-tk-atd', tkAtdEstado, () => carregarAtendimentoAgentes());
+            // 27/10/2026: esta tela abre e carrega SO o dia atual (outros dias seguem pelo calendario da aba)
+            const _hj = new Date();
+            tkAtdEstado.datas = [_hj];
+            if (tkAtdEstado.cal) tkAtdEstado.cal.setDate([_hj, _hj], false);
             carregarAtendimentoAgentes();
         }
         async function carregarAtendimentoAgentes() {
@@ -9310,7 +9323,7 @@ async function exportarExcelCartPanda() {
                 const data = await response.json();
                 if (seq !== st.seq) return;   // 14/10/2026: chegou depois de outra busca: não desenha
                 if (data.success) {
-                    st.dados = data.dados || []; st.por_time = data.por_time || null; st.periodo = data.periodo || null;
+                    st.dados = data.dados || []; st.por_time = data.por_time || null; st.por_combo = data.por_combo || null; st.periodo = data.periodo || null;
                     st.paramsAplicado = pAplicar;   // 14/10/2026: o Ver Tickets e o Excel usam este período (não o que está só marcado no calendário)
                     renderAtendimentoAgentes();
                 } else if (tb) {
@@ -9327,9 +9340,9 @@ async function exportarExcelCartPanda() {
             const st = tkAtdEstado, tb = document.getElementById('tabela-tk-atd-body');
             if (!tb) return;
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
-            const lista = st.dados.filter(d => st.time === 'TODOS' || d.time === st.time);
-            const r = (st.por_time && st.por_time[st.time]) || { agentes: 0, tickets: 0, em_aberto: 0, retornos: 0, mensagens: 0 };   // sem repetir ticket (vem do servidor)
-            set('tk-atd-sub', `${tkPeriodoTxt(st.periodo)} · ${TK_NOME_TIME[st.time]}`);
+            const lista = tkFiltraLider(st.dados.filter(d => st.time === 'TODOS' || d.time === st.time), ldAtd);   // 27/10/2026: aba por lider ('todos' nao altera nada)
+            const r = (st.por_combo && st.por_combo[st.time + '::' + ldAtd]) || (ldAtd === 'todos' && st.por_time && st.por_time[st.time]) || { agentes: 0, tickets: 0, em_aberto: 0, retornos: 0, mensagens: 0 };   // sem repetir ticket (vem do servidor)
+            set('tk-atd-sub', `${tkPeriodoTxt(st.periodo)} · ${TK_NOME_TIME[st.time]}${ldAtd !== 'todos' && TK_LIDERES[ldAtd] ? ' · Equipe ' + TK_LIDERES[ldAtd].rotulo : ''}`);
             set('tk-atd-card-agentes', tkNum(r.agentes));
             set('tk-atd-card-tickets', tkNum(r.tickets));
             set('tk-atd-card-abertos', tkNum(r.em_aberto) + ' em aberto');
@@ -9677,6 +9690,23 @@ async function exportarExcelCartPanda() {
             if (btn) btn.innerHTML = '⏳ Gerando...';
             try {
                 const a = tkRecResumo(r.linhas, r.periodo, st.canal, st.caixa);
+                // 27/10/2026: composição Caso novo (N) · Retorno do cliente (R) · Follow-up nosso (S) · Aberta por nós (F)
+                // por caixa, por dia e por hora. Fica só no Excel — o tkRecResumo e a tela continuam iguais.
+                const _vz = () => ({ N: 0, R: 0, S: 0, F: 0 });
+                const tpCaixa = new Map(), tpDia = {}, tpHora = Array.from({ length: 24 }, _vz);
+                (r.linhas || []).forEach(x => {
+                    if (!(st.canal === 'TODOS' || x.canal === st.canal)) return;
+                    const tp = ['N', 'R', 'S', 'F'].includes(x.tipo) ? x.tipo : 'F', qt = Number(x.aberturas) || 0;
+                    const m = tpCaixa.get(x.inbox_id) || Object.assign(_vz(), { caixa: x.caixa, canal: x.canal });
+                    m[tp] += qt; tpCaixa.set(x.inbox_id, m);
+                    if (!(st.caixa === 'TODAS' || x.inbox_id === st.caixa)) return;
+                    (tpDia[x.dia] = tpDia[x.dia] || _vz())[tp] += qt;
+                    if (x.hora >= 0 && x.hora < 24) tpHora[x.hora][tp] += qt;
+                });
+                const _dia = (d) => tpDia[d] || _vz();
+                const aberturas = a.novos + a.retornos + a.followup + a.aparte;
+                const pcT = (v, tot) => tot ? (v / tot * 100).toFixed(1).replace('.', ',') + '%' : '0,0%';
+                const varAbs = (atual, antes) => (antes === null || antes === undefined || !isFinite(antes)) ? '—' : (antes === 0 ? (atual ? '+' + atual + ' (sem base)' : '= 0') : ((atual - antes > 0 ? '+' : '') + (atual - antes) + ' · ' + ((atual - antes) / antes * 100 > 0 ? '+' : '') + ((atual - antes) / antes * 100).toFixed(1).replace('.', ',') + '%'));
                 const ant = r.anterior ? tkRecResumo(r.linhas_anterior, r.anterior, st.canal, st.caixa) : null;
                 const mediaAnt = ant && r.anterior && r.anterior.dias ? ant.clientes / r.anterior.dias : null;
                 const centro = (sheet) => sheet.eachRow((row, i) => { if (i > 1) row.alignment = { vertical: 'middle', horizontal: 'center' }; });
@@ -9694,13 +9724,38 @@ async function exportarExcelCartPanda() {
                     { m: 'Média por dia (dias completos)', v: Math.round(a.media * 10) / 10 }, { m: 'Dias completos', v: a.diasCompletos },
                     { m: 'Período anterior', v: r.anterior ? `${tkDataBR(r.anterior.inicio)} a ${tkDataBR(r.anterior.fim)}` : '—' },
                     { m: 'Clientes no período anterior', v: ant ? ant.clientes : '—' }, { m: 'Média/dia anterior', v: mediaAnt === null ? '—' : Math.round(mediaAnt * 10) / 10 },
-                    { m: 'Horário de pico', v: a.picoH === null ? '—' : `${a.picoH}h (${a.picoQtd} clientes)` }
+                    { m: 'Horário de pico', v: a.picoH === null ? '—' : `${a.picoH}h (${a.picoQtd} clientes)` },
+                    { m: '', v: '' },
+                    { m: 'COMPOSIÇÃO DO PERÍODO', v: '' },
+                    { m: 'Total de aberturas (novos + retornos + follow-up + abertas por nós)', v: aberturas },
+                    { m: '% caso novo (sobre os clientes)', v: pcT(a.novos, a.clientes) },
+                    { m: '% retorno do cliente (sobre os clientes)', v: pcT(a.retornos, a.clientes) },
+                    { m: '% follow-up nosso (sobre as aberturas)', v: pcT(a.followup, aberturas) },
+                    { m: '% abertas por nós (sobre as aberturas)', v: pcT(a.aparte, aberturas) },
+                    { m: 'Follow-up a cada 100 clientes', v: a.clientes ? Math.round(a.followup / a.clientes * 1000) / 10 : 0 },
+                    { m: 'Retornos a cada 100 casos novos', v: a.novos ? Math.round(a.retornos / a.novos * 1000) / 10 : 0 },
+                    { m: '', v: '' },
+                    { m: 'COMPARATIVO POR TIPO (vs período anterior)', v: '' },
+                    { m: 'Casos novos — anterior', v: ant ? ant.novos : '—' },
+                    { m: 'Casos novos — variação', v: ant ? varAbs(a.novos, ant.novos) : '—' },
+                    { m: 'Retornos do cliente — anterior', v: ant ? ant.retornos : '—' },
+                    { m: 'Retornos do cliente — variação', v: ant ? varAbs(a.retornos, ant.retornos) : '—' },
+                    { m: 'Follow-up nosso — anterior', v: ant ? ant.followup : '—' },
+                    { m: 'Follow-up nosso — variação', v: ant ? varAbs(a.followup, ant.followup) : '—' },
+                    { m: '', v: '' },
+                    { m: 'O QUE É CADA TIPO', v: '' },
+                    { m: 'Caso novo (N)', v: 'conversa criada e a 1ª mensagem é do cliente' },
+                    { m: 'Retorno do cliente (R)', v: 'conversa reaberta com mensagem do cliente' },
+                    { m: 'Follow-up nosso (S)', v: 'nós reabrimos para cobrar o cliente, sem mensagem dele — não é falha de SLA' },
+                    { m: 'Aberta por nós (F)', v: 'conversa criada por nós — fica à parte, não conta como cliente' },
+                    { m: 'Clientes', v: 'casos novos + retornos do cliente (follow-up e abertas por nós ficam fora)' }
                 ]);
                 centro(sR);
 
                 const sC = wb.addWorksheet('Por caixa', { views: [{ state: 'frozen', ySplit: 1 }] });
                 sC.columns = [{ header: 'CAIXA', key: 'caixa', width: 28 }, { header: 'CANAL', key: 'canal', width: 14 }, { header: 'CLIENTES', key: 'cli', width: 12 },
                     { header: '% DO TOTAL', key: 'pct', width: 12 }, { header: 'MÉDIA/DIA', key: 'media', width: 12 }, { header: 'NOVOS', key: 'n', width: 10 }, { header: 'RETORNOS', key: 'r', width: 12 },
+                    { header: '% NOVOS', key: 'pn', width: 10 }, { header: '% RETORNOS', key: 'pr', width: 12 }, { header: 'FOLLOW-UP NOSSO', key: 's', width: 17 }, { header: 'ABERTAS POR NÓS', key: 'f', width: 17 },
                     { header: 'PERÍODO ANT.', key: 'ant', width: 14 }, { header: 'VARIAÇÃO (MÉDIA/DIA)', key: 'var', width: 20 }];
                 tkCabecalhoExcel(sC);
                 const porCaixa = new Map();
@@ -9710,20 +9765,20 @@ async function exportarExcelCartPanda() {
                 const pct = v => (v === null || !isFinite(v)) ? 'sem base' : (v > 0 ? '+' : '') + v.toFixed(1).replace('.', ',') + '%';
                 [...porCaixa.values()].map(m => { m.cli = m.N + m.R; m.media = a.diasCompletos ? (m.cli - tkRecClientesCaixaHoje(r, m.id, st.canal)) / a.diasCompletos : 0; m.ant = antC.get(m.id) || 0; m.mediaAnt = r.anterior && r.anterior.dias ? m.ant / r.anterior.dias : null; m.varPct = (m.mediaAnt && m.mediaAnt > 0) ? ((m.media - m.mediaAnt) / m.mediaAnt) * 100 : null; return m; })
                     .sort((x, y) => y.cli - x.cli)
-                    .forEach(m => sC.addRow({ caixa: m.caixa, canal: m.canal, cli: m.cli, pct: (totCli ? (m.cli / totCli * 100).toFixed(1).replace('.', ',') : '0') + '%', media: Math.round(m.media * 10) / 10, n: m.N, r: m.R, ant: m.ant, var: pct(m.varPct) }));
-                sC.addRow({ caixa: 'TOTAL', canal: '', cli: a.clientes, pct: '100%', media: Math.round(a.media * 10) / 10, n: a.novos, r: a.retornos, ant: ant ? ant.clientes : 0, var: pct((mediaAnt && mediaAnt > 0 && a.diasCompletos) ? ((a.media - mediaAnt) / mediaAnt) * 100 : null) });
+                    .forEach(m => { const tp = tpCaixa.get(m.id) || { S: 0, F: 0 }; sC.addRow({ caixa: m.caixa, canal: m.canal, cli: m.cli, pct: (totCli ? (m.cli / totCli * 100).toFixed(1).replace('.', ',') : '0') + '%', media: Math.round(m.media * 10) / 10, n: m.N, r: m.R, pn: pcT(m.N, m.cli), pr: pcT(m.R, m.cli), s: tp.S, f: tp.F, ant: m.ant, var: pct(m.varPct) }); });
+                sC.addRow({ caixa: 'TOTAL', canal: '', cli: a.clientes, pct: '100%', media: Math.round(a.media * 10) / 10, n: a.novos, r: a.retornos, pn: pcT(a.novos, a.clientes), pr: pcT(a.retornos, a.clientes), s: [...tpCaixa.values()].reduce((x, m) => x + m.S, 0), f: [...tpCaixa.values()].reduce((x, m) => x + m.F, 0), ant: ant ? ant.clientes : 0, var: pct((mediaAnt && mediaAnt > 0 && a.diasCompletos) ? ((a.media - mediaAnt) / mediaAnt) * 100 : null) });
                 centro(sC);
 
                 const sD = wb.addWorksheet('Por dia', { views: [{ state: 'frozen', ySplit: 1 }] });
-                sD.columns = [{ header: 'DATA', key: 'dia', width: 14 }, { header: 'DIA DA SEMANA', key: 'dow', width: 16 }, { header: 'CLIENTES', key: 'cli', width: 12 }, { header: 'NOVOS', key: 'n', width: 10 }, { header: 'RETORNOS', key: 'r', width: 12 }, { header: 'OBS.', key: 'obs', width: 16 }];
+                sD.columns = [{ header: 'DATA', key: 'dia', width: 14 }, { header: 'DIA DA SEMANA', key: 'dow', width: 16 }, { header: 'CLIENTES', key: 'cli', width: 12 }, { header: 'NOVOS', key: 'n', width: 10 }, { header: 'RETORNOS', key: 'r', width: 12 }, { header: '% NOVOS', key: 'pn', width: 10 }, { header: '% RETORNOS', key: 'pr', width: 12 }, { header: 'FOLLOW-UP NOSSO', key: 's', width: 17 }, { header: 'ABERTAS POR NÓS', key: 'f', width: 17 }, { header: 'OBS.', key: 'obs', width: 16 }];
                 tkCabecalhoExcel(sD);
-                a.diasPeriodo.forEach(d => { const o = a.porDia[d] || { N: 0, R: 0, parcial: false }; sD.addRow({ dia: tkDataBR(d), dow: TK_DIAS_SEMANA[new Date(d + 'T12:00:00Z').getUTCDay()], cli: o.N + o.R, n: o.N, r: o.R, obs: o.parcial ? 'hoje (parcial)' : '' }); });
+                a.diasPeriodo.forEach(d => { const o = a.porDia[d] || { N: 0, R: 0, parcial: false }, tp = _dia(d), cliD = o.N + o.R; sD.addRow({ dia: tkDataBR(d), dow: TK_DIAS_SEMANA[new Date(d + 'T12:00:00Z').getUTCDay()], cli: cliD, n: o.N, r: o.R, pn: pcT(o.N, cliD), pr: pcT(o.R, cliD), s: tp.S, f: tp.F, obs: o.parcial ? 'hoje (parcial)' : '' }); });
                 centro(sD);
 
                 const sH = wb.addWorksheet('Por hora', { views: [{ state: 'frozen', ySplit: 1 }] });
-                sH.columns = [{ header: 'HORÁRIO', key: 'hora', width: 14 }, { header: 'CLIENTES', key: 'cli', width: 12 }, { header: 'NOVOS', key: 'n', width: 10 }, { header: 'RETORNOS', key: 'r', width: 12 }];
+                sH.columns = [{ header: 'HORÁRIO', key: 'hora', width: 14 }, { header: 'CLIENTES', key: 'cli', width: 12 }, { header: 'NOVOS', key: 'n', width: 10 }, { header: 'RETORNOS', key: 'r', width: 12 }, { header: '% NOVOS', key: 'pn', width: 10 }, { header: '% RETORNOS', key: 'pr', width: 12 }, { header: 'FOLLOW-UP NOSSO', key: 's', width: 17 }, { header: '% DOS CLIENTES DO PERÍODO', key: 'pd', width: 25 }];
                 tkCabecalhoExcel(sH);
-                a.porHora.forEach((h, i) => sH.addRow({ hora: `${i}h às ${i}h59`, cli: h.N + h.R, n: h.N, r: h.R }));
+                a.porHora.forEach((h, i) => { const cliH = h.N + h.R; sH.addRow({ hora: `${i}h às ${i}h59`, cli: cliH, n: h.N, r: h.R, pn: pcT(h.N, cliH), pr: pcT(h.R, cliH), s: tpHora[i].S, pd: pcT(cliH, a.clientes) }); });
                 centro(sH);
 
                 await tkBaixarExcel(wb, `Recebimento_${canalTxt.replace(/[^\wÀ-ÿ]+/g, '-')}_${r.periodo.inicio}_a_${r.periodo.fim}.xlsx`);
