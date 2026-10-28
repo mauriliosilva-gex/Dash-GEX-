@@ -4291,7 +4291,11 @@ app.get('/api/atendimento-agentes', async (req, res) => {
             });
         });
 
-        res.json({ success: true, dados: dados, por_time: porTime, por_combo: porCombo, periodo: { inicio: dataInicioSQL, fim: dataFimSQL } });
+        // 28/10/2026: a aba de um líder precisa mostrar a EQUIPE INTEIRA, não só quem mandou mensagem no período.
+        // Manda a lista do TK_EQUIPE (mesma fonte do campo `lider`) para a tela completar com os zerados.
+        const equipes = Object.keys(TK_EQUIPE).map(n => ({ agente: n, time: atdTimeDoAgente(n), lider: TK_EQUIPE[n][0] }));
+
+        res.json({ success: true, dados: dados, por_time: porTime, por_combo: porCombo, equipes: equipes, periodo: { inicio: dataInicioSQL, fim: dataFimSQL } });
     } catch (error) {
         console.error("Erro Atendimento por Agente:", error);
         res.status(500).json({ success: false, error: error.message });
