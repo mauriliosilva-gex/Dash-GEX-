@@ -9377,6 +9377,7 @@ async function exportarExcelCartPanda() {
                 if (seq !== st.seq) return;   // 14/10/2026: chegou depois de outra busca: não desenha
                 if (data.success) {
                     st.dados = data.dados || []; st.por_time = data.por_time || null; st.por_combo = data.por_combo || null; st.periodo = data.periodo || null;
+                    st.equipes = data.equipes || null;   // 28/10/2026: equipe de cada lider (TK_EQUIPE), para a aba do lider mostrar todos
                     st.paramsAplicado = pAplicar;   // 14/10/2026: o Ver Tickets e o Excel usam este período (não o que está só marcado no calendário)
                     renderAtendimentoAgentes();
                 } else if (tb) {
@@ -9389,11 +9390,27 @@ async function exportarExcelCartPanda() {
             }
         }
         function tkAtdFiltrar(time) { tkAtdEstado.time = time; tkMarcarTime('tkatd', time); renderAtendimentoAgentes(); }
+        // 28/10/2026: na aba de um líder a tabela mostra a EQUIPE INTEIRA (TK_EQUIPE, que chega em st.equipes).
+        // Quem não enviou mensagem no período entra zerado, com a marca "sem registro no período" — era isso que
+        // fazia a aba parecer estar faltando agente. Na aba "Todos" não muda nada.
+        function tkAtdComEquipe(lista, st, ld) {
+            if (!ld || ld === 'todos' || !Array.isArray(st.equipes)) return lista;
+            const ja = new Set((lista || []).map(d => String(d.agente || '').trim().toUpperCase()));
+            const faltam = st.equipes.filter(e => e && e.lider === ld
+                && (st.time === 'TODOS' || e.time === st.time)
+                && !ja.has(String(e.agente || '').trim().toUpperCase()));
+            return (lista || []).concat(faltam.map(e => ({
+                agente: e.agente, user_id: 0, time: e.time, lider: e.lider, sem_registro: true,
+                tickets: 0, em_aberto: 0, retornos: 0, mensagens: 0,
+                tmc_medio_minutos: 0, tmr_medio_minutos: 0, tmc_qtd: 0, tmr_qtd: 0,
+                sla_retorno_medio_min: null, sla_aberto_medio_min: null, sla_aberto_fora: 0
+            })));
+        }
         function renderAtendimentoAgentes() {
             const st = tkAtdEstado, tb = document.getElementById('tabela-tk-atd-body');
             if (!tb) return;
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
-            const lista = tkFiltraLider(st.dados.filter(d => st.time === 'TODOS' || d.time === st.time), ldAtd);   // 27/10/2026: aba por lider ('todos' nao altera nada)
+            const lista = tkAtdComEquipe(tkFiltraLider(st.dados.filter(d => st.time === 'TODOS' || d.time === st.time), ldAtd), st, ldAtd);   // 27/10/2026: aba por lider ('todos' nao altera nada) · 28/10/2026: na aba do lider, completa com a equipe inteira
             const r = (st.por_combo && st.por_combo[st.time + '::' + ldAtd]) || (ldAtd === 'todos' && st.por_time && st.por_time[st.time]) || { agentes: 0, tickets: 0, em_aberto: 0, retornos: 0, mensagens: 0 };   // sem repetir ticket (vem do servidor)
             set('tk-atd-sub', `${tkPeriodoTxt(st.periodo)} · ${TK_NOME_TIME[st.time]}${ldAtd !== 'todos' && TK_LIDERES[ldAtd] ? ' · Equipe ' + TK_LIDERES[ldAtd].rotulo : ''}`);
             set('tk-atd-card-agentes', tkNum(r.agentes));
@@ -9416,8 +9433,8 @@ async function exportarExcelCartPanda() {
                 const tks = parseInt(d.tickets) || 0, rets = parseInt(d.retornos) || 0;
                 const taxa = tks > 0 ? ((rets / tks) * 100).toFixed(1) : 0;
                 return `
-                <tr class="ranking-row row-normal linha-animada">
-                    <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">👤 ${t48xEsc(d.agente)}</td>
+                <tr class="ranking-row row-normal linha-animada${d.sem_registro ? ' opacity-60' : ''}">
+                    <td class="py-4 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap tracking-wide">👤 ${t48xEsc(d.agente)}${d.sem_registro ? '<span class="ml-2 text-[9px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">sem registro no período</span>' : ''}</td>
                     <td class="py-4 px-3 text-center font-mono text-[16px] font-bold text-gray-800 dark:text-white">${tks}</td>
                     <td class="py-4 px-3 text-center font-mono text-[16px] font-black text-yellow-500">${parseInt(d.em_aberto) || 0}</td>
                     <td class="py-4 px-3 text-center">
@@ -9430,7 +9447,7 @@ async function exportarExcelCartPanda() {
                     <td class="py-4 px-3 text-center font-mono text-[14px] text-orange-400">${t48Dur(d.sla_retorno_medio_min)}</td>
                     <td class="py-4 px-3 text-center font-mono text-[14px] text-gray-800 dark:text-white">${t48Dur(d.sla_aberto_medio_min)}${d.sla_aberto_fora ? `<span class="block text-[10px] font-bold text-red-500">🔴 ${d.sla_aberto_fora} fora do SLA</span>` : ''}</td>
                     <td class="py-4 px-3 text-center">
-                        <button onclick="tkAtdVerTickets(${parseInt(d.user_id) || 0})" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors">Ver Tickets</button>
+                        ${d.sem_registro ? '<span class="text-[10px] font-bold text-gray-400 dark:text-gray-600">—</span>' : '<button onclick="tkAtdVerTickets(' + (parseInt(d.user_id) || 0) + ')" class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-white text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-gexCyan hover:text-white transition-colors">Ver Tickets</button>'}
                     </td>
                 </tr>`;
             }).join('');
