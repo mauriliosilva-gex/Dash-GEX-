@@ -266,7 +266,43 @@ app.get('/ping', (req, res) => res.status(200).send('Servidor GEX Ativo!'));
 
 app.set('trust proxy', 1);
 
+// 30/10/2026: store próprio no lugar do MemoryStore padrão do express-session — aquele avisava no log do Render e nunca apagava sessão vencida
+// (a memória só crescia). Este apaga as vencidas a cada 15 min. Continua em memória: deploy/reinício do Render ainda desloga todo mundo.
+class LojaSessoes extends session.Store {
+    constructor() {
+        super();
+        this.sessoes = new Map(); // sid -> { json, vence }
+        setInterval(() => this.limpar(), 15 * 60 * 1000).unref();
+    }
+    vencimento(sess) { return sess.cookie && sess.cookie.expires ? new Date(sess.cookie.expires).getTime() : Date.now() + 24 * 60 * 60 * 1000; }
+    get(sid, cb) {
+        const s = this.sessoes.get(sid);
+        if (!s) return cb(null, null);
+        if (s.vence <= Date.now()) { this.sessoes.delete(sid); return cb(null, null); }
+        cb(null, JSON.parse(s.json));
+    }
+    set(sid, sess, cb) {
+        this.sessoes.set(sid, { json: JSON.stringify(sess), vence: this.vencimento(sess) });
+        if (cb) cb(null);
+    }
+    // só renova o vencimento (cookie), sem sobrescrever o resto da sessão guardada
+    touch(sid, sess, cb) {
+        const s = this.sessoes.get(sid);
+        if (s) { const atual = JSON.parse(s.json); atual.cookie = sess.cookie; this.set(sid, atual); }
+        if (cb) cb(null);
+    }
+    destroy(sid, cb) {
+        this.sessoes.delete(sid);
+        if (cb) cb(null);
+    }
+    limpar() {
+        const agora = Date.now();
+        for (const [sid, s] of this.sessoes) if (s.vence <= agora) this.sessoes.delete(sid);
+    }
+}
+
 app.use(session({
+    store: new LojaSessoes(),
     secret: process.env.SESSION_SECRET || 'chave_reserva_gex',
     resave: false,
     saveUninitialized: false,
