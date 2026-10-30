@@ -3810,7 +3810,10 @@
 
             if (qualData.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-gray-500 font-bold">Nenhuma nota encontrada.</td></tr>`; return; }
 
-            const md = qualData.reduce((acc, curr) => acc + curr.qual, 0) / qualData.length;
+            // 30/10/2026: média da equipe como a Qualidade faz — a média de cada ciclo (C1 a C4) e, depois, a média dos ciclos; a Adaptação não entra.
+            // Sem nenhum ciclo fora da Adaptação (ex.: filtro Adaptação), fica a média das notas como antes.
+            const mdCiclos = ['c1', 'c2', 'c3', 'c4'].map(c => qualData.filter(a => a[c] !== null && a[c] !== undefined && !(a.adapt || []).includes(c)).map(a => a[c])).filter(v => v.length).map(v => v.reduce((s, x) => s + x, 0) / v.length);
+            const md = mdCiclos.length ? mdCiclos.reduce((s, x) => s + x, 0) / mdCiclos.length : qualData.reduce((acc, curr) => acc + curr.qual, 0) / qualData.length;
             const elMediaVal = document.getElementById('media-qualidade-val');
             if (elMediaVal) elMediaVal.innerText = md.toFixed(1);
 
@@ -3824,7 +3827,7 @@
                 <tr class="ranking-row ${is100 ? 'row-gold font-bold linha-animada' : 'row-normal linha-animada'}">
                     <td class="py-4 px-3 pl-6 ${is100 ? 'text-white font-bold' : 'texto-contraste'} whitespace-nowrap">${t48xEsc(a.nome)}</td>
                     <td class="py-4 px-3 text-center"><span class="badge-setor ${is100?'bg-white/20 text-white border-white/30':''}">${a.time}</span></td>
-                    <td class="py-4 px-3 text-center">${fn(a.c1)}</td><td class="py-4 px-3 text-center">${fn(a.c2)}</td><td class="py-4 px-3 text-center">${fn(a.c3)}</td><td class="py-4 px-3 text-center">${fn(a.c4)}</td>
+                    ${['c1', 'c2', 'c3', 'c4'].map(c => (a.adapt || []).includes(c) ? `<td class="py-4 px-3 text-center" title="Adaptação: não entra na média"><div class="opacity-60">${fn(a[c])}</div><div class="text-[9px] font-bold uppercase tracking-wide ${is100 ? 'text-white/70' : 'text-gray-500'}">adaptação</div></td>` : `<td class="py-4 px-3 text-center">${fn(a[c])}</td>`).join('')}
                     <td class="py-4 px-3 text-center">${is100 ? `<span class="font-mono font-black text-white text-[16px]">${a.qual.toFixed(1)}</span>` : `<span class="font-mono font-black ${a.qual<70?'text-red-500':a.qual<90?'text-yellow-500':'text-gexCyan'} text-lg">${a.qual.toFixed(1)}</span>`}</td>
                     <td class="py-4 px-3 text-center pr-6">${btnD}</td>
                 </tr>`;
