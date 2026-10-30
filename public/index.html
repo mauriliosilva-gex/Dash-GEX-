@@ -8,11 +8,22 @@
     <script src="https://npmcdn.com/flatpickr/dist/l10n/pt.js"></script>
     
     <style>
-        .flatpickr-calendar { background: #0f172a !important; border: 1px solid #1e293b !important; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important; font-family: 'JetBrains Mono', monospace !important; }
-        .flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange { background: #22a7f0 !important; border-color: #22a7f0 !important; font-weight: bold; }
-        .flatpickr-day.inRange { background: rgba(34, 167, 240, 0.1) !important; border-color: transparent !important; box-shadow: -5px 0 0 rgba(34, 167, 240, 0.1), 5px 0 0 rgba(34, 167, 240, 0.1) !important; }
-        .flatpickr-months .flatpickr-month { background: #0a0f1c !important; color: white !important; }
-        .flatpickr-weekdays { background: #0a0f1c !important; }
+        @layer theme, base, components, utilities;   /* 🎨 30/10/2026: mesma ordem de camadas do Tailwind v4. O CSS próprio do Dash fica na camada utilities: lá, como no v3, decide a especificidade e depois a ordem */
+        /* 🛠️ 30/10/2026 (revisão): no v4 a classe hidden vem ANTES de inline, inline-block, inline-flex e table* no CSS gerado — um elemento com
+           hidden + inline-flex apareceria. No v3 o hidden ganhava dessas classes; esta regra devolve só isso (peso de 2 classes, então regras próprias
+           mais específicas — ex.: o botão ☰ com o menu fechado — continuam ganhando, como antes). Quem tem exibição por variante (md:flex...)
+           fica de fora e segue a regra normal do Tailwind (hidden md:flex continua aparecendo no desktop). */
+        @layer utilities {
+            .hidden:is(.inline, .inline-block, .inline-flex, .inline-grid, .inline-table, .list-item, .table, .table-caption, .table-cell, .table-column, .table-column-group, .table-footer-group, .table-header-group, .table-row-group, .table-row):where(:not([class*=":block"]):not([class*=":flex"]):not([class*=":grid"]):not([class*=":inline"]):not([class*=":table"]):not([class*=":contents"]):not([class*=":list-item"]):not([class*=":flow-root"])) { display: none; }
+        }
+        @layer utilities {
+        /* 🎨 30/10/2026: calendário nas cores GEX (navy da logo + azul/ciano) */
+        .flatpickr-calendar { background: #07142f !important; border: 1px solid rgba(148, 178, 230, 0.16) !important; border-radius: 14px !important; box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.65) !important; font-family: 'Inter', sans-serif !important; }
+        .flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange { background: #1b52af !important; border-color: #22a7f0 !important; color: #ffffff !important; font-weight: bold; }
+        .flatpickr-day.inRange { background: rgba(34, 167, 240, 0.12) !important; border-color: transparent !important; box-shadow: -5px 0 0 rgba(34, 167, 240, 0.12), 5px 0 0 rgba(34, 167, 240, 0.12) !important; }
+        .flatpickr-day.today { border-color: rgba(34, 167, 240, 0.6) !important; }
+        .flatpickr-months .flatpickr-month { background: #020c26 !important; color: white !important; border-radius: 14px 14px 0 0; }
+        .flatpickr-weekdays { background: #020c26 !important; }
 
         /* 🔥 CORREÇÃO CIRÚRGICA: Impede o Tailwind de destruir a grade do Flatpickr */
         .flatpickr-calendar .flatpickr-day.hidden,
@@ -31,19 +42,20 @@
         .row-silver { background: linear-gradient(90deg, #1a202c 0%, #334155 50%, #1a202c 100%); box-shadow: inset 0 0 0 1px #94a3b8, 0 4px 15px rgba(148, 163, 184, 0.15); }
         .row-bronze { background: linear-gradient(90deg, #2d1606 0%, #522709 50%, #2d1606 100%); box-shadow: inset 0 0 0 1px #b45309, 0 4px 15px rgba(180, 83, 9, 0.15); }
         
-        .row-normal { background: rgba(15, 23, 42, 0.4); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-        html:not(.dark) .row-normal { background: #ffffff; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0,0,0,0.03); }
+        .row-normal { background: #0a1938; box-shadow: inset 0 0 0 1px rgba(148, 178, 230, 0.10); }
+        html:not(.dark) .row-normal { background: #ffffff; box-shadow: inset 0 0 0 1px #e1e7f0, 0 1px 2px rgba(10, 17, 38, 0.04); }
 
-        .linha-animada { transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.25s ease, box-shadow 0.25s ease; position: relative; }
-        .linha-animada:hover { transform: scale(1.012); filter: brightness(1.15); z-index: 10; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); cursor: pointer; }
+        .linha-animada { transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.2s ease, box-shadow 0.2s ease; position: relative; }
+        .linha-animada:hover { transform: translateY(-1px); filter: brightness(1.08); z-index: 10; box-shadow: inset 0 0 0 1px rgba(34, 167, 240, 0.55), 0 14px 30px -14px rgba(34, 167, 240, 0.45); cursor: pointer; }
 
         .badge-setor { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 4px 14px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; transition: all 0.3s ease; }
         html.dark .badge-setor { background: rgba(255, 255, 255, 0.85); color: #000000; box-shadow: 0 0 12px rgba(255, 255, 255, 0.15); }
         html:not(.dark) .badge-setor { background: rgba(15, 23, 42, 0.85); color: #ffffff; box-shadow: 0 0 12px rgba(0, 0, 0, 0.15); }
 
-        .cabecalho-fixo { position: sticky; top: 0; z-index: 20; background-color: #ffffff; box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05); }
-        html.dark .cabecalho-fixo { background-color: #0a0f1c; box-shadow: 0 4px 6px -2px rgba(0,0,0,0.3); }
+        .cabecalho-fixo { position: sticky; top: 0; z-index: 20; background-color: #ffffff !important; box-shadow: 0 1px 0 #e1e7f0; }
+        html.dark .cabecalho-fixo { background-color: #07142f !important; box-shadow: 0 1px 0 rgba(148, 178, 230, 0.12); }
         .cabecalho-fixo::before { content: ''; position: absolute; top: -10px; left: 0; right: 0; height: 10px; background-color: inherit; z-index: -1; }
+        }
     </style>
     
     <meta charset="UTF-8" />
@@ -51,26 +63,11 @@
     <title>Dash GEX</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 🎨 30/10/2026 VISUAL GEX × ALURA: Inter (texto), Chakra Petch (títulos e números de destaque), JetBrains Mono (tabelas) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script>window.regeneratorRuntime = window.regeneratorRuntime || undefined;   // 🛡️ 16/10/2026: o ExcelJS preenche este nome; existindo antes, ele não precisa de eval (bloqueado pela política de conteúdo do servidor)</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
-
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Lexend', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
-                    colors: {
-                        lightBg: '#f8fafc', lightCard: '#ffffff', lightBorder: '#e2e8f0',
-                        darkBg: '#020617', darkCard: '#0f172a', darkBorder: '#1e293b',
-                        gexBlue: '#1b52af', gexCyan: '#22a7f0',
-                    }
-                }
-            }
-        }
-    </script>
 
     <script>
         if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -81,80 +78,212 @@
     </script>
 
     <style type="text/tailwindcss">
-        :root { --bg-page: #f8fafc; --grid-color: rgba(0,0,0,0.03); --shape-opacity: 0.15; }
-        html.dark { --bg-page: #020617; --grid-color: rgba(255,255,255,0.02); --shape-opacity: 1; }
+        /* =====================================================================================
+           🎨 VISUAL GEX × ALURA (30/10/2026) — Tailwind v4 + design tokens em 2 camadas
+           1ª camada (primitivas): a paleta crua — navy da logo GEX (#020C26), azul e ciano GEX, neutros com tom navy.
+           2ª camada (semânticas): o PAPEL de cada cor (fundo, superfície, linha, texto, destaque), com versão clara e escura.
+           Só aparência: nenhum id, nome de classe usado pelo JS ou lógica mudou.
+           ===================================================================================== */
+        @custom-variant dark (&:is(.dark *));   /* mesmo peso do modo escuro do v3 */
 
-        body { background-color: var(--bg-page); transition: background-color 0.4s ease, padding-left 0.4s cubic-bezier(0.4, 0, 0.2, 1); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-        .bg-grid { position: fixed; inset: 0; z-index: -2; background-image: linear-gradient(45deg, var(--grid-color) 1px, transparent 1px), linear-gradient(-45deg, var(--grid-color) 1px, transparent 1px); background-size: 24px 24px; }
-        
-        /* Glassmorphism Premium */
-        html.dark .glass-panel { background: linear-gradient(145deg, rgba(15, 23, 42, 0.7) 0%, rgba(2, 6, 23, 0.9) 100%) !important; border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
-        html:not(.dark) .glass-panel { background-color: #ffffff !important; border: 1px solid #e2e8f0; box-shadow: 0 8px 25px rgba(0,0,0,0.04); }
+        @theme {
+            --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+            --font-display: 'Chakra Petch', 'Inter', ui-sans-serif, sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-        .tab-btn { @apply flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 cursor-pointer border border-transparent; }
-        .tab-btn-inactive { @apply text-gray-500 dark:text-gray-400 bg-transparent hover:text-gray-800 dark:hover:text-white hover:bg-gexBlue/20 dark:hover:bg-gexBlue/80 hover:scale-105; }
-        .tab-btn-active { @apply bg-gradient-to-r from-gexBlue to-gexCyan text-white shadow-[0_4px_15px_rgba(34,167,240,0.4)] scale-105 border-transparent; }
-        
-        .btn-setor { @apply px-4 py-1.5 text-xs font-bold transition-all duration-300 cursor-pointer rounded-xl shadow-sm border border-transparent; }
+            /* ---- 1ª camada: primitivas GEX ---- */
+            --color-gexBlue: #1b52af;            /* azul GEX (marca) */
+            --color-gexCyan: #22a7f0;            /* ciano GEX (destaque) */
+            --color-gex-50: #ecf6fe;  --color-gex-100: #d3ebfd; --color-gex-200: #a7d6fa; --color-gex-300: #6fbcf6;
+            --color-gex-400: #22a7f0; --color-gex-500: #1a86d6; --color-gex-600: #1b6ac0; --color-gex-700: #1b52af;
+            --color-gex-800: #163f86; --color-gex-900: #0f2a5c; --color-gex-950: #020c26;
+            --color-navy-600: #233462; --color-navy-700: #1a2a52; --color-navy-800: #0f1d40;
+            --color-navy-850: #0b1834; --color-navy-900: #07122b; --color-navy-950: #020c26;   /* 950 = fundo da logo */
 
-        html.dark .btn-setor-inativo { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: #94a3b8; border: 1px solid rgba(255,255,255,0.05); }
-        html.dark .btn-setor-ativo { background: linear-gradient(135deg, #1b52af 0%, #22a7f0 100%); color: #ffffff; opacity: 1; box-shadow: 0 0 15px rgba(34, 167, 240, 0.3); transform: scale(1.05); border: 1px solid rgba(34, 167, 240, 0.4); }
+            /* neutros: gray e slate com o mesmo tom navy (todo o Dash usa as escalas gray e slate: muda tudo de uma vez, sem mexer no HTML) */
+            --color-gray-50: #f5f7fb;  --color-gray-100: #edf1f7; --color-gray-200: #dfe5ef; --color-gray-300: #c6cfdd;
+            --color-gray-400: #97a3b8; --color-gray-500: #6a7790; --color-gray-600: #4b5770; --color-gray-700: #343f57;
+            --color-gray-800: #1f2a42; --color-gray-900: #121b31; --color-gray-950: #0a1126;
+            --color-slate-50: #f5f7fb;  --color-slate-100: #edf1f7; --color-slate-200: #dfe5ef; --color-slate-300: #c6cfdd;
+            --color-slate-400: #97a3b8; --color-slate-500: #6a7790; --color-slate-600: #4b5770; --color-slate-700: #343f57;
+            --color-slate-800: #1f2a42; --color-slate-900: #121b31; --color-slate-950: #0a1126;
 
-        html:not(.dark) .btn-setor-inativo { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color: #475569; }
-        html:not(.dark) .btn-setor-ativo { background: linear-gradient(135deg, #1b52af 0%, #22a7f0 100%); color: #ffffff; opacity: 1; box-shadow: 0 4px 15px rgba(27, 82, 175, 0.25); transform: scale(1.05); }
+            /* nomes do tailwind.config antigo (continuam valendo nas classes já existentes) */
+            --color-lightBg: #f4f7fc; --color-lightCard: #ffffff; --color-lightBorder: #dfe5ef;
+            --color-darkBg: #020c26;  --color-darkCard: #07142f;  --color-darkBorder: #15254a;
 
-        .select-moderno { @apply bg-white/50 dark:bg-black/30 border border-gray-200 dark:border-gray-700/50 text-gray-800 dark:text-white text-sm rounded-lg px-3 py-1 outline-none focus:border-gexCyan cursor-pointer transition-colors shadow-inner; }
+            --radius-card: 1rem;
 
-        .custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--gex-cyan) #e2e8f0; }
-        html.dark .custom-scrollbar { scrollbar-color: var(--gex-cyan) #0f172a; }
+            /* 🛠️ revisão: valores do v3 (no v4 estas 3 escalas ficaram maiores; shadow-sm aparece 144x, backdrop-blur-sm 14x nas janelas) */
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --radius-sm: 0.125rem;
+            --blur-sm: 4px;
+        }
+
+        /* ---- 2ª camada: semânticas (viram classes bg-page, bg-surface, border-line, text-ink...) ---- */
+        @theme inline {
+            --color-page: var(--gx-page);
+            --color-surface: var(--gx-surface);
+            --color-surface-2: var(--gx-surface-2);
+            --color-line: var(--gx-line);
+            --color-ink: var(--gx-ink);
+            --color-ink-muted: var(--gx-ink-muted);
+            --color-accent: var(--gx-accent);
+            --color-accent-soft: var(--gx-accent-soft);
+        }
+
+        :root {
+            --gx-page: #f4f7fc; --gx-surface: #ffffff; --gx-surface-2: #f5f7fb;
+            --gx-line: #e1e7f0; --gx-line-strong: #c6cfdd;
+            --gx-ink: #0a1126; --gx-ink-muted: #5b6782;
+            --gx-accent: #1b52af; --gx-accent-2: #22a7f0; --gx-accent-soft: rgba(27, 82, 175, 0.08);
+            --gx-focus: #22a7f0;
+            --gx-shadow: 0 1px 2px rgba(10, 17, 38, 0.04), 0 10px 28px -14px rgba(10, 17, 38, 0.16);
+            --gx-shadow-lg: 0 2px 4px rgba(10, 17, 38, 0.04), 0 24px 48px -20px rgba(10, 17, 38, 0.22);
+            /* variáveis antigas (mantidas) */
+            --bg-page: var(--gx-page); --grid-color: rgba(27, 82, 175, 0.06); --shape-opacity: 0.55; --gex-cyan: #22a7f0;
+            color-scheme: light;   /* 🛠️ revisão: controles nativos (lista do select, calendário do input date, barra de rolagem) no tema certo */
+        }
+        html.dark {
+            --gx-page: #020c26; --gx-surface: #07142f; --gx-surface-2: #0a1938;
+            --gx-line: rgba(148, 178, 230, 0.12); --gx-line-strong: rgba(148, 178, 230, 0.22);
+            --gx-ink: #f1f5fd; --gx-ink-muted: #94a3bf;
+            --gx-accent: #22a7f0; --gx-accent-2: #22a7f0; --gx-accent-soft: rgba(34, 167, 240, 0.12);
+            --gx-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 14px 34px -18px rgba(0, 0, 0, 0.7);
+            --gx-shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 30px 60px -24px rgba(0, 0, 0, 0.8);
+            --bg-page: var(--gx-page); --grid-color: rgba(148, 178, 230, 0.05); --shape-opacity: 1;
+            color-scheme: dark;
+        }
+
+        /* compatibilidade v3 → v4: borda padrão e cursor de botão como antes */
+        @layer base {
+            *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--gx-line); }
+            button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+            h1, h2 { font-family: var(--font-display); letter-spacing: -0.01em; }
+            input::placeholder, textarea::placeholder { opacity: 1; color: var(--color-gray-400); }   /* 🛠️ revisão: cor do placeholder igual ao v3 */
+        }
+
+        /* 🎨 componentes do Dash — camada utilities, igual ao v3 (mesma camada: vale especificidade e ordem; este bloco vem depois das classes geradas) */
+        @layer utilities {
+        body { background-color: var(--bg-page); font-family: var(--font-sans); transition: background-color 0.4s ease, padding-left 0.4s cubic-bezier(0.4, 0, 0.2, 1); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+        ::selection { background: rgba(34, 167, 240, 0.28); }
+
+        /* foco visível (teclado) em tudo que é clicável — padrão de acessibilidade dos componentes Radix */
+        :where(a, button, select, input, textarea, [role="tab"], [tabindex]):focus-visible { outline: 2px solid var(--gx-focus); outline-offset: 2px; }
+
+        /* fundo: grade de pontos + brilho azul GEX (no lugar das faixas diagonais) */
+        .bg-grid { position: fixed; inset: 0; z-index: -2; background-image: radial-gradient(var(--grid-color) 1px, transparent 1px); background-size: 22px 22px; -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 85%); mask-image: linear-gradient(to bottom, #000 0%, transparent 85%); }
+        .gx-glow { position: fixed; inset: 0; z-index: -1; background: radial-gradient(1100px 520px at 88% -12%, rgba(27, 82, 175, 0.38), transparent 62%), radial-gradient(800px 460px at -8% 108%, rgba(34, 167, 240, 0.12), transparent 60%); }
+        html:not(.dark) .gx-glow { background: radial-gradient(1100px 520px at 88% -12%, rgba(34, 167, 240, 0.14), transparent 62%), radial-gradient(800px 460px at -8% 108%, rgba(27, 82, 175, 0.08), transparent 60%); }
+
+        /* painéis: superfície sólida, linha fina e sombra curta (sem vidro/gradiente) */
+        .glass-panel { background: var(--gx-surface) !important; border: 1px solid var(--gx-line) !important; box-shadow: var(--gx-shadow) !important; }
+        .glass-panel.shadow-2xl, .glass-panel.shadow-lg { box-shadow: var(--gx-shadow-lg) !important; }
+
+        /* abas principais (visão do agente): controle segmentado */
+        .tab-btn { @apply flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer border border-transparent; }
+        .tab-btn-inactive { @apply text-ink-muted bg-transparent hover:text-ink hover:bg-accent-soft; }
+        .tab-btn-active { @apply bg-gexBlue text-white border-gexCyan/40 shadow-[0_8px_20px_-8px_rgba(34,167,240,0.65)]; }
+
+        /* chips de sub-aba / setor */
+        .btn-setor { @apply px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer rounded-full border; }   /* sem display (como no original): o hidden do JS continua escondendo o chip */
+        .btn-setor-inativo { background: var(--gx-surface); color: var(--gx-ink-muted); border-color: var(--gx-line-strong) !important; }
+        .btn-setor-inativo:hover { color: var(--gx-ink); border-color: rgba(34, 167, 240, 0.55) !important; background: var(--gx-accent-soft); }
+        html.dark .btn-setor-inativo { background: rgba(148, 178, 230, 0.05); }
+        .btn-setor-ativo { background: #1b52af; color: #ffffff; opacity: 1; border-color: rgba(34, 167, 240, 0.55) !important; box-shadow: 0 8px 18px -10px rgba(34, 167, 240, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+
+        .select-moderno { @apply bg-surface border border-line text-ink text-sm rounded-lg px-3 py-1 outline-none focus:border-gexCyan focus:ring-2 focus:ring-gexCyan/25 cursor-pointer transition-colors; }
+
+        .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(34, 167, 240, 0.55) transparent; }
         .custom-scrollbar::-webkit-scrollbar { width: 8px !important; height: 8px !important; display: block !important; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--gex-cyan); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
-        
-        .texto-contraste { @apply text-black dark:text-white font-bold text-[14px]; }
-        .texto-contraste-sm { @apply text-black dark:text-white font-medium text-[13px]; }
-        .texto-contraste-xs { @apply text-black dark:text-white font-bold text-xs; }
-        
-        .texto-top3 { @apply text-white font-bold text-[14px] !important; }
-        .texto-top3-sm { @apply text-white font-medium text-[13px] !important; }
-        .texto-top3-xs { @apply text-white font-bold text-xs !important; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(34, 167, 240, 0.55); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #22a7f0; }
 
-        .pos-badge { @apply inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-900 dark:bg-white text-white dark:text-black font-black text-[11px] shadow-sm; }
+        .texto-contraste { @apply text-ink font-bold text-[14px]; }
+        .texto-contraste-sm { @apply text-ink font-medium text-[13px]; }
+        .texto-contraste-xs { @apply text-ink font-bold text-xs; }
+
+        .texto-top3 { color: #ffffff !important; font-weight: 700 !important; font-size: 14px !important; }
+        .texto-top3-sm { color: #ffffff !important; font-weight: 500 !important; font-size: 13px !important; }
+        .texto-top3-xs { color: #ffffff !important; font-weight: 700 !important; font-size: 0.75rem !important; line-height: 1rem !important; }
+
+        .pos-badge { @apply inline-flex items-center justify-center w-7 h-7 rounded-lg bg-navy-950 dark:bg-white text-white dark:text-navy-950 font-black text-[11px] shadow-sm; font-family: var(--font-display); }
 
         /* 🔥 ESTRUTURA ADMIN x AGENTE */
         .admin-hidden { transition: all 0.3s ease; }
         body.is-admin .admin-hidden { display: none !important; }
-        
+
         #admin-sidebar { display: none; }
         body.is-admin #admin-sidebar { display: flex; }
-        
+
         body.is-admin .admin-hamburger { display: block; }
-        
+
         /* Regras do Desktop e botão Toggle */
-        @media (min-width: 768px) { 
-            body.is-admin .admin-hamburger { display: none; } 
+        @media (min-width: 768px) {
+            body.is-admin .admin-hamburger { display: none; }
             body.is-admin { padding-left: 260px; }
-            
+
             /* Quando a sidebar estiver fechada no desktop */
             body.is-admin.sidebar-closed { padding-left: 0; }
             body.is-admin.sidebar-closed #admin-sidebar { transform: translateX(-100%); }
             body.is-admin.sidebar-closed .admin-hamburger { display: block; }
         }
 
+        /* topo e menu lateral: barra navy da marca nos dois temas */
+        .gx-topo { background: rgba(2, 12, 38, 0.86); border-bottom: 1px solid rgba(148, 178, 230, 0.12); -webkit-backdrop-filter: saturate(140%) blur(14px); backdrop-filter: saturate(140%) blur(14px); }
+        #admin-sidebar { background: #020c26 !important; border-right: 1px solid rgba(148, 178, 230, 0.10) !important; box-shadow: 12px 0 40px -20px rgba(0, 0, 0, 0.6) !important; }
+
         .sidebar-link {
-            @apply flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-medium text-gray-400 transition-all duration-300 cursor-pointer border border-transparent;
+            @apply relative flex items-center gap-3 px-4 py-2.5 rounded-xl text-[13px] font-medium text-gray-400 transition-all duration-200 cursor-pointer border border-transparent;
         }
         .sidebar-link:hover {
-            @apply text-white bg-white/5 border-white/10 shadow-sm translate-x-1;
+            @apply text-white bg-white/5;
         }
         .sidebar-link.active-link {
-            @apply text-white bg-gradient-to-r from-gexBlue/20 to-gexCyan/20 border border-gexCyan/30 shadow-[0_0_20px_rgba(34,167,240,0.15)] font-bold translate-x-1;
+            @apply text-white bg-gexCyan/10 border-gexCyan/20 font-semibold;
         }
+        .sidebar-link.active-link::before { content: ""; position: absolute; left: -0.5rem; top: 22%; bottom: 22%; width: 3px; border-radius: 9999px; background: #22a7f0; box-shadow: 0 0 12px rgba(34, 167, 240, 0.8); }
         .sidebar-link.active-link svg {
             @apply text-gexCyan opacity-100;
         }
+
+        /* janelas (modais): véu navy e painel com a sombra grande */
+        [id^="modal-"].fixed.inset-0 { background-color: rgba(2, 12, 38, 0.72) !important; }
+        [id^="modal-"].fixed.inset-0 > div { box-shadow: var(--gx-shadow-lg); }
+
+        /* números de destaque (cards de resumo) na fonte de títulos */
+        section > .glass-panel .text-2xl, section > .glass-panel .text-3xl { font-family: var(--font-display) !important; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+
+        /* topo: linha da marca (azul → ciano) e botão Sincronizar sólido (a classe bg-gradient-to-r fica no HTML: o JS acha o botão por ela) */
+        .gx-topo::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, #1b52af 20%, #22a7f0 50%, #1b52af 80%, transparent); opacity: 0.7; pointer-events: none; }
+        .gx-topo button.btn-refresh.bg-gradient-to-r { background: #1b52af !important; border-color: rgba(34, 167, 240, 0.5) !important; box-shadow: 0 8px 20px -10px rgba(34, 167, 240, 0.9); }
+        .gx-topo button.btn-refresh.bg-gradient-to-r:hover { background: #2160c8 !important; opacity: 1; }
+
+        /* menu lateral: pastas como títulos de grupo (mais leve, sem caixa) */
+        #menu-base-itens > div > button { background: transparent !important; border-color: transparent !important; box-shadow: none !important; border-radius: 0.75rem; padding-top: 0.6rem; padding-bottom: 0.6rem; }
+        #menu-base-itens > div > button:hover { background: rgba(148, 178, 230, 0.06) !important; }
+        #menu-base-itens > div > button span.uppercase { font-size: 11px !important; font-weight: 700 !important; letter-spacing: 0.14em !important; color: #94a3bf !important; text-align: left; }
+        #menu-base-itens > div > button:hover span.uppercase { color: #ffffff !important; }
+        #menu-base-itens > div > div[id^="pasta-"] { margin-left: 0.85rem; padding-left: 0.5rem; border-left: 1px solid rgba(148, 178, 230, 0.12); }
+
+        /* cards de resumo: superfície limpa, brilho discreto (html na frente = vence o bloco gx-visual-2026, que vem depois) */
+        html .gx-card::after { opacity: 0.45; }
+        html .gx-card::before { left: 0; right: 0; height: 2px; border-radius: 0; opacity: 0.85; }
+
+        /* pódio do ranking: ouro/prata/bronze que se fundem no navy (texto branco continua legível nos dois temas) */
+        .row-gold { background: linear-gradient(90deg, rgba(212, 175, 55, 0.42) 0%, rgba(212, 175, 55, 0.14) 38%, #0a1938 78%) !important; box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.6), 0 10px 26px -14px rgba(212, 175, 55, 0.55) !important; }
+        .row-silver { background: linear-gradient(90deg, rgba(203, 213, 225, 0.34) 0%, rgba(203, 213, 225, 0.10) 38%, #0a1938 78%) !important; box-shadow: inset 0 0 0 1px rgba(203, 213, 225, 0.45), 0 10px 26px -14px rgba(203, 213, 225, 0.35) !important; }
+        .row-bronze { background: linear-gradient(90deg, rgba(217, 119, 6, 0.40) 0%, rgba(217, 119, 6, 0.12) 38%, #0a1938 78%) !important; box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.55), 0 10px 26px -14px rgba(217, 119, 6, 0.5) !important; }
+        .row-gold, .row-silver, .row-bronze { background-color: #0a1938 !important; }
+
+        /* tabelas: cabeçalho em versalete discreto */
+        thead th { letter-spacing: 0.12em; }
+        }
     </style>
     <style id="gx-visual-2026">
+        /* camada utilities (Tailwind v4): mesma prioridade do v3 */
+        @layer utilities {
         /* ✨ GEX VISUAL 2026: ícones de linha (SVG), selos, avatares e acabamento dos cards */
         .gx-ic { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -0.2em; flex-shrink: 0; background-color: currentColor; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
         .gx-i-ampulheta { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3h12M6 21h12M7 3v3a5 5 0 002.5 4.33L12 12l2.5-1.67A5 5 0 0017 6V3M7 21v-3a5 5 0 012.5-4.33L12 12l2.5 1.67A5 5 0 0117 18v3'/%3E%3C/svg%3E"); }
@@ -248,7 +377,11 @@
         .gx-medalha { --gx: 234,179,8; display: inline-flex; align-items: center; justify-content: center; width: 1.45em; height: 1.45em; border-radius: 9999px; font-size: .8em; font-weight: 900; color: #0f172a; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.85), rgba(var(--gx),1) 58%); box-shadow: 0 0 0 2px rgba(var(--gx),.35), 0 0 12px rgba(var(--gx),.45); vertical-align: middle; }
         .gx-medalha-tit { width: 1.55rem; height: 1.55rem; font-size: .75rem; margin-right: .55rem; }
         .gx-av .gx-ic { width: 1rem; height: 1rem; }
+        }
     </style>
+    <!-- 🎨 30/10/2026: Tailwind v4 (mesma geração usada pela Alura). A configuração saiu do tailwind.config e virou @theme no bloco text/tailwindcss acima.
+         🛠️ revisão: fica no FIM do head de propósito — o v4 grava o CSS dele logo depois desta tag; assim os estilos do head vêm antes, como no v3 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
 </head>
 
 <body class="text-gray-800 dark:text-white min-h-screen flex flex-col relative">
@@ -526,17 +659,12 @@
     <!-- EFEITOS DE FUNDO PREMIUM -->
     <div class="fixed inset-0 z-[-1] overflow-hidden pointer-events-none" style="opacity: var(--shape-opacity); transition: opacity 0.4s ease;">
         <div class="bg-grid"></div>
-        <div class="absolute -top-[120px] -right-[150px] rotate-[40deg] flex flex-col gap-3 opacity-60 blur-[2px]">
-            <div class="w-[800px] h-[85px] bg-[#1b52af] rounded-full mb-2"></div>
-            <div class="w-[800px] h-[15px] bg-[#1b52af] rounded-full"></div>
-            <div class="w-[800px] h-[15px] bg-[#1b52af] rounded-full"></div>
-        </div>
-        <div class="absolute -bottom-[200px] -left-[120px] w-[450px] h-[650px] border-[22px] border-[#1b52af] rounded-full rotate-[35deg] opacity-30 blur-3xl"></div>
+        <div class="gx-glow"></div>   <!-- 🎨 30/10/2026: brilho azul GEX no lugar das faixas diagonais -->
     </div>
 
     <!-- ADMIN-HTML-INI: menu lateral -->
     <!-- 🔥 MENU LATERAL (APENAS ADMINISTRADORES) -->
-    <aside id="admin-sidebar" class="fixed inset-y-0 left-0 z-[100] w-[260px] bg-[#0a0f1c]/95 backdrop-blur-2xl border-r border-white/5 flex-col shadow-[15px_0_40px_rgba(0,0,0,0.4)] transform -translate-x-full transition-transform duration-300 md:translate-x-0">
+    <aside id="admin-sidebar" class="fixed inset-y-0 left-0 z-[100] w-[260px] bg-navy-900/95 backdrop-blur-2xl border-r border-white/5 flex-col shadow-[15px_0_40px_rgba(0,0,0,0.4)] transform -translate-x-full transition-transform duration-300 md:translate-x-0">
         
         <!-- Sidebar Header / Logo -->
         <div class="p-6 flex items-center justify-between border-b border-white/5 shrink-0">
@@ -706,7 +834,7 @@
     <!-- ADMIN-HTML-FIM: menu lateral -->
 
     <!-- HEADER COM INFORMAÇÕES DE LOGIN -->
-    <header class="bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50 transition-colors shadow-sm">
+    <header class="gx-topo sticky top-0 z-50 transition-colors">
         <div class="max-w-[1700px] mx-auto px-6 py-3 flex justify-between items-center">
             
             <div class="flex items-center gap-4">
@@ -1019,7 +1147,7 @@
                             </div>
                             <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                                 <table class="w-full text-left border-separate min-w-[800px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                                    <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                                    <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                         <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                             <th class="py-3 px-3 pl-4">Agente</th>
                                             <th class="py-3 px-3 text-center" title="Em aberto com a última mensagem do agente (não conta no SLA)">🔵 Em aberto</th>
@@ -1062,7 +1190,7 @@
                             </div>
                             <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                                 <table class="w-full text-left border-separate min-w-[800px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                                    <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                                    <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                         <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent" id="thead-dist-dinamico"></tr>
                                     </thead>
                                     <tbody id="tabela-dist-body" class="text-sm"></tbody>
@@ -1128,7 +1256,7 @@
                             </div>
                             <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                                 <table class="w-full text-left border-separate min-w-[1100px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                                    <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                                    <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                         <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                             <th class="py-3 px-3 pl-4">Agente</th>
                                             <th class="py-3 px-3 text-center" title="Turno da liderança e pausa do agente">Jornada</th>
@@ -1205,7 +1333,7 @@
                             </div>
                             <div class="overflow-x-auto custom-scrollbar">
                                 <table class="w-full text-left border-separate min-w-[1000px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                                    <thead class="bg-white/95 dark:bg-[#0a0f1c]/95">
+                                    <thead class="bg-white/95 dark:bg-navy-900/95">
                                         <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                             <th class="py-3 px-3 pl-4">Agente</th>
                                             <th class="py-3 px-3 text-center" title="Tickets em que o agente enviou pelo menos 1 mensagem no período (o ticket pode ter chegado antes)">Tickets Atendidos</th>
@@ -1583,7 +1711,7 @@
                         </div>
                         <!-- modal do agente -->
                         <div id="ag-modal" class="hidden fixed inset-0 z-[120] flex items-center justify-center p-4" style="background:rgba(0,0,0,.55)" onclick="if(event.target===this)this.classList.add('hidden')">
-                            <div class="glass-panel border border-lightBorder dark:border-white/10 rounded-2xl shadow-2xl bg-white dark:bg-[#0a0f1c] w-full max-w-2xl max-h-[88vh] overflow-y-auto custom-scrollbar p-6" id="ag-modal-conteudo"></div>
+                            <div class="glass-panel border border-lightBorder dark:border-white/10 rounded-2xl shadow-2xl bg-white dark:bg-navy-900 w-full max-w-2xl max-h-[88vh] overflow-y-auto custom-scrollbar p-6" id="ag-modal-conteudo"></div>
                         </div>
                     </div>
                 </div>
@@ -1802,6 +1930,8 @@
         <!-- ABA: BOT TELEGRAM (ADMIN ONLY) — vínculos, comandos, disparos por turno, entregas e leitura (✅ Ciente) -->
         <div id="aba-telegram" class="hidden space-y-6">
             <style>
+                /* camada utilities (Tailwind v4): mesma prioridade do v3 */
+                @layer utilities {
                 .tg-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .18rem .62rem; border-radius: 9999px; font-size: 11px; font-weight: 700; white-space: nowrap; line-height: 1.3; }
                 .tg-dot { width: .5rem; height: .5rem; border-radius: 9999px; display: inline-block; flex-shrink: 0; }
                 .tg-ctl { background: rgba(255,255,255,.04); border: 1px solid rgba(148,163,184,.22); border-radius: .7rem; padding: .45rem .7rem; font-size: 12px; font-weight: 600; color: inherit; outline: none; width: 100%; }
@@ -1827,6 +1957,7 @@
                 .tg-pulso { animation: tgPulso 2.2s ease-in-out infinite; }
                 @keyframes tgPulso { 0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,.55); } 50% { box-shadow: 0 0 0 7px rgba(52,211,153,0); } }
                 @media (prefers-reduced-motion: reduce) { .tg-pulso { animation: none; } .tg-btn, .tg-switch span, .tg-switch span::after { transition: none; } }
+                }
             </style>
 
             <!-- Identidade do bot + régua do dia (os 3 turnos e os horários de cada disparo) -->
@@ -1876,7 +2007,7 @@
                     </div>
                     <div class="p-0 overflow-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[1000px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Produto Tabulado</th>
                                     <th class="py-3 px-3 text-center" title="Volume total de conversas/tickets deste produto">🎫 Total de Tickets</th>
@@ -1937,7 +2068,7 @@
                     </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[1000px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Produto Citado no Texto</th>
                                     <th class="py-3 px-3 text-center">Fila / Equipe</th>
@@ -1959,7 +2090,7 @@
                     <!-- 🔎 Tabela da aba Todos (07/10/2026): tickets que começaram no período; retornos pela regra do Time 48H -->
                     <div id="mencoes-todos-tabela-wrap" class="hidden p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Produto Citado no Texto</th>
                                     <th class="py-3 px-3 text-center">Fila / Equipe</th>
@@ -2020,7 +2151,7 @@
                         </div>
                     <div class="p-0 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Analista (Ticket)</th>
                                     <th class="py-3 px-2 text-center text-emerald-500" title="Retidos em 10 a 30%">10 a 30%</th>
@@ -2107,7 +2238,7 @@
                     </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Agente</th>
                                     <th class="py-3 px-3 text-center" title="Tickets em que o agente enviou pelo menos 1 mensagem no período (o ticket pode ter chegado antes)">Tickets Atendidos</th>
@@ -2174,7 +2305,7 @@
                     </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[820px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4 text-center" title="Selecionar todos"><input type="checkbox" id="chk-adiar-todos" class="w-4 h-4 accent-gexBlue cursor-pointer align-middle" onclick="toggleTodosAdiar(this)"></th>
                                     <th class="py-3 px-3">Agente</th>
@@ -2258,7 +2389,7 @@
                     </div>
                     <div class="overflow-x-auto overflow-y-auto max-h-[max(460px,calc(100vh_-_174px))] custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[980px]" style="border-spacing: 0 0.4rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4 text-center" title="Marcar todos"><input type="checkbox" id="chk-tr-todos" class="w-4 h-4 accent-gexBlue cursor-pointer align-middle" onclick="trMarcarTodos(this.checked)"></th>
                                     <th class="py-3 px-3">Ticket</th>
@@ -2297,7 +2428,7 @@
                     </div>
                     <div class="relative max-w-[560px]">
                         <input type="text" id="tr-etq-busca" autocomplete="off" oninput="trEtqBuscar(this.value)" onfocus="trEtqBuscar(this.value)" onblur="setTimeout(trEtqFecharSugestoes, 150)" onkeydown="trEtqTecla(event)" placeholder="Buscar etiqueta pelo nome..." class="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-white/10 rounded-xl px-4 py-2.5 text-[13px] font-bold text-gray-800 dark:text-gray-100 outline-none focus:border-gexCyan">
-                        <div id="tr-etq-sugestoes" class="hidden absolute left-0 right-0 mt-1 z-20 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0a0f1c] shadow-xl max-h-[280px] overflow-y-auto custom-scrollbar"></div>
+                        <div id="tr-etq-sugestoes" class="hidden absolute left-0 right-0 mt-1 z-20 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-navy-900 shadow-xl max-h-[280px] overflow-y-auto custom-scrollbar"></div>
                     </div>
                     <div id="tr-etq-escolhidas" class="flex flex-wrap gap-2"></div>
                     <p id="tr-etq-resumo" class="text-[11px] font-bold text-gray-500"></p>
@@ -2336,7 +2467,7 @@
     <!-- ADMIN-HTML-INI: modais das telas de admin -->
     <!-- MODAL SINALIZAÇÕES -->
     <div id="modal-sinalizacoes" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-sin-titulo">Sinalizações</h3>
                 <button onclick="fecharModalSin()" class="text-gray-500 hover:text-red-500 transition-colors">
@@ -2349,7 +2480,7 @@
 
     <!-- 💰 MODAL DO RELATÓRIO DE COMISSÃO (16/10/2026): escolhe o mês e gera o Excel (TRV + Tickets + Qualidade de todos os agentes) -->
     <div id="modal-comissao" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <h3 class="text-lg font-black text-gray-800 dark:text-white">💰 Relatório de Comissão</h3>
                 <button onclick="fecharModalComissao()" class="text-gray-500 hover:text-red-500 transition-colors" title="Fechar">
@@ -2378,7 +2509,7 @@
 
     <!-- MODAL DE PAUSAS DA PRODUTIVIDADE -->
     <div id="modal-pausas" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-pausas-titulo">Log de Produtividade</h3>
                 <button onclick="fecharModalPausas()" class="text-gray-500 hover:text-red-500 transition-colors">
@@ -2391,7 +2522,7 @@
 
     <!-- MODAL DETALHES DE MENÇÕES -->
     <div id="modal-mencoes-detalhes" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-mencoes-titulo">Detalhes da Menção</h3>
                 <button onclick="fecharModalMencoes()" class="text-gray-500 hover:text-red-500 transition-colors">
@@ -2404,7 +2535,7 @@
 
     <!-- MODAL DETALHES MONITORIA DE TICKETS -->
     <div id="modal-monitoriatk" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <div>
                     <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-montk-titulo">Auditoria de Tickets</h3>
@@ -2420,7 +2551,7 @@
 
     <!-- MODAL PAGAMERICAN -->
     <div id="modal-pagamerican" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <div>
                     <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-pagam-titulo">Tickets PagAmerican</h3>
@@ -2435,7 +2566,7 @@
 
     <!-- MODAL STATUS DE CASOS -->
     <div id="modal-casos" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <div>
                     <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-casos-titulo">Auditoria de Casos</h3>
@@ -2451,7 +2582,7 @@
 
     <!-- MODAL OPÇÕES DE ADIAMENTO -->
     <div id="modal-adiar-opcoes" class="hidden fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <h3 class="text-lg font-black text-gray-800 dark:text-white">🌙 Adiar casos</h3>
                 <button onclick="fecharOpcoesAdiar()" class="text-gray-500 hover:text-red-500 transition-colors"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
@@ -2477,7 +2608,7 @@
 
     <!-- MODAL PRODUTOS TABULADOS -->
     <div id="modal-produtos" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <div>
                     <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-prod-titulo">Auditoria do Produto</h3>
@@ -2493,7 +2624,7 @@
 
     <!-- MODAL: TIME 48H (detalhe do agente) -->
     <div id="modal-time48" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <div>
                     <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-t48-titulo">Time 48h</h3>
@@ -2508,7 +2639,7 @@
     </div>
     <!-- MODAL: TIME 48H POR ETIQUETA (Ver Tickets das abas Etiqueta 48H / Etiqueta Painel) -->
     <div id="modal-t48x" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                 <div>
                     <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-t48x-titulo">Time 48h</h3>
@@ -2523,7 +2654,7 @@
     </div>
     <!-- MODAL: RELATÓRIO Q3 (cards clicáveis) -->
     <div id="modal-q3" class="hidden fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-[#0b1220] rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-white/10 flex flex-col max-h-[90vh]">
+        <div class="bg-white dark:bg-navy-900 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-white/10 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-gradient-to-r from-gexBlue/10 to-gexCyan/10">
                 <div class="min-w-0">
                     <h3 class="text-lg font-black text-gray-800 dark:text-white truncate" id="modal-q3-titulo">Detalhe</h3>
@@ -2938,7 +3069,7 @@
                 const r = await fetch('/api/raio-x-perf');
                 const d = await r.json();
                 if (!d.success) { cont.innerHTML = '<p class="text-red-500 font-bold text-sm">' + (d.error || 'Erro') + '</p>'; return; }
-                const card = (t, c) => `<div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm">${t}${c}</div>`;
+                const card = (t, c) => `<div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm">${t}${c}</div>`;
                 const w = d.warmer;
                 const wBadge = w.ativo ? '<span class="text-emerald-500 font-black">🟢 ATIVO</span>' : '<span class="text-gray-400 font-black">⚪ Dormindo (sem acesso recente)</span>';
                 const warmerHtml = card('<div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Aquecedor (Warmer)</div>',
@@ -3206,7 +3337,7 @@
             if (!document.getElementById('modal-agente-ret')) {
                 document.body.insertAdjacentHTML('beforeend', `
                 <div id="modal-agente-ret" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+                    <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
                         <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                             <div><h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-agente-ret-titulo">Agente</h3>
                             <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1" id="modal-agente-ret-sub"></p></div>
@@ -3752,7 +3883,7 @@
             const ag = dadosSinalizacoes.find(x => x.nome === n); if (!ag || !ag.ciclos[c] || !ag.ciclos[c].length) return;
             document.getElementById('modal-sin-titulo').innerText = `Sinalizações - ${n} (Ciclo ${c})`;
             document.getElementById('modal-sin-conteudo').innerHTML = ag.ciclos[c].map(x => `
-                <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col shadow-sm">
+                <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col shadow-sm">
                     <div class="flex flex-wrap gap-2 mb-3">
                         <span class="bg-gexBlue text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">TIPO: ${x.tipo||'-'}</span>
                         <span class="bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">QTD: ${x.qtd}</span>
@@ -3761,7 +3892,7 @@
                             : `<span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">🚨 ${x.item}</span>`}
                     </div>
                     
-                    <div class="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap flex-1 bg-white dark:bg-[#0f172a] p-3 rounded-lg border border-gray-100 dark:border-gray-700 leading-relaxed">
+                    <div class="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap flex-1 bg-white dark:bg-navy-850 p-3 rounded-lg border border-gray-100 dark:border-gray-700 leading-relaxed">
                         ${x.obs||'Nenhuma observação registrada.'}
                     </div>
                     
@@ -4005,7 +4136,7 @@
                     if(tk.status.includes('Em aberto')) corStatus = 'bg-sky-500/10 text-sky-500 border border-sky-500/30';
 
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente) /* 14/10/2026: escapado (nome vem do Chatwoot) */}</p>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
@@ -4165,19 +4296,19 @@
             
             let html = `
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
+                <div class="bg-gray-100 dark:bg-navy-850 border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Média Ociosa / Dia</p>
                     <p class="text-xl font-black text-red-500">${a.detalhes?.media_ocioso || 0} min</p>
                 </div>
-                <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
+                <div class="bg-gray-100 dark:bg-navy-850 border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Hora + Produtiva</p>
                     <p class="text-xl font-black text-emerald-500">${a.detalhes?.hora_mais || '-'}</p>
                 </div>
-                <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
+                <div class="bg-gray-100 dark:bg-navy-850 border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Hora - Produtiva</p>
                     <p class="text-xl font-black text-yellow-500">${a.detalhes?.hora_menos || '-'}</p>
                 </div>
-                <div class="bg-gray-100 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
+                <div class="bg-gray-100 dark:bg-navy-850 border border-gray-200 dark:border-gray-800 p-4 rounded-xl shadow-sm">
                     <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-1">Dia + Ocioso</p>
                     <p class="text-xl font-black text-red-500">${a.detalhes?.dia_ocioso || '-'}</p>
                 </div>
@@ -5650,7 +5781,7 @@
             if (!document.getElementById('modal-produtos')) {
                 const modalHTML = `
                 <div id="modal-produtos" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div class="bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+                    <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
                         <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
                             <div>
                                 <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-prod-titulo">Auditoria do Produto</h3>
@@ -5702,7 +5833,7 @@
                         if(tk.status && tk.status.includes('Sem Retorno')) corStatus = 'bg-gray-500/10 text-gray-500 border border-gray-500/30 font-bold';
 
                         html += `
-                        <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                        <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                             <div>
                                 <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente || 'Sem Nome') /* 14/10/2026: escapado (nome vem do Chatwoot) */}</p>
                                 <p class="text-[10px] font-bold text-gray-500 mt-1">👤 ${tk.agente || 'Sem Agente'}</p>
@@ -5877,7 +6008,7 @@
                     if(tk.status && tk.status.includes('Sem Retorno')) corStatus = 'bg-gray-500/10 text-gray-500 border border-gray-500/30 font-bold';
 
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.nome || tk.cliente || 'Sem Nome') /* 14/10/2026: escapado (nome vem do Chatwoot) */}</p>
                             <p class="text-xs font-bold text-gray-500 mt-1">📧 ${t48xEsc(tk.email || tk.agente || 'Sem Info') /* 14/10/2026: escapado */}</p>
@@ -6118,7 +6249,7 @@
                     ? `<button onclick="mencoesFiltrarModal('dup', 'sim')" class="text-[10px] px-2 py-0.5 rounded font-bold ${corDup}" title="Tem a etiqueta duplicado: o cliente abriu outro ticket e este foi fechado como duplicado">🏷️ Duplicado</button>`
                     : `<button onclick="mencoesFiltrarModal('dup', 'nao')" class="text-[10px] px-2 py-0.5 rounded font-bold ${neutro}" title="Sem a etiqueta duplicado">Não é duplicado</button>`);
                 html += `
-                <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                     <div class="min-w-0">
                         <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.nome || 'Sem Nome')}</p>
                         <p class="text-xs font-bold text-gray-500 mt-1">📧 ${t48xEsc(tk.email || 'Sem Email')}</p>
@@ -6490,7 +6621,7 @@
                         : '';
 
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${tk.nome}</p>
                             <p class="text-xs font-bold text-gray-500 mt-1">📧 ${tk.email}</p>
@@ -6796,7 +6927,7 @@ function abrirModalBuyGoods(index) {
                 : '';
 
             html += `
-            <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+            <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                 <div>
                     <p class="text-sm font-black text-gray-800 dark:text-white">${tk.nome}</p>
                     <p class="text-xs font-bold text-gray-500 mt-1">📧 ${tk.email}</p>
@@ -7019,7 +7150,7 @@ function abrirModalCartPanda(index) {
                 : '';
 
             html += `
-            <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+            <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                 <div>
                     <p class="text-sm font-black text-gray-800 dark:text-white">${tk.nome}</p>
                     <p class="text-xs font-bold text-gray-500 mt-1">📧 ${tk.email}</p>
@@ -7268,7 +7399,7 @@ async function exportarExcelCartPanda() {
                     }
 
                     html += `
-                        <div class="flex items-start gap-3 bg-white dark:bg-[#0f172a] p-2.5 rounded-lg border border-gray-100 dark:border-gray-800">
+                        <div class="flex items-start gap-3 bg-white dark:bg-navy-850 p-2.5 rounded-lg border border-gray-100 dark:border-gray-800">
                             <span class="font-mono text-gray-400 text-xs font-bold pt-0.5 w-12">${dataHora}</span>
                             <div class="flex-1">
                                 <div class="flex items-center flex-wrap gap-1">
@@ -7304,7 +7435,7 @@ async function exportarExcelCartPanda() {
                 d.detalhes.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente) /* 14/10/2026: escapado (nome vem do Chatwoot) */}</p>
                             <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${tk.id}</p>
@@ -7340,7 +7471,7 @@ async function exportarExcelCartPanda() {
                     const tk = x.tk;
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${tk.id}`;
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente)}</p>
                             <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${tk.id}</p>
@@ -7755,7 +7886,7 @@ async function exportarExcelCartPanda() {
                     </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Agente</th>
                                     <th class="py-3 px-3 text-center" title="Tickets em que o agente enviou pelo menos 1 mensagem no período (o ticket pode ter chegado antes)">Tickets Atendidos</th>
@@ -7925,7 +8056,7 @@ async function exportarExcelCartPanda() {
                 d.detalhes.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente)}</p>
                             <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${t48xEsc(tk.id)}</p>
@@ -7972,7 +8103,7 @@ async function exportarExcelCartPanda() {
                     </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Agente</th>
                                     <th class="py-3 px-3 text-center" title="Tickets em que o agente enviou pelo menos 1 mensagem no período (o ticket pode ter chegado antes)">Tickets Atendidos</th>
@@ -8088,7 +8219,7 @@ async function exportarExcelCartPanda() {
                 d.detalhes.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente)}</p>
                             <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${t48xEsc(tk.id)}</p>
@@ -8251,7 +8382,7 @@ async function exportarExcelCartPanda() {
                     </div>
                     <div class="p-0 overflow-y-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[900px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Agente</th>
                                     <th class="py-3 px-3 text-center" title="Atribuições com o cliente esperando resposta e com os 15 min já vencidos">Atribuições</th>
@@ -8277,7 +8408,7 @@ async function exportarExcelCartPanda() {
                     </div>
                     <div class="p-0 overflow-auto flex-1 custom-scrollbar">
                         <table class="w-full text-left border-separate min-w-[1000px]" style="border-spacing: 0 0.4rem; padding: 0 1rem;">
-                            <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
+                            <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md z-10 shadow-sm border-b border-white/5">
                                 <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent">
                                     <th class="py-3 px-3 pl-4">Ticket</th>
                                     <th class="py-3 px-3">Agente</th>
@@ -8478,7 +8609,7 @@ async function exportarExcelCartPanda() {
         function tgToast(msg, tipo) {
             const el = document.getElementById('tg-toast'); if (!el) return;
             const c = tipo === 'erro' ? '#F87171' : (tipo === 'aviso' ? '#FBBF24' : '#34D399');
-            el.innerHTML = `<div class="glass-panel rounded-2xl px-4 py-3 shadow-2xl border text-sm font-bold flex items-center gap-2 bg-white dark:bg-[#0b1324]" style="border-color:${c}66;color:${c}"><span class="tg-dot" style="background:${c}"></span>${tgE(msg)}</div>`;
+            el.innerHTML = `<div class="glass-panel rounded-2xl px-4 py-3 shadow-2xl border text-sm font-bold flex items-center gap-2 bg-white dark:bg-navy-900" style="border-color:${c}66;color:${c}"><span class="tg-dot" style="background:${c}"></span>${tgE(msg)}</div>`;
             el.classList.remove('hidden');
             clearTimeout(tgToast._t); tgToast._t = setTimeout(() => el.classList.add('hidden'), 3500);
         }
@@ -8971,7 +9102,7 @@ async function exportarExcelCartPanda() {
                 <section class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden">
                     <div class="px-5 md:px-6 pt-5 pb-3 flex items-baseline justify-between gap-3"><h3 class="text-sm font-black text-gray-900 dark:text-white">Pedidos</h3><span class="text-xs text-gray-500">${linhas.length > 500 ? 'os 500 mais recentes (o Excel traz todos)' : ''}</span></div>
                     <div class="overflow-x-auto max-h-[max(620px,calc(100vh_-_168px))] overflow-y-auto custom-scrollbar"><table class="w-full text-sm min-w-[720px]">
-                        <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95 backdrop-blur"><tr class="text-[11px] text-gray-500 text-left"><th class="py-2 px-4 font-bold">Quando</th><th class="py-2 px-3 font-bold">Pessoa</th><th class="py-2 px-3 font-bold">Comando</th><th class="py-2 px-3 font-bold">Resultado</th><th class="py-2 px-4 font-bold text-right">Resposta em</th></tr></thead>
+                        <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95 backdrop-blur"><tr class="text-[11px] text-gray-500 text-left"><th class="py-2 px-4 font-bold">Quando</th><th class="py-2 px-3 font-bold">Pessoa</th><th class="py-2 px-3 font-bold">Comando</th><th class="py-2 px-3 font-bold">Resultado</th><th class="py-2 px-4 font-bold text-right">Resposta em</th></tr></thead>
                         <tbody>${tabela || '<tr><td colspan="5" class="py-8 text-center text-gray-500 text-sm">Nenhum pedido no período.</td></tr>'}</tbody>
                     </table></div>
                 </section>`;
@@ -9383,7 +9514,7 @@ async function exportarExcelCartPanda() {
                 d.detalhes.forEach(tk => {
                     const urlChatwoot = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
                     html += `
-                    <div class="bg-gray-50 dark:bg-[#0a0f1c] border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                         <div>
                             <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente)}</p>
                             <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${t48xEsc(tk.id)}</p>
@@ -10992,7 +11123,7 @@ async function exportarExcelCartPanda() {
                 ${avisos.length ? `<p class="text-[11px] font-bold text-yellow-500">⚠️ ${avisos.map(t48xEsc).join(' · ')}</p>` : ''}
                 <div class="overflow-x-auto overflow-y-auto max-h-[360px] custom-scrollbar rounded-xl border border-gray-200 dark:border-white/10">
                     <table class="w-full text-left min-w-[900px]">
-                        <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95"><tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest"><th class="py-2 px-3">Ticket</th><th class="py-2 px-3">Cliente</th><th class="py-2 px-3">Sai de</th><th class="py-2 px-3">Vai para</th><th class="py-2 px-3">Time</th><th class="py-2 px-3">Situação</th></tr></thead>
+                        <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95"><tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest"><th class="py-2 px-3">Ticket</th><th class="py-2 px-3">Cliente</th><th class="py-2 px-3">Sai de</th><th class="py-2 px-3">Vai para</th><th class="py-2 px-3">Time</th><th class="py-2 px-3">Situação</th></tr></thead>
                         <tbody class="text-[12px]">${p.itens.map(i => `<tr class="border-t border-gray-100 dark:border-white/5">
                             <td class="py-2 px-3 font-mono font-bold whitespace-nowrap">${trLinkTicket(i.display_id)}</td>
                             <td class="py-2 px-3 text-gray-700 dark:text-gray-200 max-w-[180px] truncate">${t48xEsc(i.cliente)}</td>
@@ -11086,7 +11217,7 @@ async function exportarExcelCartPanda() {
                 ${avisos.length ? `<p class="text-[11px] font-bold text-yellow-500">⚠️ ${avisos.map(t48xEsc).join(' · ')}</p>` : ''}
                 <div class="overflow-x-auto overflow-y-auto max-h-[360px] custom-scrollbar rounded-xl border border-gray-200 dark:border-white/10">
                     <table class="w-full text-left min-w-[760px]">
-                        <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95"><tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest"><th class="py-2 px-3">Ticket</th><th class="py-2 px-3">Cliente</th><th class="py-2 px-3">Sai de</th><th class="py-2 px-3">Fila do time</th><th class="py-2 px-3">Resultado</th></tr></thead>
+                        <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95"><tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest"><th class="py-2 px-3">Ticket</th><th class="py-2 px-3">Cliente</th><th class="py-2 px-3">Sai de</th><th class="py-2 px-3">Fila do time</th><th class="py-2 px-3">Resultado</th></tr></thead>
                         <tbody class="text-[12px]">${p.itens.map(i => `<tr class="border-t border-gray-100 dark:border-white/5">
                             <td class="py-2 px-3 font-mono font-bold whitespace-nowrap">${trLinkTicket(i.display_id)}</td>
                             <td class="py-2 px-3 text-gray-700 dark:text-gray-200 max-w-[180px] truncate">${t48xEsc(i.cliente)}</td>
@@ -11192,7 +11323,7 @@ async function exportarExcelCartPanda() {
                 ${p.nao_achados && p.nao_achados.length ? `<p class="text-[11px] font-bold text-yellow-500">⚠️ ${p.nao_achados.length} caso${p.nao_achados.length === 1 ? '' : 's'} não existe${p.nao_achados.length === 1 ? '' : 'm'} mais no Chatwoot</p>` : ''}
                 <div class="overflow-x-auto overflow-y-auto max-h-[360px] custom-scrollbar rounded-xl border border-gray-200 dark:border-white/10">
                     <table class="w-full text-left min-w-[860px]">
-                        <thead class="sticky top-0 bg-white/95 dark:bg-[#0a0f1c]/95"><tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest"><th class="py-2 px-3">Ticket</th><th class="py-2 px-3">Cliente</th><th class="py-2 px-3">Agente</th><th class="py-2 px-3">Etiquetas antes</th><th class="py-2 px-3">Etiquetas depois</th><th class="py-2 px-3">Resultado</th></tr></thead>
+                        <thead class="sticky top-0 bg-white/95 dark:bg-navy-900/95"><tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest"><th class="py-2 px-3">Ticket</th><th class="py-2 px-3">Cliente</th><th class="py-2 px-3">Agente</th><th class="py-2 px-3">Etiquetas antes</th><th class="py-2 px-3">Etiquetas depois</th><th class="py-2 px-3">Resultado</th></tr></thead>
                         <tbody class="text-[12px]">${p.itens.map(i => {
                             const tem = (lista, e) => lista.some(x => trEtqNorm(x) === trEtqNorm(e));
                             const tirou = i.antes.filter(e => !tem(i.depois, e)), pos = i.depois.filter(e => !tem(i.antes, e));
