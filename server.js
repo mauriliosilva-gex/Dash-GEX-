@@ -865,6 +865,17 @@ function qualOrdemDoMes(txt) {
     return a * 12 + mes;
 }
 const qualMesesDoMaisNovo = (x, y) => (qualOrdemDoMes(y) - qualOrdemDoMes(x)) || String(y).localeCompare(String(x));
+// 30/10/2026: nome da BASE_MONITORIA → nome no Chatwoot (TK_EQUIPE), só para achar o líder. Sem isso esses analistas sumiam das abas por líder.
+const QUAL_NOME_CHATWOOT = {
+    'HENRIQUE MORAES': 'Henrique Morais - RET',
+    'REBECA SOUSA': 'Rebeca Souza - RET',
+    'SUSANA GARCIA': 'Susana Barros - SAC',
+    'PATRICIA MAIA': 'Patricia Figueredo - RET',
+    'DARYSON NASCIMENTO': 'Daryson Matheus - 48H',
+    'GABRIELA PENHA': 'Gabriela Andrade - 48H',
+};
+// 30/10/2026: quem saiu da empresa não está mais no Chatwoot, mas as monitorias do mês continuam contando para o time em que estava (como no relatório da Qualidade)
+const QUAL_LIDER_DE_QUEM_SAIU = { 'LAVINIA BOAVENTURA': 'flavia', 'VERONICA OLIVEIRA': 'flavia', 'WILLIAN SANTOS': 'flavia' };
 
 app.get('/api/qualidade', async (req, res) => {
     try {
@@ -959,22 +970,36 @@ app.get('/api/qualidade', async (req, res) => {
                 siglaSetor = 'BKO';
             }
 
-            monitoriasGerais.push({ mes: mesRaw, nome: nomeFormatado, time: siglaSetor, qual: nota, ciclo: cicloNum, nomeOriginal: nomeRaw });
+            monitoriasGerais.push({ mes: mesRaw, nome: nomeFormatado, time: siglaSetor, qual: nota, ciclo: cicloNum, nomeOriginal: nomeRaw, adapt: siglaSetor === 'ADAPTACAO' });
         }
 
         const meses = Array.from(mesesSet).sort(qualMesesDoMaisNovo);   // mês mais novo primeiro (calendário, não alfabeto) 
         const mesSelecionado = req.query.mes || (meses.length > 0 ? meses[0] : '');
         const monitoriasDoMes = monitoriasGerais.filter(m => m.mes === mesSelecionado);
 
+        // 30/10/2026: mesma regra do relatório da Qualidade — a monitoria de Adaptação (C1 do analista novo) aparece, mas não entra na média;
+        // a nota do analista é a média dos ciclos dele (2 monitorias no mesmo ciclo viram a média das duas) e o setor é o da 1ª monitoria fora da Adaptação.
+        // Antes: média de todas as linhas (com a Adaptação) e setor da 1ª linha do mês (o novato ficava "Adaptação" o mês inteiro).
         const agentesAgrupados = {};
         monitoriasDoMes.forEach(m => {
-            if (!agentesAgrupados[m.nome]) agentesAgrupados[m.nome] = { nome: m.nome, time: m.time, soma: 0, count: 0, ciclos: {}, nomeOriginal: m.nomeOriginal };
-            agentesAgrupados[m.nome].soma += m.qual;
-            agentesAgrupados[m.nome].count++;
-            agentesAgrupados[m.nome].ciclos[`c${m.ciclo}`] = m.qual; 
+            if (!agentesAgrupados[m.nome]) agentesAgrupados[m.nome] = { nome: m.nome, time: null, ciclos: {}, nomeOriginal: m.nomeOriginal };
+            const a = agentesAgrupados[m.nome];
+            if (!m.adapt && !a.time) a.time = m.time;
+            const c = a.ciclos[`c${m.ciclo}`] || (a.ciclos[`c${m.ciclo}`] = { normal: [], adapt: [] });
+            c[m.adapt ? 'adapt' : 'normal'].push(m.qual);
         });
+        const qualMedia = v => v.reduce((s, x) => s + x, 0) / v.length;
 
         const resultados = Object.values(agentesAgrupados).map(a => {
+            const notaCiclo = {}, adapt = [];
+            Object.keys(a.ciclos).forEach(k => {
+                const c = a.ciclos[k];
+                if (c.normal.length) notaCiclo[k] = qualMedia(c.normal);
+                else { notaCiclo[k] = qualMedia(c.adapt); adapt.push(k); }
+            });
+            const contam = Object.keys(notaCiclo).filter(k => !adapt.includes(k));
+            const emAdaptacao = contam.length === 0;   // só tem a monitoria de Adaptação no mês: mostra a nota dela, fora das médias de equipe
+            const qual = qualMedia((emAdaptacao ? Object.keys(notaCiclo) : contam).map(k => notaCiclo[k]));
             let linkPastaDrive = '#';
             const nomeBuscadoOriginal = String(a.nomeOriginal || '').trim();
             const nomeBuscadoNormalizado = normalizeNome(nomeBuscadoOriginal);
@@ -1010,12 +1035,13 @@ app.get('/api/qualidade', async (req, res) => {
             }
 
             return {
-                nome: a.nomeOriginal.toUpperCase(), time: a.time, qual: a.soma / a.count,
-                lider: tkLiderDeNome(a.nomeOriginal),   // 30/10/2026: abas por líder nas Notas de Monitoria (fonte única: TK_EQUIPE)
-                c1: a.ciclos['c1'] !== undefined ? a.ciclos['c1'] : null,
-                c2: a.ciclos['c2'] !== undefined ? a.ciclos['c2'] : null,
-                c3: a.ciclos['c3'] !== undefined ? a.ciclos['c3'] : null,
-                c4: a.ciclos['c4'] !== undefined ? a.ciclos['c4'] : null,
+                nome: a.nomeOriginal.toUpperCase(), time: a.time || 'ADAPTACAO', qual,
+                lider: tkLiderDeNome(QUAL_NOME_CHATWOOT[normalizeNome(a.nomeOriginal)] || a.nomeOriginal) || QUAL_LIDER_DE_QUEM_SAIU[normalizeNome(a.nomeOriginal)] || null,   // 30/10/2026: abas por líder nas Notas de Monitoria (fonte única: TK_EQUIPE)
+                c1: notaCiclo['c1'] !== undefined ? notaCiclo['c1'] : null,
+                c2: notaCiclo['c2'] !== undefined ? notaCiclo['c2'] : null,
+                c3: notaCiclo['c3'] !== undefined ? notaCiclo['c3'] : null,
+                c4: notaCiclo['c4'] !== undefined ? notaCiclo['c4'] : null,
+                adapt, emAdaptacao,   // 30/10/2026: ciclos de Adaptação (fora da média) e quem ainda só tem a Adaptação
                 link: linkPastaDrive
             };
         });
