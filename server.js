@@ -605,6 +605,12 @@ const normalizeNome = (nome) => {
     if (!nome) return '';
     return String(nome).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s*[-(\[|].*/, '').replace(/\s+/g, ' ').trim();
 };
+// 30/10/2026: l\u00edder do agente aceitando TAMB\u00c9M o nome sem o sufixo de time \u2014 a Qualidade manda "ALINE MARTINS" e o
+// TK_EQUIPE tem "Aline Martins - RET". Fonte \u00fanica continua o TK_EQUIPE e a normaliza\u00e7\u00e3o \u00e9 a que o Dash j\u00e1 usa
+// (tkNorm primeiro, normalizeNome depois). Nos 54 agentes de hoje os nomes curtos s\u00e3o todos distintos (sem empate).
+const _tkIdxEqCurto = {};
+for (const _kCurto in TK_EQUIPE) _tkIdxEqCurto[normalizeNome(_kCurto)] = TK_EQUIPE[_kCurto];
+function tkLiderDeNome(nome) { const e = _tkIdxEq[tkNorm(nome)] || _tkIdxEqCurto[normalizeNome(nome)]; return e ? e[0] : null; }
 const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas, nomesDaPlanilha) => {   // 14/10/2026: nomesDaPlanilha (opcional) = nomes que já estão na planilha
     const nomeLimpo = normalizeNome(nomePlanilha);
     let agenteEncontrado = ticketsMap[nomeLimpo];
@@ -966,8 +972,9 @@ app.get('/api/qualidade', async (req, res) => {
                 }
             }
 
-            return { 
+            return {
                 nome: a.nomeOriginal.toUpperCase(), time: a.time, qual: a.soma / a.count,
+                lider: tkLiderDeNome(a.nomeOriginal),   // 30/10/2026: abas por líder nas Notas de Monitoria (fonte única: TK_EQUIPE)
                 c1: a.ciclos['c1'] !== undefined ? a.ciclos['c1'] : null,
                 c2: a.ciclos['c2'] !== undefined ? a.ciclos['c2'] : null,
                 c3: a.ciclos['c3'] !== undefined ? a.ciclos['c3'] : null,
@@ -1100,7 +1107,7 @@ app.get('/api/tickets', async (req, res) => {
         result.rows.forEach(row => {
             const nome = (row.agente || '').toUpperCase();
             if (!nome.match(/- SAC|- RET|- BKO|- SMS|- 48H/)) return;
-            if (!agentesMap[nome]) agentesMap[nome] = { nome: row.agente, seg:0, ter:0, qua:0, qui:0, sex:0, sab:0, dom:0, total:0 };
+            if (!agentesMap[nome]) agentesMap[nome] = { nome: row.agente, lider: tkLiderDe(row.agente), seg:0, ter:0, qua:0, qui:0, sex:0, sab:0, dom:0, total:0 };   // 30/10/2026: lider p/ a aba por líder da Tickets (Atual e Visão Mensal)
 
             const diaStr = row.dia instanceof Date ? row.dia.toISOString().split('T')[0] : String(row.dia).split('T')[0];
             const dataData = new Date(diaStr + 'T12:00:00Z');
@@ -1229,7 +1236,7 @@ app.get('/api/distribuicao', soAdmin, async (req, res) => {   // 🛡️ 16/10/2
                 nome = nomeAgente.replace(/[\s\-]+(RET|SAC|BKO|SMS|48H)\b.*$/, '').trim() + ' - ' + sig;
             }
             
-            if (!distAgentes[nome]) distAgentes[nome] = { nome, total: 0 };
+            if (!distAgentes[nome]) distAgentes[nome] = { nome, lider: tkLiderDe(nome), total: 0 };   // 30/10/2026: lider p/ a aba por líder da Tickets (Distribuição)
             distAgentes[nome][cx] = (distAgentes[nome][cx] || 0) + (parseInt(r.qtd) || 0);   // 14/10/2026: soma — o mesmo agente na mesma caixa vem em mais de 1 linha quando o time da conversa muda
             distAgentes[nome].total += parseInt(r.qtd) || 0;
         });
@@ -2286,6 +2293,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
             }
         } catch (e) { console.error('[qualidade] enriquecer snooze falhou:', e.message); }
 
+        result.rows.forEach(r => { r.lider = tkLiderDeNome(r.agente_nome); });   // 30/10/2026: abas por líder na Monitoria de Tickets (fonte única: TK_EQUIPE)
         res.json({ success: true, dados: result.rows });
     } catch (error) { 
         console.error("Erro Rota Monitoria:", error);
@@ -4377,6 +4385,7 @@ app.get('/api/recebimento-tickets', async (req, res) => {
                   AND c.created_at >= ($1 || ' 00:00:00')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                   AND c.created_at <= ($2 || ' 23:59:59')::timestamp AT TIME ZONE 'America/Sao_Paulo'
                   AND (i.name IS NULL OR i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste'))   -- 14/10: fora, sem exceção
+                  AND COALESCE(c.cached_label_list, '') NOT ILIKE '%spam%'   -- 30/10/2026: spam fora da conta (mesma regra da tela Recebimento de Tickets)
             )
             ${selecao}`;
         const linhas = (await pool.query(base(`
@@ -5315,7 +5324,7 @@ const PD_PERIODO_PROPS = {
     titulo: { type: 'string', description: 'Título curto do gráfico, em português, até 60 caracteres' }
 };
 const PD_FERRAMENTAS = [
-    { name: 'recebimento', description: 'Tickets recebidos: conversas novas abertas pelo cliente (duplicadas, abertas por nós e sem mensagem ficam à parte; caixas Atendimento | Brasil e Pitaco Teste fora). Mesma regra da tela Recebimento de Tickets. Serve para volume, entrada, chegada de tickets, por time, caixa, dia, hora ou dia da semana, e para comparar dois períodos (ex.: dia X × dia Y por hora).',
+    { name: 'recebimento', description: 'Tickets recebidos: conversas novas abertas pelo cliente (duplicadas, abertas por nós e sem mensagem ficam à parte; caixas Atendimento | Brasil e Pitaco Teste fora; spam fora da conta). Mesma regra da tela Recebimento de Tickets. Serve para volume, entrada, chegada de tickets, por time, caixa, dia, hora ou dia da semana, e para comparar dois períodos (ex.: dia X × dia Y por hora).',
         input_schema: { type: 'object', properties: Object.assign({}, PD_PERIODO_PROPS, {
             agrupar_por: { type: 'string', enum: ['time', 'caixa', 'dia', 'hora', 'dia_da_semana'] },
             time: { type: 'string', enum: ['TODOS'].concat(PD_TIMES), description: 'Filtra um time (não vale para agrupar_por=time)' },
@@ -6805,7 +6814,7 @@ app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 // F: warmer — a cada 15min, se houve acesso REAL recente (<=20min), revalida em background as rotas pesadas
 // do Postgres (escalonado, 1 por vez). Se ninguem usou o Dash, nao roda (aguarda) — nao toca no Chatwoot.
-const ROTAS_WARM = ['/api/resumo-recorrencia', '/api/produtividade']; // /api/time48, Produtos e Menções saíram do aquecedor (01/10/2026): carregam 1x no acesso e depois só pelo 🔄 Atualizar
+const ROTAS_WARM = ['/api/produtividade']; // 30/10/2026: /api/resumo-recorrencia saiu do aquecedor (a aba Cockpit foi retirada). /api/time48, Produtos e Menções saíram do aquecedor (01/10/2026): carregam 1x no acesso e depois só pelo 🔄 Atualizar
 function aquecerRota(rota) {
     return new Promise((resolve) => {
         const rq = http.get({ host: '127.0.0.1', port: PORT, path: rota + '?fresh=1', headers: { 'x-warm-token': WARM_TOKEN } }, (r) => { r.resume(); r.on('end', resolve); });
