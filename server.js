@@ -320,7 +320,8 @@ passport.use(new GoogleStrategy({
 },
 function(accessToken, refreshToken, profile, cb) {
     const email = profile.emails && profile.emails[0] ? profile.emails[0].value : '';
-    if (email.endsWith('@institutoexperience.com.br')) return cb(null, profile);
+    // 30/10/2026: domínio novo da operação (@gexcorp.com.br) liberado; o antigo continua valendo para quem ainda não migrou
+    if (email.endsWith('@institutoexperience.com.br') || email.endsWith('@gexcorp.com.br')) return cb(null, profile);
     else return cb(null, false, { message: 'Acesso negado.' });
 }));
 
