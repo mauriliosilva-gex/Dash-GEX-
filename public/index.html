@@ -457,7 +457,7 @@
             const ICONE_TITULO = [[/recebimento/, 'inbox'], [/atendimento por agente|todos os agentes|equipe/, 'equipe'], [/ticket/, 'ticket'], [/mensal|semanal|semana/, 'calendario'],
                 [/produtividade|pausa/, 'relogio'], [/distribui|caixa/, 'caixa'], [/status de casos|casos/, 'lista'], [/ranking|desempenho|performance/, 'trofeu'],
                 [/monitoria|qualidade|avaliac/, 'estrela'], [/sinaliza/, 'sino'], [/menc/, 'chat'], [/reembolso|refund|pagamerican|buygoods|cartpanda/, 'dinheiro'],
-                [/recorr/, 'atualizar'], [/tabula|produto/, 'caixa'], [/adiar/, 'lua'], [/raio-x/, 'pulso'], [/cockpit/, 'grafico'], [/telegram|\bbot\b|comando/, 'robo'],
+                [/recorr/, 'atualizar'], [/tabula|produto/, 'caixa'], [/adiar/, 'lua'], [/raio-x/, 'pulso'], [/telegram|\bbot\b|comando/, 'robo'],
                 [/etiqueta/, 'etiqueta'], [/geral|hist/, 'grafico']];
             function decorarTitulo(h) {
                 if (h.dataset.gxTit || !/text-\[1[1-4]px\]/.test(h.className) || !/uppercase/.test(h.className) || h.closest('.gx-card, [data-gx-manter]')) return;
@@ -593,9 +593,6 @@
                         <svg id="icon-pasta-cw" class="w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
                     <div id="pasta-cw" class="space-y-1 hidden mt-2">
-                        <a data-menu-id="cw-recorrencia" onclick="registrarClique('cw-recorrencia'); mudarAba('chatwoot'); mudarSubAbaCw('recorrencia'); ativarMenu('cw-recorrencia'); fecharSidebarMobile();" class="sidebar-link">
-                            <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg> Cockpit Operacional
-                        </a>
                         <a data-menu-id="cw-tabulacao" onclick="registrarClique('cw-tabulacao'); mudarAba('chatwoot'); mudarSubAbaCw('tabulacao'); ativarMenu('cw-tabulacao'); fecharSidebarMobile();" class="sidebar-link">
                             <svg class="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg> Produtos Tabulados
                         </a>
@@ -864,6 +861,17 @@
                     </div>
                 </div>
 
+                <!-- 30/10/2026: ABA POR LÍDER DA TICKETS — uma barra só, aqui no topo, valendo para TODAS as sub-abas.
+                     Fica FORA do admin-hidden de propósito: aparece para admin e para agente. -->
+                <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex items-center gap-2 flex-wrap shrink-0 bg-gray-50/50 dark:bg-black/20">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
+                    <button onclick="ldFiltrarTickets('todos')" id="btn-ld-tickets-todos" class="btn-setor btn-setor-ativo">Todos</button>
+                    <button onclick="ldFiltrarTickets('flavia')" id="btn-ld-tickets-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
+                    <button onclick="ldFiltrarTickets('adevania')" id="btn-ld-tickets-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
+                    <button onclick="ldFiltrarTickets('camila')" id="btn-ld-tickets-camila" class="btn-setor btn-setor-inativo">Camila</button>
+                    <span class="text-[10px] font-bold text-gray-500 ml-2" id="lbl-ld-tickets"></span>
+                </div>
+
                 <!-- SUB-ABA 1: ATUAL -->
                 <div id="tela-tk-atual" class="flex-1 flex flex-col min-h-0">
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/10 shrink-0">
@@ -956,15 +964,6 @@
 
                 <!-- SUB-ABA 3: GERAL -->
                 <div id="tela-tk-geral" class="hidden flex-1 flex flex-col min-h-0">
-                    <!-- ADMIN-HTML-INI: abas por lider do Tickets Geral -->
-                    <div class="px-5 pt-3 flex items-center gap-2 flex-wrap shrink-0">
-                        <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
-                        <button onclick="ldFiltrarTkGeral('todos')" id="btn-ld-tk-todos" class="btn-setor btn-setor-ativo">Todos</button>
-                        <button onclick="ldFiltrarTkGeral('flavia')" id="btn-ld-tk-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
-                        <button onclick="ldFiltrarTkGeral('adevania')" id="btn-ld-tk-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
-                        <button onclick="ldFiltrarTkGeral('camila')" id="btn-ld-tk-camila" class="btn-setor btn-setor-inativo">Camila</button>
-                    </div>
-                    <!-- ADMIN-HTML-FIM: abas por lider do Tickets Geral -->
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/10 shrink-0">
                         <div class="flex items-center gap-4">
                             <h3 class="text-[12px] font-black uppercase tracking-wider text-gray-800 dark:text-white">Tickets Geral</h3>
@@ -998,13 +997,6 @@
                 <!-- ADMIN-HTML-INI: telas Status de Casos, Distribuição, Produtividade, Atendimento e Recebimento -->
                 <!-- SUB-ABA 4: STATUS DE CASOS -->
                 <div id="tela-tk-casos" class="hidden flex-1 flex flex-col min-h-0 bg-transparent">
-                    <div class="px-5 pt-3 flex items-center gap-2 flex-wrap shrink-0">
-                        <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
-                        <button onclick="ldFiltrarCasos('todos')" id="btn-ld-casos-todos" class="btn-setor btn-setor-ativo">Todos</button>
-                        <button onclick="ldFiltrarCasos('flavia')" id="btn-ld-casos-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
-                        <button onclick="ldFiltrarCasos('adevania')" id="btn-ld-casos-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
-                        <button onclick="ldFiltrarCasos('camila')" id="btn-ld-casos-camila" class="btn-setor btn-setor-inativo">Camila</button>
-                    </div>
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/10 shrink-0">
                         <div class="flex items-center gap-4">
                             <h3 class="text-[12px] font-black uppercase tracking-wider text-gray-800 dark:text-white">Tempo Real (Status)</h3>
@@ -1083,13 +1075,6 @@
 
                 <!-- SUB-ABA 6: PRODUTIVIDADE (ADMIN ONLY) -->
                 <div id="tela-tk-prod" class="hidden flex-1 flex flex-col min-h-0 bg-transparent">
-                    <div class="px-5 pt-3 flex items-center gap-2 flex-wrap shrink-0">
-                        <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
-                        <button onclick="ldFiltrarProd('todos')" id="btn-ld-prod-todos" class="btn-setor btn-setor-ativo">Todos</button>
-                        <button onclick="ldFiltrarProd('flavia')" id="btn-ld-prod-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
-                        <button onclick="ldFiltrarProd('adevania')" id="btn-ld-prod-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
-                        <button onclick="ldFiltrarProd('camila')" id="btn-ld-prod-camila" class="btn-setor btn-setor-inativo">Camila</button>
-                    </div>
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/10 shrink-0">
                         <div class="flex items-center gap-4">
                             <h3 class="text-[12px] font-black uppercase tracking-wider text-gray-800 dark:text-white">Produtividade</h3>
@@ -1163,14 +1148,6 @@
 
                 <!-- SUB-ABA 7: ATENDIMENTO POR AGENTE (06/10/2026) — mesma regra e colunas do 👥 Todos os Agentes do Time 48H, com todos os tickets -->
                 <div id="tela-tk-atendimento" class="hidden flex-1 flex flex-col min-h-0 bg-transparent">
-                    <!-- 27/10/2026: abas por lider (esta tela ja esta dentro do par ADMIN-HTML das telas de operacao) -->
-                    <div class="px-5 pt-3 flex items-center gap-2 flex-wrap shrink-0">
-                        <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
-                        <button onclick="ldFiltrarAtd('todos')" id="btn-ld-atd-todos" class="btn-setor btn-setor-ativo">Todos</button>
-                        <button onclick="ldFiltrarAtd('flavia')" id="btn-ld-atd-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
-                        <button onclick="ldFiltrarAtd('adevania')" id="btn-ld-atd-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
-                        <button onclick="ldFiltrarAtd('camila')" id="btn-ld-atd-camila" class="btn-setor btn-setor-inativo">Camila</button>
-                    </div>
                     <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex flex-wrap justify-between items-center gap-4 bg-gray-100/30 dark:bg-black/10 shrink-0">
                         <div class="flex items-center gap-4 flex-wrap">
                             <h3 class="text-[12px] font-black uppercase tracking-wider text-gray-800 dark:text-white">Atendimento por Agente</h3>
@@ -1632,6 +1609,14 @@
 
             <!-- TELA 1: NOTAS DE MONITORIA -->
             <div id="tela-qual-monitoria" class="block space-y-6">
+                <!-- 30/10/2026: abas por lider das Notas de Monitoria — aparece para TODO MUNDO (agente tambem), igual ao resto desta tela -->
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
+                    <button onclick="ldFiltrarQual('todos')" id="btn-ld-qual-todos" class="btn-setor btn-setor-ativo">Todos</button>
+                    <button onclick="ldFiltrarQual('flavia')" id="btn-ld-qual-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
+                    <button onclick="ldFiltrarQual('adevania')" id="btn-ld-qual-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
+                    <button onclick="ldFiltrarQual('camila')" id="btn-ld-qual-camila" class="btn-setor btn-setor-inativo">Camila</button>
+                </div>
                 <div class="flex justify-between items-end mb-4">
                     <div class="grid grid-cols-1 md:grid-cols-1 gap-6 w-1/3">
                         <div class="glass-panel border-2 border-gexCyan rounded-2xl p-6 shadow-[0_0_25px_rgba(34,167,240,0.15)] relative overflow-hidden">
@@ -1742,6 +1727,13 @@
 
             <!-- TELA 3: MONITORIA DE TICKETS -->
             <div id="tela-qual-monitoriatk" class="hidden space-y-6">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
+                    <button onclick="ldFiltrarMonTk('todos')" id="btn-ld-montk-todos" class="btn-setor btn-setor-ativo">Todos</button>
+                    <button onclick="ldFiltrarMonTk('flavia')" id="btn-ld-montk-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
+                    <button onclick="ldFiltrarMonTk('adevania')" id="btn-ld-montk-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
+                    <button onclick="ldFiltrarMonTk('camila')" id="btn-ld-montk-camila" class="btn-setor btn-setor-inativo">Camila</button>
+                </div>
                 <section class="flex flex-col gap-6 items-start h-[max(800px,calc(100vh_-_114px))] mb-10">
                     <div class="glass-panel rounded-2xl w-full flex flex-col h-full overflow-hidden shadow-2xl border border-white/5">
                         <div class="px-6 py-5 border-b border-lightBorder dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/20 shrink-0">
@@ -1861,36 +1853,16 @@
             <!-- SUB-MENU CHATWOOT (VISÍVEL APENAS PARA AGENTES) -->
             <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-4 shadow-sm shrink-0 admin-hidden">
                 <div class="flex items-center gap-2">
-                    <button id="btn-sub-cw-recorrencia" onclick="mudarSubAbaCw('recorrencia')" class="btn-setor btn-setor-ativo">📊 Cockpit do Atendimento</button>
-                    <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
-                    <button id="btn-sub-cw-tabulacao" onclick="mudarSubAbaCw('tabulacao')" class="btn-setor btn-setor-inativo">📦 Produtos Tabulados</button>
+                    <button id="btn-sub-cw-tabulacao" onclick="mudarSubAbaCw('tabulacao')" class="btn-setor btn-setor-ativo">📦 Produtos Tabulados</button>
                     <button id="btn-sub-cw-mencoes" onclick="mudarSubAbaCw('mencoes')" class="btn-setor btn-setor-inativo">🔎 Radar de Menções (Fila)</button>
                     <div class="w-px h-6 bg-gray-300 dark:bg-gray-800 mx-2"></div>
                     <button id="btn-sub-cw-reembolsos" onclick="mudarSubAbaCw('reembolsos')" class="btn-setor btn-setor-inativo">🔄 Reembolsos</button>
                     <button id="btn-sub-cw-time48" onclick="mudarSubAbaCw('time48')" class="btn-setor btn-setor-inativo">⏳ Time 48h</button>
                 </div>
-                <button onclick="refreshManual(function(){ carregarRecorrencia(); carregarProdutosMetricas(); carregarMencoesAbertos(); carregarPagAmerican(''); })" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 ml-auto">🔄 Atualizar Tudo</button>
+                <button onclick="refreshManual(function(){ carregarProdutosMetricas(); carregarMencoesAbertos(); carregarPagAmerican(''); })" class="btn-refresh bg-gexBlue hover:bg-gexCyan text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 ml-auto">🔄 Atualizar Tudo</button>
             </div>
 
-            <!-- TELA 1: RECORRÊNCIA -->
-            <div id="tela-cw-recorrencia" class="block space-y-6">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Período</span>
-                    <div class="flex flex-wrap gap-1.5" id="resumo-periodo-btns"></div>
-                    <span class="text-[11px] font-medium text-gray-500 ml-1" id="resumo-periodo-lbl"></span>
-                </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="resumo-kpis"></div>
-                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg bg-white/50 dark:bg-black/20">
-                    <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-transparent">
-                        <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">🗓️ Demanda por Dia da Semana × Hora</h3>
-                        <p class="text-[11px] text-gray-500 mt-1">Conversas criadas no período · quanto mais escuro, mais volume</p>
-                    </div>
-                    <div class="p-5 overflow-x-auto custom-scrollbar" id="resumo-heatmap"></div>
-                </div>
-            </div>
-
-            <!-- TELA 2: PRODUTOS TABULADOS -->
-            <div id="tela-cw-tabulacao" class="hidden space-y-6">
+            <div id="tela-cw-tabulacao" class="block space-y-6">
                 <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-2xl overflow-hidden shadow-lg flex flex-col h-[max(650px,calc(100vh_-_114px))] bg-white/50 dark:bg-black/20">
                     <div class="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex flex-wrap justify-between items-center gap-4 shrink-0 bg-gray-50/50 dark:bg-transparent">
                         <h3 class="text-[12px] font-black text-gray-800 dark:text-white uppercase tracking-wider">📦 Inteligência por Produto (Tabulação)</h3>
@@ -2825,20 +2797,23 @@
                 if(btn) btn.classList.replace('btn-setor-ativo', 'btn-setor-inativo');
             });
             
-            document.getElementById(`tela-qual-${aba}`).classList.remove('hidden');
-            document.getElementById(`tela-qual-${aba}`).classList.add('block');
-            document.getElementById(`btn-sub-qual-${aba}`).classList.replace('btn-setor-inativo', 'btn-setor-ativo');
-            
-            if (aba === 'sinalizacoes' && dadosSinalizacoes.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') carregarSinalizacoes('');
-            if (aba === 'monitoriatk' && dadosMonitoriaTk.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') carregarMonitoriaTk('');
-            if (aba === 'q3' && !q3Carregado && usuarioAtual && usuarioAtual.role === 'admin') carregarQ3();
+            // 30/10/2026: tela/botão que não existem nesta versão não quebram mais a troca de sub-aba (o Tickets já fazia assim)
+            const _telaQual = document.getElementById(`tela-qual-${aba}`);
+            if (_telaQual) { _telaQual.classList.remove('hidden'); _telaQual.classList.add('block'); }
+            const _btnQual = document.getElementById(`btn-sub-qual-${aba}`);
+            if (_btnQual) _btnQual.classList.replace('btn-setor-inativo', 'btn-setor-ativo');
+
+            // 30/10/2026: a checagem de admin vem ANTES de ler a variável da tela — na versão do agente essas variáveis não existem
+            if (aba === 'sinalizacoes' && usuarioAtual && usuarioAtual.role === 'admin' && dadosSinalizacoes.length === 0) carregarSinalizacoes('');
+            if (aba === 'monitoriatk' && usuarioAtual && usuarioAtual.role === 'admin' && dadosMonitoriaTk.length === 0) carregarMonitoriaTk('');
+            if (aba === 'q3' && usuarioAtual && usuarioAtual.role === 'admin' && !q3Carregado) carregarQ3();
             setTimeout(tocarTelaAberta, 80);
         }
 
         function mudarSubAbaCw(aba) {
-            if (aba === 'adiar' && !podeVerAdiar()) aba = 'recorrencia';
-            if (aba === 'transferir' && !podeVerAdiar()) aba = 'recorrencia';   // 🔀 14/10/2026
-            ['recorrencia', 'tabulacao', 'mencoes', 'reembolsos', 'time48', 'adiar', 'transferir'].forEach(id => {
+            if (aba === 'adiar' && !podeVerAdiar()) aba = 'tabulacao';   // 30/10/2026: o Cockpit saiu; a sub-aba padrao do Chatwoot passou a ser Produtos Tabulados
+            if (aba === 'transferir' && !podeVerAdiar()) aba = 'tabulacao';   // 🔀 14/10/2026
+            ['tabulacao', 'mencoes', 'reembolsos', 'time48', 'adiar', 'transferir'].forEach(id => {
                 const tela = document.getElementById(`tela-cw-${id}`);
                 const btn = document.getElementById(`btn-sub-cw-${id}`);
                 
@@ -2864,10 +2839,10 @@
                 btnAtivo.classList.add('btn-setor-ativo');
             }
 
-            if (aba === 'reembolsos' && dadosPagAmerican.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') {
+            if (aba === 'reembolsos' && usuarioAtual && usuarioAtual.role === 'admin' && dadosPagAmerican.length === 0) {   // 30/10/2026: admin primeiro — na versão do agente dadosPagAmerican não existe
                 carregarPagAmerican(window._perReemb || '');   // 14/10/2026: no período aplicado no calendário
             }
-            if (aba === 'adiar' && !dadosAdiar && podeVerAdiar()) {
+            if (aba === 'adiar' && podeVerAdiar() && typeof dadosAdiar !== 'undefined' && !dadosAdiar) {   // 30/10/2026: na versão do agente dadosAdiar não existe
                 carregarAdiar();
             }
             if (aba === 'transferir' && podeVerAdiar()) trAbrir();   // 🔀 14/10/2026
@@ -2902,7 +2877,7 @@
             if ((aba === 'casos' || aba === 'distribuicao') && !dadosDistribuicao && usuarioAtual && usuarioAtual.role === 'admin') {
                 carregarDistribuicao();
             }
-            if (aba === 'prod' && dadosProdutividade.length === 0 && usuarioAtual && usuarioAtual.role === 'admin') {
+            if (aba === 'prod' && usuarioAtual && usuarioAtual.role === 'admin' && dadosProdutividade.length === 0) {   // 30/10/2026: admin primeiro — na versão do agente dadosProdutividade não existe
                 // 🔥 PRODUTIVIDADE: Forçar busca apenas de HOJE no primeiro carregamento
                 const ini = new Date(); ini.setHours(0, 0, 0, 0);
                 const fim = new Date(); fim.setHours(23, 59, 59, 0);
@@ -3006,7 +2981,6 @@
             ['tela-tk-semanal',        () => carregarTicketsSemanal(window._perVisaoMensal || '', diasFiltroSemanal || 7), 1800000],
             ['tela-tk-geral',          () => carregarTicketsGeral(window._perTkGeral || ''), 1800000],
             ['tela-tk-prod',           () => carregarProdutividade(''),  1800000],
-            ['tela-cw-recorrencia',    () => carregarRecorrencia(),      1800000],
             ['tela-cw-tabulacao',      () => carregarProdutosMetricas(), 1800000],
             ['tela-cw-mencoes',        () => carregarMencoesAbertos(),   1800000],
             ['tela-cw-reembolsos',     () => { const p = window._perReemb || ''; if (plataformaAtual === 'buygoods') carregarBuyGoods(p); else if (plataformaAtual === 'cartpanda') carregarCartPanda(p); else carregarPagAmerican(p); }, 1800000],   // só a plataforma aberta · 14/10/2026: no período aplicado no calendário
@@ -3042,7 +3016,6 @@
             if (usuarioAtual && usuarioAtual.role === 'admin') {
                 fila.push(
                     () => carregarSinalizacoes(''),
-                    () => carregarRecorrencia(),
                     () => carregarProdutosMetricas(),
                     () => carregarMencoesAbertos(),
                     () => carregarMonitoriaTk(''),
@@ -3056,7 +3029,7 @@
             fila.forEach((fn, i) => setTimeout(() => { try { fn(); } catch (e) {} }, i * 300));
             // Telas carregadas aqui contam como já carregadas: não recarregam ao abrir (admin: só pelo 🔄 Atualizar · agente: no intervalo da tela)
             const _jaCarregadas = ['aba-retencao', 'tela-qual-monitoria', 'tela-tk-atual', 'tela-tk-geral'];
-            if (usuarioAtual && usuarioAtual.role === 'admin') _jaCarregadas.push('tela-qual-sinalizacoes', 'tela-cw-recorrencia', 'tela-cw-tabulacao', 'tela-cw-mencoes', 'tela-qual-monitoriatk', 'tela-cw-reembolsos', 'tela-cw-time48', 'tela-tk-casos', 'tela-tk-distribuicao', 'tela-tk-prod');
+            if (usuarioAtual && usuarioAtual.role === 'admin') _jaCarregadas.push('tela-qual-sinalizacoes', 'tela-cw-tabulacao', 'tela-cw-mencoes', 'tela-qual-monitoriatk', 'tela-cw-reembolsos', 'tela-cw-time48', 'tela-tk-casos', 'tela-tk-distribuicao', 'tela-tk-prod');
             const _agoraCarga = Date.now(); _jaCarregadas.forEach(id => { _ultRefreshTela[id] = _agoraCarga; });
         }
 
@@ -3075,7 +3048,6 @@
                 ['tela-qual-monitoria',  () => carregarQualidade('')],
                 ['tela-qual-sinalizacoes', () => carregarSinalizacoes('')],
                 ['tela-qual-monitoriatk',  () => carregarMonitoriaTk('')],
-                ['tela-cw-recorrencia',  () => carregarRecorrencia()],
                 ['tela-cw-tabulacao',    () => carregarProdutosMetricas()],
                 ['tela-cw-mencoes',      () => carregarMencoesAbertos()],
                 ['tela-cw-reembolsos',   () => { const p = window._perReemb || ''; if (plataformaAtual === 'buygoods') carregarBuyGoods(p); else if (plataformaAtual === 'cartpanda') carregarCartPanda(p); else carregarPagAmerican(p); }],   // só a plataforma aberta · 14/10/2026: no período aplicado no calendário
@@ -3697,11 +3669,12 @@
         function renderTabelaQualidade() {
             const tb = document.getElementById('tabela-qualidade-body'); if (!tb) return;
             let qualData = setorQualAtivo === 'TODOS' ? [...dadosQualidade] : dadosQualidade.filter(a => a.time.includes(setorQualAtivo));
+            qualData = tkFiltraLider(qualData, ldQual);   // 30/10/2026: aba por líder ('todos' nao altera nada)
             qualData.sort((a, b) => b.qual - a.qual);
             // 14/10/2026: o card da média acompanha o filtro de time (o título diz qual) e, sem notas no filtro, mostra "—" em vez do número anterior
             const elMediaTit = document.getElementById('media-qualidade-label');
             const txtMediaTit = elMediaTit ? [...elMediaTit.childNodes].reverse().find(n => n.nodeType === 3 && n.nodeValue.trim()) : null;
-            if (txtMediaTit) txtMediaTit.nodeValue = `Média da Equipe (${({ TODOS: 'Geral', RET: 'Retenção', SAC: 'SAC', BKO: 'BackOffice', SMS: 'SMS', '48H': '48H', ADAPTACAO: 'Adaptação' })[setorQualAtivo] || setorQualAtivo})`;
+            if (txtMediaTit) txtMediaTit.nodeValue = `Média da Equipe (${({ TODOS: 'Geral', RET: 'Retenção', SAC: 'SAC', BKO: 'BackOffice', SMS: 'SMS', '48H': '48H', ADAPTACAO: 'Adaptação' })[setorQualAtivo] || setorQualAtivo}${ldQual !== 'todos' && TK_LIDERES[ldQual] ? ' · Equipe ' + TK_LIDERES[ldQual].rotulo : ''})`;   // 30/10/2026: o card acompanha a aba do líder
             if (qualData.length === 0) { const elMediaVazio = document.getElementById('media-qualidade-val'); if (elMediaVazio) elMediaVazio.innerText = '—'; }
 
             if (qualData.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-gray-500 font-bold">Nenhuma nota encontrada.</td></tr>`; return; }
@@ -3813,6 +3786,7 @@
         function renderTabelaTickets() {
             const tb = document.getElementById('tabela-tickets-body'); if (!tb) return;
             let l = filtroTkAtualSetor === 'TODOS' ? dadosTkAtual : dadosTkAtual.filter(a => a.nome.toUpperCase().includes(`- ${filtroTkAtualSetor}`));
+            l = tkFiltraLider(l, ldTickets);   // 30/10/2026: aba por lider da Tickets ('todos' nao altera nada)
 
             if (l.length === 0) { tb.innerHTML = `<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente.</td></tr>`; return; }
             tb.innerHTML = l.map(a => {
@@ -3873,6 +3847,7 @@
         function renderTabelaTicketsSemanal() {
             const tb=document.getElementById('tabela-tickets-semanal-body'); if(!tb) return;
             let l=filtroTkSemanalSetor==='TODOS'?dadosTkSemanal:dadosTkSemanal.filter(a=>a.nome.toUpperCase().includes(`- ${filtroTkSemanalSetor}`));
+            l = tkFiltraLider(l, ldTickets);   // 30/10/2026: aba por lider da Tickets ('todos' nao altera nada)
             if(l.length===0){ tb.innerHTML=`<tr><td colspan="10" class="py-6 text-center text-gray-500 font-bold">Nenhum agente.</td></tr>`; return; }
             tb.innerHTML = l.map(a => { const fc = v => (v===0||v==='-') ? `<span class="texto-contraste-sm opacity-50">-</span>` : `<span class="font-mono texto-contraste-sm">${v}</span>`; return `<tr class="ranking-row row-normal linha-animada"><td class="py-3 px-4 texto-contraste pl-6">${t48xEsc(a.nome)}</td><td class="py-3 px-2 text-center">${fc(a.seg)}</td><td class="py-3 px-2 text-center">${fc(a.ter)}</td><td class="py-3 px-2 text-center">${fc(a.qua)}</td><td class="py-3 px-2 text-center">${fc(a.qui)}</td><td class="py-3 px-2 text-center">${fc(a.sex)}</td><td class="py-3 px-2 text-center">${fc(a.sab)}</td><td class="py-3 px-2 text-center">${fc(a.dom)}</td><td class="py-3 px-4 text-center font-black text-gexCyan">${a.total}</td><td class="py-3 px-4 text-center font-bold text-emerald-500 pr-6">${(a.total/diasMediaVisaoMensal()).toFixed(1)}</td></tr>`; }).join('');
         }
@@ -3894,11 +3869,30 @@
         // chave 'todos' devolve a MESMA lista — zero mudança no comportamento atual
         function tkFiltraLider(lista, chave) { return (!chave || chave === 'todos') ? lista : (lista || []).filter(a => a && a.lider === chave); }
         let ldTkGeral = 'todos', ldCasos = 'todos', ldProd = 'todos', ldAtd = 'todos';   // 27/10/2026: ldAtd = aba por lider do Atendimento por Agente
+        let ldQual = 'todos', ldMonTk = 'todos';   // 30/10/2026: abas por lider das Notas de Monitoria e da Monitoria de Tickets
+        let ldTickets = 'todos';   // 30/10/2026: aba por lider da ABA TICKETS inteira — uma barra no topo, valendo para todas as sub-abas
         function ldPintarBotoes(pre, ativo) { ['todos'].concat(TK_LIDERES_ORDEM).forEach(k => { const b = document.getElementById(pre + k); if (b) b.className = `btn-setor ${k === ativo ? 'btn-setor-ativo' : 'btn-setor-inativo'}`; }); }
         function ldFiltrarTkGeral(k) { ldTkGeral = k; ldPintarBotoes('btn-ld-tk-', k); renderTabelaTkGeral(); }
         function ldFiltrarCasos(k) { ldCasos = k; ldPintarBotoes('btn-ld-casos-', k); renderTabelaCasos(); }
         function ldFiltrarProd(k) { ldProd = k; ldPintarBotoes('btn-ld-prod-', k); renderTabelaProdutividade(); }
         function ldFiltrarAtd(k) { ldAtd = k; ldPintarBotoes('btn-ld-atd-', k); renderAtendimentoAgentes(); }   // 27/10/2026
+        // 30/10/2026: a barra do topo da aba Tickets manda em todas as sub-abas de uma vez. As variaveis de cada tela
+        // continuam existindo (nada foi reescrito): a barra do topo apenas poe o mesmo lider em todas e redesenha o
+        // que ja esta carregado. 'todos' devolve a lista inteira, igual a antes. A sub-aba Recebimento de Tickets nao
+        // entra: o dado dela e por caixa/canal/hora, sem agente, entao nao da para dividir por lider.
+        function ldFiltrarTickets(k) {
+            ldTickets = k;
+            ldTkGeral = ldCasos = ldProd = ldAtd = k;
+            ldPintarBotoes('btn-ld-tickets-', k);
+            const lbl = document.getElementById('lbl-ld-tickets');
+            if (lbl) lbl.textContent = (k !== 'todos' && TK_LIDERES[k]) ? `turno ${TK_LIDERES[k].turno} \u00b7 o Recebimento de Tickets n\u00e3o se divide por l\u00edder` : '';
+            [ 'renderTabelaTickets', 'renderTabelaTicketsSemanal', 'renderTabelaTkGeral', 'renderTabelaCasos',
+              'renderTabelaDist', 'renderTabelaProdutividade', 'renderAtendimentoAgentes' ].forEach(fn => {
+                try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {}   // tela que o usuario nao recebe (ou ainda sem dado) nao atrapalha as outras
+            });
+        }
+        function ldFiltrarQual(k) { ldQual = k; ldPintarBotoes('btn-ld-qual-', k); renderTabelaQualidade(); }   // 30/10/2026: Notas de Monitoria
+        function ldFiltrarMonTk(k) { ldMonTk = k; ldPintarBotoes('btn-ld-montk-', k); if (typeof renderTabelaMonitoriaTk === 'function') renderTabelaMonitoriaTk(); }   // 30/10/2026: Monitoria de Tickets (só ADMIN — na versão do agente a tela não existe)
         function filtrarTkGeral(s) { filtroTkGeralSetor=s; ['TODOS','RET','SAC','BKO','SMS','48H'].forEach(b=>{ const btn=document.getElementById(`btn-f-tk-${b}`); if(btn) btn.className=`btn-setor ${b===s?'btn-setor-ativo':'btn-setor-inativo'}`; }); renderTabelaTkGeral(); }
         function renderTabelaTkGeral() {
             const th=document.getElementById('thead-tk-geral-dinamico'), tb=document.getElementById('tabela-tickets-geral-body'); if(!tb||!th) return;
@@ -4043,6 +4037,7 @@
             if (!th || !tb || !tf || !dadosDistribuicao) return;
             
             let lista = filtroDistSetor === 'TODOS' ? dadosDistribuicao.distribuicao : dadosDistribuicao.distribuicao.filter(a => a.nome.toUpperCase().includes(`- ${filtroDistSetor}`));
+            lista = tkFiltraLider(lista, ldTickets);   // 30/10/2026: aba por lider da Tickets ('todos' nao altera nada)
 
             let headH = `<th class="py-3 px-3 pl-4 bg-transparent">Agente</th>`; 
             dadosDistribuicao.caixas.forEach(c => headH+=`<th class="py-3 px-3 text-center max-w-[120px] truncate bg-transparent" title="${c}">${c}</th>`); 
@@ -5507,91 +5502,6 @@
                 await tkBaixarExcel(workbook, `Produtividade_GEX_${dataArquivoBrasilia()}.xlsx`);
             } catch(e) { console.error(e); alert('Erro ao gerar o arquivo Excel.'); }
             btn.innerHTML = '📥 Baixar Excel';
-        }
-
-        let periodoResumo = null, periodoResumoTipo = 'mes';
-
-        function fmtTempoSeg(s){ if(s==null) return '—'; if(s<60) return Math.round(s)+' s'; if(s<3600) return Math.round(s/60)+' min'; const h=Math.floor(s/3600), m=Math.round((s%3600)/60); return h+'h'+String(m).padStart(2,'0'); }
-        function sparkResumo(arr, cor){ if(!arr||arr.length<2) return ''; const mx=Math.max(...arr), mn=Math.min(...arr); const W=140,H=30; const y=v=>mx===mn?H/2:3+(mx-v)/(mx-mn)*(H-6); let p=''; arr.forEach((v,i)=>{p+=(i?'L':'M')+(i/(arr.length-1)*W).toFixed(1)+' '+y(v).toFixed(1)+' ';}); return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:30px;margin-top:6px"><path d="${p}L${W} ${H}L0 ${H}Z" fill="${cor}" opacity=".13"/><path d="${p}" fill="none" stroke="${cor}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`; }
-
-        function renderPeriodoResumoBtns() {
-            const el = document.getElementById('resumo-periodo-btns'); if (!el) return;
-            const opts = [['mes','Este Mês'],['7','Últimos 7 dias'],['30','Últimos 30 dias'],['mespassado','Mês Passado']];
-            el.innerHTML = opts.map(([t,l]) => `<button onclick="setPeriodoResumo('${t}')" class="btn-setor text-[11px] px-3 py-1 ${periodoResumoTipo===t?'btn-setor-ativo':'btn-setor-inativo'}">${l}</button>`).join('');
-        }
-        function setPeriodoResumo(tipo) {
-            periodoResumoTipo = tipo;
-            if (tipo === 'mes') { periodoResumo = null; carregarRecorrencia(); return; }
-            const hoje = new Date(); let ini, fim = new Date(hoje); fim.setHours(23,59,59,0);
-            if (tipo === '7') { ini = new Date(hoje); ini.setDate(hoje.getDate()-6); }
-            else if (tipo === '30') { ini = new Date(hoje); ini.setDate(hoje.getDate()-29); }
-            else if (tipo === 'mespassado') { ini = new Date(hoje.getFullYear(), hoje.getMonth()-1, 1); fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0); fim.setHours(23,59,59,0); }
-            ini.setHours(0,0,0,0);
-            periodoResumo = { since: Math.floor(ini.getTime()/1000), until: Math.floor(fim.getTime()/1000) };
-            carregarRecorrencia();
-        }
-
-        function renderHeatmapResumo(d) {
-            const el = document.getElementById('resumo-heatmap'); if (!el) return;
-            const M = Array.from({length:7},()=>new Array(24).fill(0));
-            (d.heatmap||[]).forEach(r => { if(r.dow>=0&&r.dow<7&&r.hora>=0&&r.hora<24) M[r.dow][r.hora]=r.n; });
-            const mx = Math.max(1, ...M.flat());
-            const SEM=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-            const cor = v => { if(!v) return 'background:rgba(148,163,184,.06);color:#64748b'; const t=v/mx; return `background:rgba(14,165,233,${(.14+t*.82).toFixed(2)});color:${t>.5?'#fff':'#94a3b8'}`; };
-            let g = '<div style="display:grid;grid-template-columns:34px repeat(24,1fr);gap:2px;font-size:9.5px;min-width:660px">';
-            g += '<div></div>'; for(let hr=0;hr<24;hr++) g+=`<div style="text-align:center;color:#64748b;font-weight:700">${hr}h</div>`;
-            for(const w of [1,2,3,4,5,6,0]) {
-                g += `<div style="color:#94a3b8;font-weight:700;display:flex;align-items:center">${SEM[w]}</div>`;
-                for(let hr=0;hr<24;hr++){ const v=M[w][hr]; g+=`<div title="${SEM[w]} ${hr}h: ${v} conversas" style="height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:600;${cor(v)}">${v>0?v:''}</div>`; }
-            }
-            el.innerHTML = g + '</div>';
-        }
-
-        function renderResumoCockpit(d) {
-            const fN = v => Math.round(v||0).toLocaleString('pt-BR');
-            const fP = v => (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
-            const f1 = v => (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
-            const serieVol = (d.volume.por_dia||[]).map(x=>x.n);
-            const cards = [
-                {lbl:'Conversas no Período', val:fN(d.volume.total), sub:`Média ${fN(d.volume.media_dia)}/dia`, cor:'#0ea5e9', spark:serieVol},
-                {lbl:'SLA 1ª Resposta (Mediana)', val:fmtTempoSeg(d.sla_1a.mediana_s), sub:`Média ${fmtTempoSeg(d.sla_1a.media_s)}`, cor:'#fb923c'},
-                {lbl:'SLA Entre Respostas (Mediana)', val:fmtTempoSeg(d.sla_entre_s), sub:'Da 2ª resposta em diante', cor:'#7c3aed'},
-                {lbl:'Respondidas em Até 24h', val:fP(d.pct_24h), sub:`Em até 1h ${fP(d.pct_1h)}`, cor:'#15803d'},
-                {lbl:'Sem Nenhuma Resposta', val:fP(d.pct_sem_resposta), sub:`${fN(d.sem_resposta)} conversas`, cor:'#d97706'},
-                {lbl:'Fila Agora — Abertas', val:fN(d.fila.abertas), sub:`${fN(d.fila.sem_resposta)} nunca respondidas`, cor:'#db2777'},
-                {lbl:'Conversas por Agente/Dia', val:f1(d.produtividade), sub:'Humanos ativos no período', cor:'#14b8a6'},
-            ];
-            document.getElementById('resumo-kpis').innerHTML = cards.map(c => `
-                <div class="glass-panel border border-lightBorder dark:border-white/5 rounded-xl p-4 shadow-sm bg-white/50 dark:bg-black/20">
-                    <div class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">${c.lbl}</div>
-                    <div class="text-2xl font-black text-gray-800 dark:text-white font-mono mt-1">${c.val}</div>
-                    <div class="text-[10px] text-gray-500 mt-1">${c.sub||''}</div>
-                    ${c.spark?sparkResumo(c.spark,c.cor):''}
-                </div>`).join('');
-            const lbl = document.getElementById('resumo-periodo-lbl');
-            if (lbl && d.periodo) lbl.textContent = `${d.periodo.ini} → ${d.periodo.fim} · ${d.dias} dias`;
-            renderHeatmapResumo(d);
-        }
-
-        async function carregarRecorrencia() {
-            if(usuarioAtual && usuarioAtual.role !== 'admin') return;
-            renderPeriodoResumoBtns();
-            const kp = document.getElementById('resumo-kpis');
-            if (kp && !kp.innerHTML) kp.innerHTML = '<div class="text-gray-500 text-xs col-span-full py-4">⏳ Carregando resumo…</div>';
-            const nPedRec = novoPedidoTela('recorrencia');   // 14/10/2026: só a resposta do último pedido é desenhada (trocando o período rápido)
-            try {
-                let url = '/api/resumo-recorrencia';
-                if (periodoResumo) url += `?since=${periodoResumo.since}&until=${periodoResumo.until}`;
-                const response = await fetch(url);
-                const data = await response.json();
-                if (!pedidoVigenteTela('recorrencia', nPedRec)) return;   // 14/10/2026
-                if (data.success) renderResumoCockpit(data);
-                else if (kp) kp.innerHTML = `<div class="text-red-500 text-xs col-span-full py-4">⚠️ ${data.error||'Erro'}</div>`;
-            } catch (e) {
-                console.error(e);
-                if (!pedidoVigenteTela('recorrencia', nPedRec)) return;   // 14/10/2026: erro de um pedido antigo não cobre o novo
-                if (kp) kp.innerHTML = '<div class="text-red-500 text-xs col-span-full py-4">⚠️ Erro de conexão.</div>';
-            }
         }
 
         // 📥 14/10/2026: Excel dos Produtos Tabulados (o botão chamava uma função que não existia): resumo por produto + todos os tickets com link
@@ -7246,6 +7156,7 @@ async function exportarExcelCartPanda() {
         function renderTabelaMonitoriaTk() {
             const tb = document.getElementById('tabela-monitoriatk-body'); if (!tb) return;
             let lista = filtroMonitoriaTkSetor === 'TODOS' ? dadosMonitoriaTk : dadosMonitoriaTk.filter(a => a.equipe === filtroMonitoriaTkSetor);
+            lista = tkFiltraLider(lista, ldMonTk);   // 30/10/2026: aba por líder ('todos' nao altera nada)
             
             if (lista.length === 0) { tb.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-gray-500 font-bold">Nenhuma alteração encontrada neste setor no período.</td></tr>`; return; }
 
