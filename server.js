@@ -331,42 +331,226 @@ passport.deserializeUser((user, done) => done(null, user));
 // Servir logo público para a tela de login ANTES do bloqueio
 app.get('/logo.jpg', (req, res) => res.sendFile(path.join(__dirname, 'public', 'logo.jpg')));
 
-// 🎨 TELA DE LOGIN ESTILIZADA GEX
+// 🎨 TELA DE LOGIN ESTILIZADA GEX — 31/10/2026: padrão da home da Alura (fundo preto, título fino, botão azul #052fd3) com animação própria em canvas: partículas que giram como esfera e se juntam no símbolo da GEX (lido do /logo.jpg). Com "reduzir movimento" no sistema, mostra o símbolo parado. Mesmo bloqueio de botão direito/atalhos do Dash.
 app.get('/login', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/');
     res.send(`
-    <!DOCTYPE html>
-    <html lang="pt-BR" class="dark">
-    <head>
-        <meta charset="UTF-8">
-        <title>Login - Dash GEX</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
-    </head>
-    <body class="bg-[#020617] text-white flex items-center justify-center min-h-screen font-['Roboto'] relative overflow-hidden">
-        <div class="absolute inset-0 z-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] bg-[length:24px_24px]"></div>
-        <div class="absolute -top-[120px] -right-[150px] rotate-[40deg] flex flex-col gap-3 opacity-20">
-            <div class="w-[800px] h-[85px] bg-[#1b52af] rounded-full mb-2"></div>
-            <div class="w-[800px] h-[15px] bg-[#1b52af] rounded-full"></div>
-            <div class="w-[800px] h-[15px] bg-[#1b52af] rounded-full"></div>
-        </div>
-        <div class="z-10 bg-[#0a0f1c] p-10 rounded-[2rem] shadow-2xl border border-gray-800 max-w-md w-full text-center backdrop-blur-xl">
-            <img src="/logo.jpg" alt="Logo GEX" class="w-24 h-24 mx-auto rounded-2xl mb-6 shadow-[0_0_20px_rgba(34,167,240,0.3)] object-cover">
-            <h1 class="text-3xl font-black mb-2 tracking-tight">Dash GEX</h1>
-            <p class="text-gray-400 font-medium mb-10 text-sm">Acesso restrito à operação.</p>
-            
-            <a href="/auth/google" class="flex items-center justify-center gap-3 bg-white text-gray-900 font-bold py-3.5 px-6 rounded-xl hover:bg-gray-100 transition-all hover:scale-105 shadow-[0_10px_25px_rgba(255,255,255,0.1)]">
-                <svg class="w-5 h-5" viewBox="0 0 24 24">
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dash GEX · Acesso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Encode+Sans:wght@200;300;500;600&family=Roboto+Flex:wght@200;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+    /* 🎨 31/10/2026: login no padrão da home da Alura (fundo preto, título fino Encode Sans 200, botão azul #052fd3 cantos 4px)
+       com animação própria: partículas que giram como uma esfera e se juntam no símbolo da GEX (canvas; nada da Alura é reutilizado) */
+    :root { --preto: #000; --azul: #052fd3; --azul-h: #0d3ee3; --azul-claro: #7a9ff0; --tinta: #ffffff; --mudo: #7b7f8e; --borda: #383a42; --sup: #131316; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { background: var(--preto); color: var(--tinta); font-family: 'Roboto Flex', system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow: hidden; }
+    img { -webkit-user-drag: none; -webkit-touch-callout: none; }
+    #particulas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    .vinheta { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 42%, transparent 35%, rgba(0, 0, 0, 0.55) 75%, #000 100%); }
+
+    /* topo: marca à esquerda, status à direita (como o menu flutuante da Alura, mais discreto) */
+    .topo { position: fixed; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 26px clamp(16px, 6vw, 112px); }
+    .marca { display: flex; align-items: center; gap: 12px; font-family: 'Encode Sans', sans-serif; font-weight: 500; font-size: 18px; letter-spacing: .01em; }
+    .marca img { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--borda); }
+    .status { display: inline-flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--borda); background: rgba(19, 19, 22, 0.7); font: 500 11px/1 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; color: #b2b4bd; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+    .status i { width: 7px; height: 7px; border-radius: 99px; background: #01cb29; box-shadow: 0 0 0 3px rgba(1, 203, 41, 0.18), 0 0 10px rgba(1, 203, 41, 0.8); animation: pisca 2s ease-in-out infinite; }
+    @keyframes pisca { 50% { opacity: .35; } }
+
+    /* centro: título fino e grande sobre as partículas, frase que troca, botão */
+    .centro { position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; padding: 0 16px clamp(56px, 11vh, 120px); pointer-events: none; }
+    .centro > * { pointer-events: auto; }
+    h1 { font-family: 'Encode Sans', sans-serif; font-weight: 200; font-size: clamp(44px, 7.2vw, 96px); line-height: 1; letter-spacing: -0.01em; color: rgba(255, 255, 255, 0.92); }
+    h1 b { font-weight: 600; color: #fff; }
+    .frase { position: relative; margin-top: 18px; height: 1.4em; font-family: 'Encode Sans', sans-serif; font-weight: 200; font-size: clamp(18px, 2.2vw, 28px); color: rgba(255, 255, 255, 0.7); min-width: 10px; }
+    .frase span { display: inline-block; transition: opacity .5s ease, transform .5s ease; }
+    .frase span.sai { opacity: 0; transform: translateY(6px); }
+    .entrar { margin-top: 40px; display: inline-flex; align-items: center; gap: 14px; height: 52px; padding: 0 18px 0 8px; border-radius: 4px; background: var(--azul); border: 1px solid var(--azul); color: #fff; text-decoration: none; font-weight: 500; font-size: 16px; transition: background-color .2s cubic-bezier(.4, 0, .2, 1), box-shadow .2s cubic-bezier(.4, 0, .2, 1); box-shadow: 0 18px 40px -16px rgba(5, 47, 211, 0.9); }
+    .entrar:hover { background: var(--azul-h); border-color: var(--azul-h); box-shadow: 0 18px 44px -12px rgba(13, 62, 227, 1); }
+    .entrar:focus-visible { outline: 2px dashed #fff; outline-offset: 4px; }
+    .entrar .g { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 3px; background: #fff; }
+    .entrar .g svg { width: 18px; height: 18px; }
+    .entrar .seta { width: 18px; height: 18px; transition: transform .2s ease; }
+    .entrar:hover .seta { transform: translateX(3px); }
+    .nota { margin-top: 16px; font-size: 13px; font-weight: 200; color: var(--mudo); }
+
+    /* rodapé de HUD: coordenadas do cursor e assinatura */
+    .hud { position: fixed; bottom: 22px; z-index: 3; font: 400 10px/1 'JetBrains Mono', monospace; letter-spacing: .14em; text-transform: uppercase; color: rgba(178, 180, 189, 0.55); }
+    .hud.esq { left: clamp(16px, 6vw, 112px); }
+    .hud.dir { right: clamp(16px, 6vw, 112px); }
+
+    @media (max-width: 640px) { .status span { display: none; } .hud { display: none; } .entrar { margin-top: 30px; } }
+    @media (max-height: 620px) { .centro { justify-content: center; padding-top: 90px; } }
+</style>
+</head>
+<body>
+    <canvas id="particulas" aria-hidden="true"></canvas>
+    <div class="vinheta"></div>
+
+    <header class="topo">
+        <div class="marca"><img src="/logo.jpg" alt="Logo GEX"><span>Dash GEX</span></div>
+        <div class="status"><i></i><span>Sistema online</span></div>
+    </header>
+
+    <main class="centro">
+        <h1>Dash <b>GEX</b></h1>
+        <p class="frase" aria-live="polite"><span id="frase">Performance da operação em tempo real.</span></p>
+        <a class="entrar" href="/auth/google">
+            <span class="g">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 15.02 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                 </svg>
-                Continuar com o Google
-            </a>
-        </div>
-    </body>
-    </html>
+            </span>
+            Entrar com o Google
+            <svg class="seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
+        <p class="nota">Acesso restrito à operação · use a sua conta Google corporativa</p>
+    </main>
+
+    <div class="hud esq" id="hud-xy">x: 0000 · y: 0000</div>
+    <div class="hud dir">GEX · Grupo Experience</div>
+
+    <script>
+        (function () {   /* 🔒 mesmo bloqueio do Dash: botão direito e atalhos que abrem o código */
+            document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, true);
+            document.addEventListener('keydown', function (e) {
+                var k = String(e.key || '').toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
+                if (e.key === 'F12' || (ctrl && !e.shiftKey && !e.altKey && (k === 'u' || k === 's')) || (ctrl && e.shiftKey && ['i', 'j', 'c', 'k'].indexOf(k) >= 0) || (e.metaKey && e.altKey && ['i', 'j', 'c', 'u'].indexOf(k) >= 0)) { e.preventDefault(); e.stopPropagation(); }
+            }, true);
+            document.addEventListener('dragstart', function (e) { if (e.target && e.target.nodeName === 'IMG') e.preventDefault(); }, true);
+        })();
+
+        (function () {   /* frase que troca (como o título da Alura) — sempre animada, a pedido do usuário */
+            var frases = ['Performance da operação em tempo real.', 'Retenção, tickets e qualidade num só lugar.', 'Dados que viram decisão.'], i = 0, el = document.getElementById('frase');
+            setInterval(function () { el.className = 'sai'; setTimeout(function () { i = (i + 1) % frases.length; el.textContent = frases[i]; el.className = ''; }, 500); }, 3800);
+        })();
+
+        (function () {   /* 31/10/2026: o G da GEX se MONTA — partículas vêm espalhadas e vão formando o símbolo em espiral, seguindo o círculo;
+                            depois o G vira esfera girando (como a home da Alura) e se monta de novo. Sempre animado (mesmo com "reduzir movimento"). */
+            var cv = document.getElementById('particulas'), ctx = cv.getContext('2d'), hud = document.getElementById('hud-xy');
+            var W = 0, H = 0, DPR = 1, N = 3400, P = [], rotulos = [], mouse = { x: -9999, y: -9999 }, t0 = 0;
+            var CORES = ['#0a2cff', '#0a2cff', '#1f45ff', '#1f45ff', '#2f5bff', '#3d63ff', '#4d74ff', '#6f8cff', '#9ab7f3', '#d1def9'];
+            var CICLO = 16000, MONTA_INI = 250, MONTA_ESPALHA = 2000, MONTA_DUR = 1900, FIM_MONTA = 4800, DESFAZ_INI = 11200, DESFAZ_FIM = 13200;
+            function medir() { DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
+            function esfera(k, n) { var y = 1 - (k + 0.5) / n * 2, r = Math.sqrt(1 - y * y), a = k * 2.399963; return [Math.cos(a) * r * 0.82, y * 0.82, Math.sin(a) * r * 0.82]; }
+            function nuvem() { var u = Math.random() * 2 - 1, a = Math.random() * 6.283, r = 1.5 + Math.random() * 1.6, q = Math.sqrt(1 - u * u); return [Math.cos(a) * q * r * 1.6, u * r, Math.sin(a) * q * r * 0.45]; }   /* nuvem achatada na profundidade: nada passa perto da câmera */
+            function montar(alvos) {
+                P = [];
+                for (var k = 0; k < N; k++) {
+                    var s = esfera(k, N), a = alvos.length ? alvos[Math.floor(Math.random() * alvos.length)] : s;
+                    var lx = a[0] + (Math.random() - 0.5) * 0.012, ly = a[1] + (Math.random() - 0.5) * 0.012;
+                    var ang = (Math.atan2(lx, -ly) + 6.2832) % 6.2832 / 6.2832;   /* posição no círculo, a partir do topo, sentido horário: ordem de montagem */
+                    P.push({ s: s, n: nuvem(), l: [lx, ly, (Math.random() - 0.5) * 0.14], ang: ang, atraso: ang * MONTA_ESPALHA + Math.random() * 260, c: CORES[Math.floor(Math.random() * CORES.length)], tam: 1.4 + Math.random() * 2.6, ox: 0, oy: 0, fase: Math.random() * 6.283 });
+                }
+            }
+            function pontosDoLogo(pronto) {   /* lê os pixels claros do logo (fundo navy, símbolo branco) e vira a forma-alvo */
+                var img = new Image();
+                img.onload = function () {
+                    try {
+                        var c = document.createElement('canvas'), L = 160; c.width = L; c.height = L;
+                        var g = c.getContext('2d'); g.drawImage(img, 0, 0, L, L);
+                        var d = g.getImageData(0, 0, L, L).data, pts = [];
+                        for (var y = 0; y < L; y += 1) for (var x = 0; x < L; x += 1) { var i = (y * L + x) * 4; if (d[i] + d[i + 1] + d[i + 2] > 520) pts.push([(x / L - 0.5) * 2.1, (y / L - 0.5) * 2.1]); }
+                        pronto(pts.length > 200 ? pts : []);
+                    } catch (e) { pronto([]); }
+                };
+                img.onerror = function () { pronto([]); };
+                img.src = '/logo.jpg';
+            }
+            function lim(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+            function suave(x) { x = lim(x); return x * x * (3 - 2 * x); }
+            function saida(x) { x = lim(x); return 1 - Math.pow(1 - x, 3); }
+            function escolherRotulos() { rotulos = []; for (var k = 0; k < 6; k++) rotulos.push(Math.floor(Math.random() * N)); }
+            function quadro(agora) {
+                var ms = agora - t0, q = ms % CICLO, primeira = ms < CICLO, tempo = ms / 1000;
+                var cel = W < 640, R = cel ? Math.min(W * 0.40, H * 0.24) : Math.min(W * 0.27, H * 0.30, 330), cx = W / 2, cy = H * (cel ? 0.38 : 0.40), K = cel ? 0.62 : 1;
+                /* quanto o conjunto está "G" (para o giro): sobe durante a montagem, 1 parado, desce ao desfazer, 0 na esfera */
+                var g = q < FIM_MONTA ? suave((q - MONTA_INI) / (MONTA_ESPALHA + MONTA_DUR)) : q < DESFAZ_INI ? 1 : q < DESFAZ_FIM ? 1 - suave((q - DESFAZ_INI) / (DESFAZ_FIM - DESFAZ_INI)) : 0;
+                var desfaz = q >= DESFAZ_INI ? suave((q - DESFAZ_INI) / (DESFAZ_FIM - DESFAZ_INI)) : 0;
+                var giro = (1 - g) * tempo * 0.6 + g * Math.sin(tempo * 0.45) * 0.35, inc = 0.18 * (1 - g) + Math.sin(tempo * 0.3) * 0.05 * g;
+                var cg = Math.cos(giro), sg = Math.sin(giro), ci = Math.cos(inc), si = Math.sin(inc), D = 3.2;
+                ctx.clearRect(0, 0, W, H);
+                var brilho = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.25);
+                brilho.addColorStop(0, 'rgba(10, 44, 255, ' + (0.08 + 0.14 * g) + ')'); brilho.addColorStop(0.55, 'rgba(10, 44, 255, 0.05)'); brilho.addColorStop(1, 'rgba(10, 44, 255, 0)');
+                ctx.fillStyle = brilho; ctx.fillRect(cx - R * 1.3, cy - R * 1.3, R * 2.6, R * 2.6);
+                ctx.globalCompositeOperation = 'lighter';
+                var proj = new Array(N), faiscas = [];
+                for (var k = 0; k < N; k++) {
+                    var p = P[k], x, y, z, mp;
+                    if (q < DESFAZ_INI) {   /* montagem (e o G parado): cada partícula sai da origem no seu momento e vem em espiral */
+                        mp = q < FIM_MONTA + 400 ? saida((q - MONTA_INI - p.atraso) / MONTA_DUR) : 1;
+                        var o = primeira ? p.n : p.s, onda = mp * Math.sin(tempo * 1.6 + p.fase) * 0.035;
+                        x = o[0] + (p.l[0] - o[0]) * mp; y = o[1] + (p.l[1] - o[1]) * mp; z = o[2] + (p.l[2] + onda - o[2]) * mp;
+                        var vira = (1 - mp) * 2.4, cv2 = Math.cos(vira), sv2 = Math.sin(vira), xr = x * cv2 - y * sv2; y = x * sv2 + y * cv2; x = xr;
+                        if (mp > 0.82 && mp < 0.995) faiscas.push(k);
+                    } else {   /* o G se desfaz numa esfera e a esfera gira */
+                        mp = 1 - desfaz;
+                        x = p.l[0] + (p.s[0] - p.l[0]) * desfaz; y = p.l[1] + (p.s[1] - p.l[1]) * desfaz; z = p.l[2] + (p.s[2] - p.l[2]) * desfaz;
+                    }
+                    var x1 = x * cg + z * sg, z1 = -x * sg + z * cg, y1 = y * ci - z1 * si, z2 = y * si + z1 * ci;
+                    var e = Math.min(2.2, D / (D - z2)), px = cx + x1 * R * e, py = cy + y1 * R * e;
+                    var dx = px - mouse.x, dy = py - mouse.y, d2 = dx * dx + dy * dy;
+                    if (d2 < 12000) { var f = (1 - d2 / 12000) * 18, dd = Math.sqrt(d2) || 1; p.ox += (dx / dd * f - p.ox) * 0.18; p.oy += (dy / dd * f - p.oy) * 0.18; } else { p.ox *= 0.9; p.oy *= 0.9; }
+                    px += p.ox; py += p.oy;
+                    var prof = lim((z2 + 1.6) / 3.2), s = p.tam * K * e * (0.75 + g * 0.25);
+                    ctx.globalAlpha = Math.max(0.18, Math.min(1, 0.32 + prof * 0.9));
+                    ctx.fillStyle = p.c;
+                    ctx.fillRect(px - s / 2, py - s / 2, s, s);
+                    proj[k] = [px, py, prof];
+                }
+                /* faísca branca quando a partícula chega no lugar dela */
+                ctx.fillStyle = '#ffffff';
+                for (var fk = 0; fk < faiscas.length; fk += 2) { var fq = proj[faiscas[fk]]; ctx.globalAlpha = 0.85; ctx.fillRect(fq[0] - 1.5, fq[1] - 1.5, 3, 3); }
+                for (var b = 0; b < N; b += 23) { var bq = proj[b]; if (bq[2] > 0.62) { ctx.globalAlpha = 0.5 * Math.abs(Math.sin(tempo * 2 + b)); ctx.fillRect(bq[0] - 1, bq[1] - 1, 2, 2); } }
+                ctx.globalCompositeOperation = 'source-over';
+                /* arco de varredura acompanhando a montagem do G (de cima, sentido horário) */
+                if (q > MONTA_INI && q < FIM_MONTA + 300) {
+                    var frente = lim((q - MONTA_INI) / (MONTA_ESPALHA + 400)), aa = -Math.PI / 2 + frente * Math.PI * 2, rr = R * 1.13;
+                    ctx.globalAlpha = 0.85 * (1 - suave((q - FIM_MONTA + 500) / 800));
+                    ctx.strokeStyle = 'rgba(122, 159, 240, 0.9)'; ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.arc(cx, cy, rr, aa - 0.5, aa); ctx.stroke();
+                    ctx.fillStyle = '#ffffff'; ctx.fillRect(cx + Math.cos(aa) * rr - 2, cy + Math.sin(aa) * rr - 2, 4, 4);
+                    ctx.font = '400 10px JetBrains Mono, monospace'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.fillText('GEX · ' + Math.round(frente * 100) + '%', cx + Math.cos(aa) * (rr + 14) - (Math.cos(aa) < 0 ? 62 : 0), cy + Math.sin(aa) * (rr + 14));
+                }
+                /* coordenadas flutuando junto de algumas partículas (toque "tech" da referência) */
+                ctx.font = '400 10px JetBrains Mono, monospace'; ctx.textBaseline = 'middle';
+                var feitos = [];
+                for (var r = 0; r < rotulos.length; r++) {
+                    var u = proj[rotulos[r]]; if (!u || u[2] < 0.45) continue;
+                    var perto = false; for (var f2 = 0; f2 < feitos.length; f2++) { if (Math.abs(feitos[f2][0] - u[0]) < 150 && Math.abs(feitos[f2][1] - u[1]) < 26) perto = true; } if (perto) continue; feitos.push(u);
+                    ctx.globalAlpha = 0.5; ctx.strokeStyle = 'rgba(181, 203, 246, 0.6)'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(u[0] + 3, u[1]); ctx.lineTo(u[0] + 22, u[1] - 12); ctx.stroke();
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+                    ctx.fillText('x: ' + Math.round(u[0]) + '  y: ' + Math.round(u[1]), u[0] + 26, u[1] - 12);
+                }
+                ctx.globalAlpha = 1;
+                requestAnimationFrame(quadro);
+            }
+            addEventListener('resize', medir);
+            addEventListener('pointermove', function (e) { mouse.x = e.clientX; mouse.y = e.clientY; hud.textContent = 'x: ' + String(Math.round(e.clientX)).padStart(4, '0') + ' · y: ' + String(Math.round(e.clientY)).padStart(4, '0'); });
+            addEventListener('pointerleave', function () { mouse.x = -9999; mouse.y = -9999; });
+            medir();
+            pontosDoLogo(function (alvos) {
+                if (W < 640) N = 1900;
+                montar(alvos); escolherRotulos();
+                setInterval(escolherRotulos, 3200);
+                t0 = performance.now();
+                requestAnimationFrame(quadro);
+            });
+        })();
+    </script>
+</body>
+</html>
     `);
 });
 
@@ -594,9 +778,111 @@ function versaoAgenteIndex(html) {
     return html.replace(/[ \t]*<!-- ADMIN-HTML-INI: [^>]*-->[\s\S]*?<!-- ADMIN-HTML-FIM: [^>]*-->[ \t]*(\r?\n)?/g, '')
                .replace(/[ \t]*\/\* ADMIN-JS-INI: [^*]*\*\/[\s\S]*?\/\* ADMIN-JS-FIM: [^*]*\*\/[ \t]*(\r?\n)?/g, '');
 }
+// 🔒 30/10/2026: o index sai ENXUTO para o navegador — sem comentários (HTML, CSS e JS) e sem indentação. Não muda o que a página faz:
+// cada <script> enxugado tem a sintaxe conferida (vm.Script) e, se não passar, aquele bloco sai como estava. Se der qualquer erro, sai o arquivo inteiro como antes.
+// Acompanha o bloqueio de botão direito/atalhos que está no próprio index. (Esconder 100% não existe: o navegador precisa receber o código para mostrar a tela.)
+const vmEnxugar = require('vm');
+
+function enxugarJs(src) {
+    const linhas = []; let ln = '', i = 0, inicioLinha = true;
+    const n = src.length, pilha = []; let chaves = 0;   // pilha: templates abertos (profundidade de chaves de cada ${ })
+    const PALAVRAS = /(?:^|[^\w$])(return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await|instanceof)$/;
+    const SIMBOLOS = '(,=:[!&|?{};+-*%<>~^';
+    const regexPode = () => {
+        let t = ln.trimEnd();
+        for (let k = linhas.length - 1; !t && k >= 0; k--) t = linhas[k];
+        if (!t) return true;
+        return SIMBOLOS.includes(t[t.length - 1]) || PALAVRAS.test(t.slice(-12));
+    };
+    const fimLinha = () => { ln = ln.trimEnd(); if (ln) linhas.push(ln); ln = ''; inicioLinha = true; };
+    function lerString(q) {
+        const a = i; i++;
+        while (i < n) { const c = src[i]; i++; if (c === '\\') { i++; continue; } if (c === q || c === '\n') break; }
+        return src.slice(a, i);
+    }
+    function lerTemplate() {   // texto de template até a crase (fecha) ou ${ (abre expressão)
+        const a = i;
+        while (i < n) {
+            const c = src[i];
+            if (c === '\\') { i += 2; continue; }
+            if (c === '`') { i++; return { s: src.slice(a, i), fechou: true }; }
+            if (c === '$' && src[i + 1] === '{') { i += 2; return { s: src.slice(a, i), fechou: false }; }
+            i++;
+        }
+        return { s: src.slice(a, i), fechou: true };
+    }
+    function lerRegex() {
+        const a = i; let classe = false; i++;
+        while (i < n) {
+            const c = src[i]; i++;
+            if (c === '\\') { i++; continue; }
+            if (c === '[') classe = true; else if (c === ']') classe = false;
+            else if ((c === '/' && !classe) || c === '\n') break;
+        }
+        while (i < n && /[a-z]/i.test(src[i])) i++;
+        return src.slice(a, i);
+    }
+    const ESPECIAIS = new Set(['/', '"', "'", '`', '{', '}', '\r', '\n']);
+    while (i < n) {
+        const c = src[i], d = src[i + 1];
+        if (inicioLinha && (c === ' ' || c === '\t')) { i++; continue; }
+        if (c === '\r') { i++; continue; }
+        if (c === '\n') { fimLinha(); i++; continue; }
+        inicioLinha = false;
+        if (c === '/' && d === '/') { while (i < n && src[i] !== '\n') i++; continue; }
+        if (c === '/' && d === '*') {
+            const f = src.indexOf('*/', i + 2), e = f < 0 ? n : f + 2, multi = src.slice(i, e).includes('\n');
+            i = e; if (multi) fimLinha(); else if (ln && !/\s$/.test(ln)) ln += ' ';
+            continue;
+        }
+        if (c === '"' || c === "'") { ln += lerString(c); continue; }
+        if (c === '`') { i++; const r = lerTemplate(); ln += '`' + r.s; if (!r.fechou) { pilha.push(chaves); chaves = 0; } continue; }
+        if (c === '/' && regexPode()) { ln += lerRegex(); continue; }
+        if (c === '{') { chaves++; ln += c; i++; continue; }
+        if (c === '}') {
+            if (pilha.length && chaves === 0) { i++; const r = lerTemplate(); ln += '}' + r.s; if (r.fechou) chaves = pilha.pop(); continue; }
+            chaves--; ln += c; i++; continue;
+        }
+        let j = i + 1; while (j < n && !ESPECIAIS.has(src[j])) j++;   // trecho comum de código: copia de uma vez
+        ln += src.slice(i, j); i = j;
+    }
+    fimLinha();
+    return linhas.join('\n');
+}
+
+function enxugarCss(src) {
+    let out = '', i = 0;
+    while (i < src.length) {
+        const c = src[i];
+        if (c === '"' || c === "'") { const j = src.indexOf(c, i + 1); out += src.slice(i, j < 0 ? src.length : j + 1); i = j < 0 ? src.length : j + 1; continue; }
+        if (c === '/' && src[i + 1] === '*') { const f = src.indexOf('*/', i + 2); i = f < 0 ? src.length : f + 2; continue; }
+        out += c; i++;
+    }
+    return out.split(/\r?\n/).map(l => l.trim()).filter(Boolean).join('\n');
+}
+
+function enxugarHtml(html) {
+    const partes = html.split(/(<script\b[^>]*>[\s\S]*?<\/script>|<style\b[^>]*>[\s\S]*?<\/style>|<pre\b[\s\S]*?<\/pre>|<textarea\b[\s\S]*?<\/textarea>)/i);
+    let falhas = 0;
+    const saida = partes.map((p, k) => {
+        if (k % 2 === 0) return p.replace(/<!--(?!\[if)[\s\S]*?-->/g, '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).join('\n');
+        if (/^<pre|^<textarea/i.test(p)) return p;
+        const m = /^(<(script|style)\b[^>]*>)([\s\S]*?)(<\/\2>)$/i.exec(p);
+        if (!m) return p;
+        if (m[2].toLowerCase() === 'style') return m[1] + '\n' + enxugarCss(m[3]) + '\n' + m[4];
+        if (/\bsrc=/.test(m[1]) || !m[3].trim()) return p;
+        try { const js = enxugarJs(m[3]); new vmEnxugar.Script(js); return m[1] + '\n' + js + '\n' + m[4]; }
+        catch (e) { falhas++; return p; }   // não passou na conferência: sai como estava
+    }).join('\n');
+    if (falhas) console.warn('🔒 enxugar index:', falhas, 'bloco(s) de script saíram sem enxugar (a conferência de sintaxe não passou)');
+    return saida;
+}
+function enxugarIndex(html) {
+    try { return enxugarHtml(html); } catch (e) { console.warn('🔒 enxugar index falhou, vai o arquivo como está:', e.message); return html; }
+}
 function indexDoPerfil(admin) {
     const st = fs.statSync(ARQ_INDEX);
-    if (st.mtimeMs !== indexMem.mtime) { const html = fs.readFileSync(ARQ_INDEX, 'utf8'); indexMem = { mtime: st.mtimeMs, admin: html, agente: versaoAgenteIndex(html) }; }
+    if (st.mtimeMs !== indexMem.mtime) { const html = fs.readFileSync(ARQ_INDEX, 'utf8'); indexMem = { mtime: st.mtimeMs, admin: enxugarIndex(html), agente: enxugarIndex(versaoAgenteIndex(html)) }; }   // 🔒 30/10/2026: enxuto (sem comentários) — os marcadores ADMIN-* são cortados ANTES
     return admin ? indexMem.admin : indexMem.agente;
 }
 app.get(['/', '/index.html'], verificarLogin, (req, res) => {
@@ -6815,7 +7101,43 @@ app.get('/api/q3', async (req, res) => {
             const timeDaCel = c => { const s = String(c || '').toUpperCase(); if (s.includes('SMS')) return 'SMS'; if (s.includes('BKO')) return 'BKO'; if (s.includes('48')) return '48H'; if (s.includes('SAC')) return 'SAC'; if (s.includes('RET')) return 'RET'; return 'OUTROS'; };
             (rt.data.values || []).forEach(r => { const n = norm(r[0]); const c = r[1]; if (n && c) times[n] = timeDaCel(c); });
         } catch (e) { console.log('[q3] times indisponivel:', e.message); }
-        res.json({ success: true, valores, times });
+        // 30/10/2026: cobertura e distribuição das notas por mês, contadas na BASE_MONITORIA (mesma planilha, só leitura).
+        // Cada mês: monitorias, NCG (coluna NCG = Sim), notas por faixa, analistas monitorados e quantos tiveram os 4 ciclos.
+        // Também: o time de quem não está na BASE DE MÉDIA (pela última monitoria fora da adaptação) e quem foi monitorado no mês mais recente (ativos).
+        let monitorias = [], ativos = [], mesMaisRecente = '';
+        try {
+            const rb = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'BASE_MONITORIA'!A1:Z` });
+            const porMes = {}, timeBase = {}, nomesPorMes = {};
+            const normQ3 = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+            (rb.data.values || []).forEach((r, i) => {
+                if (i < 4) return;
+                const nome = String(r[2] || '').trim(), mes = String(r[8] || '').trim();
+                if (!nome || !mes || mes.toUpperCase() === 'MES_REF') return;
+                const sigla = qualSiglaDoSetor(String(r[1] || '').toUpperCase(), normalizeNome(nome));
+                if (sigla !== 'ADAPTACAO') timeBase[normQ3(nome)] = sigla;   // a linha mais nova vence (a base está em ordem de data)
+                const nm = nomesPorMes[mes] || (nomesPorMes[mes] = {});   // nome -> maior ciclo em que foi monitorado no mês
+                nm[normQ3(nome)] = Math.max(nm[normQ3(nome)] || 0, parseInt(r[3]) || 0);
+                const m = porMes[mes] || (porMes[mes] = { mes, monitorias: 0, ncg: 0, nota100: 0, de90a99: 0, de80a89: 0, abaixo80: 0, ciclosPorAnalista: {} });
+                const nota = parseFloat(String(r[5] || '0').replace('%', '').replace(',', '.')) || 0;
+                m.monitorias++;
+                if (String(r[6] || '').trim().toUpperCase() === 'SIM') m.ncg++;
+                if (nota >= 100) m.nota100++; else if (nota >= 90) m.de90a99++; else if (nota >= 80) m.de80a89++; else m.abaixo80++;
+                const k = normalizeNome(nome);
+                (m.ciclosPorAnalista[k] = m.ciclosPorAnalista[k] || new Set()).add(parseInt(r[3]) || 0);
+            });
+            monitorias = Object.values(porMes).map(m => {
+                const ciclos = Object.values(m.ciclosPorAnalista);
+                const { ciclosPorAnalista, ...resto } = m;
+                return { ...resto, analistas: ciclos.length, analistasCom4: ciclos.filter(s => s.size >= 4).length };
+            });
+            Object.keys(timeBase).forEach(n => { if (!times[n] || times[n] === 'OUTROS') times[n] = timeBase[n]; });   // só completa: o time da BASE DE MÉDIA continua valendo
+            mesMaisRecente = Object.keys(nomesPorMes).sort(qualMesesDoMaisNovo)[0] || '';
+            if (mesMaisRecente) {   // ativo = monitorado em um dos 2 últimos ciclos do mês mais recente (quem saiu no meio do mês fica de fora)
+                const nm = nomesPorMes[mesMaisRecente], ultimo = Math.max(...Object.values(nm));
+                ativos = Object.keys(nm).filter(n => nm[n] >= ultimo - 1);
+            }
+        } catch (e) { console.log('[q3] BASE_MONITORIA indisponivel:', e.message); }
+        res.json({ success: true, valores, times, monitorias, ativos, mesMaisRecente });
     } catch (e) { console.error('[q3]', e.message); res.status(500).json({ success: false, error: e.message }); }
 });
 
