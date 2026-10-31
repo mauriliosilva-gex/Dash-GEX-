@@ -640,9 +640,9 @@
         }
     </style>
     <style id="gx-pos-holograma">
-        /* 🛰️ 31/10/2026: HOLOGRAMA FUTURISTA no número de posição — hexágono de vidro luminoso flutuando, linhas de varredura e faixa de luz,
-           anel de projetor inclinado girando na base, feixe de luz subindo, número com aberração ciano/azul e "glitch" ocasional.
-           O brilho segue o contorno do hexágono (drop-shadow no conjunto). 1º/2º/3º mais intensos. As faixas coloridas das linhas do pódio não mudam. */
+        /* 🛰️ 31/10/2026: HOLOGRAMA FUTURISTA, versão ECONÔMICA — mesmo desenho parado (hexágono de vidro com linhas de varredura,
+           anel de projetor, feixe de luz, número luminoso com aberração ciano/azul). Movimento só com transform/opacity
+           (desenhado pela placa de vídeo) e só nos números visíveis: a classe .gx-holo-on é ligada pelo script #gx-holo-visivel. */
         @layer utilities {
             .gx-pos, .gx-pos-1, .gx-pos-2, .gx-pos-3 {
                 --h: 125, 225, 255; --h2: 61, 120, 255; --forca: 1; --tam: 38px;
@@ -652,61 +652,98 @@
                 animation: none !important; isolation: isolate; font-family: var(--font-display);
                 filter: drop-shadow(0 0 calc(4px * var(--forca)) rgba(var(--h2), 0.85)) drop-shadow(0 0 1px rgba(var(--h), 0.9));
             }
-            /* hexágono de vidro (flutua de leve) */
+            /* hexágono de vidro (desenho fixo: linhas de varredura + luz interna) */
             .gx-pos::before {
                 content: "" !important; position: absolute; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 8px !important; width: auto !important; height: auto !important;
                 border: 0 !important; border-radius: 0 !important; opacity: 1 !important; filter: none !important; z-index: -1;
                 clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
                 background:
-                    linear-gradient(180deg, transparent 0%, rgba(var(--h), 0.6) 50%, transparent 60%) 0 -80px / 100% 80px no-repeat,
                     repeating-linear-gradient(180deg, rgba(var(--h), 0.22) 0 1px, transparent 1px 3px),
                     radial-gradient(circle at 50% 35%, rgba(var(--h), 0.45), rgba(var(--h2), 0.10) 70%),
                     linear-gradient(160deg, rgba(var(--h), 0.30), rgba(var(--h2), 0.14) 60%, rgba(var(--h2), 0.32)) !important;
-                animation: gxHoloVarre2 2.8s linear infinite, gxHoloFlutua 3.6s ease-in-out infinite !important;
+                animation: none !important;
             }
-            /* anel do projetor: elipse inclinada girando na base */
+            /* brilho que passa pelo hexágono: camada própria, só esmaece (opacity) — parada fica invisível, como antes */
+            .gx-pos b::after {
+                content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 8px; z-index: -1; pointer-events: none; opacity: 0;
+                clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+                background: linear-gradient(165deg, transparent 20%, rgba(var(--h), 0.55) 48%, rgba(255, 255, 255, 0.35) 52%, transparent 78%);
+            }
+            /* anel do projetor: elipse inclinada (gira com transform) */
             .gx-pos::after {
                 content: "" !important; position: absolute; left: 50% !important; right: auto !important; top: auto !important; bottom: -1px !important;
                 width: calc(var(--tam) * 1.1) !important; height: calc(var(--tam) * 1.1) !important; border: 0 !important; border-radius: 50% !important; z-index: -2; filter: none !important; opacity: 0.95 !important;
                 background: conic-gradient(from 0deg, rgba(var(--h), 1) 0 22%, rgba(var(--h), 0.25) 22% 50%, rgba(var(--h), 1) 50% 72%, rgba(var(--h), 0.25) 72% 100%) !important;
                 -webkit-mask: radial-gradient(circle, transparent 62%, #000 64%, #000 70%, transparent 72%); mask: radial-gradient(circle, transparent 62%, #000 64%, #000 70%, transparent 72%);
                 transform: translateX(-50%) translateY(47%) scaleY(0.26) rotate(0deg);
-                animation: gxHoloAnel 3.4s linear infinite !important;
+                animation: none !important;
             }
-            /* número: luz própria, aberração de cor e glitch de vez em quando; o feixe sai da base até o hexágono */
+            /* número: luz própria e aberração de cor fixas (o "glitch" agora só pisca a opacidade) */
             .gx-pos b, .gx-pos-1 b, .gx-pos-2 b, .gx-pos-3 b {
                 position: static; background: none !important; -webkit-background-clip: border-box !important; background-clip: border-box !important;
                 color: #effbff !important; font-weight: 600 !important; font-size: 17px; letter-spacing: -0.01em;
                 text-shadow: 1px 0 rgba(0, 245, 255, 0.8), -1px 0 rgba(90, 110, 255, 0.8), 0 0 8px rgba(var(--h), 1), 0 0 16px rgba(var(--h2), 0.7);
-                animation: gxHoloGlitch 4.6s steps(1) infinite;
+                animation: none;
             }
             .gx-pos b::before { content: ""; position: absolute; left: 50%; bottom: 0; width: 70%; height: 12px; transform: translateX(-50%); z-index: -1;
                 clip-path: polygon(38% 100%, 62% 100%, 100% 0, 0 0); background: linear-gradient(to top, rgba(var(--h), 0.75), rgba(var(--h), 0.05)); opacity: 0.8; }
             .gx-pos i { font-style: normal; font-size: 8px; font-weight: 600; color: rgba(var(--h), 0.95) !important; transform: translateY(-5px); text-shadow: 0 0 6px rgba(var(--h), 0.9); }
-            /* pódio: mais intenso; o 1º maior */
             .gx-pos-1 { --forca: 1.7; --tam: 42px; }
             .gx-pos-2 { --forca: 1.4; }
             .gx-pos-3 { --forca: 1.25; }
             .gx-pos-1 b { font-size: 19px; }
-            @keyframes gxHoloVarre2 { 0% { background-position: 0 -80px, 0 0, 0 0, 0 0; } 70%, 100% { background-position: 0 80px, 0 0, 0 0, 0 0; } }
-            @keyframes gxHoloFlutua { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
-            @keyframes gxHoloAnel { to { transform: translateX(-50%) translateY(47%) scaleY(0.26) rotate(360deg); } }
-            @keyframes gxHoloGlitch {
-                0%, 88%, 100% { opacity: 1; text-shadow: 1px 0 rgba(0, 245, 255, 0.8), -1px 0 rgba(90, 110, 255, 0.8), 0 0 8px rgba(var(--h), 1), 0 0 16px rgba(var(--h2), 0.7); }
-                90% { opacity: 0.6; text-shadow: 3px 0 rgba(0, 245, 255, 0.9), -3px 0 rgba(90, 110, 255, 0.9), 0 0 8px rgba(var(--h), 1); }
-                92% { opacity: 1; text-shadow: -2px 0 rgba(0, 245, 255, 0.9), 2px 0 rgba(90, 110, 255, 0.9), 0 0 12px rgba(var(--h), 1); }
-                94% { opacity: 0.8; }
-            }
+
+            /* ── movimento: SÓ quando o número está visível (.gx-holo-on) e só com transform/opacity ── */
+            .gx-holo-on::after { will-change: transform; animation: gxHoloAnel 3.4s linear infinite !important; }
+            .gx-holo-on b::after { will-change: opacity; animation: gxHoloBrilho 2.8s ease-in-out infinite; }
+            .gx-holo-on b { animation: gxHoloGlitch 4.6s steps(1) infinite; }
+            @keyframes gxHoloAnel { from { transform: translateX(-50%) translateY(47%) scaleY(0.26) rotate(0deg); } to { transform: translateX(-50%) translateY(47%) scaleY(0.26) rotate(360deg); } }
+            @keyframes gxHoloBrilho { 0%, 100% { opacity: 0; } 45% { opacity: 0.9; } 70% { opacity: 0; } }
+            @keyframes gxHoloGlitch { 0%, 88%, 100% { opacity: 1; } 90% { opacity: 0.55; } 92% { opacity: 1; } 94% { opacity: 0.75; } }
+
             /* tema claro (linhas comuns): azul mais forte para aparecer no fundo claro */
             html:not(.dark) .gx-pos:not(.gx-pos-1, .gx-pos-2, .gx-pos-3) { --h: 40, 125, 255; --h2: 5, 47, 211; filter: drop-shadow(0 0 3px rgba(5, 47, 211, 0.45)); }
             html:not(.dark) .gx-pos:not(.gx-pos-1, .gx-pos-2, .gx-pos-3) b { color: #052fd3 !important; text-shadow: 0 0 6px rgba(40, 125, 255, 0.5), 1px 0 rgba(0, 200, 255, 0.35); }
-            /* tamanhos menores (ranking e listas do Q3) */
+            /* tamanhos menores (ranking e listas do Q3); o mini não anima */
             .gx-pos-sm { --tam: 32px; }
             .gx-pos-sm b { font-size: 14px !important; }
             .gx-pos-xs { --tam: 22px; height: 20px !important; padding-bottom: 0; margin-right: 8px; }
-            .gx-pos-xs::before { bottom: 0 !important; animation: gxHoloVarre2 2.8s linear infinite !important; }
-            .gx-pos-xs b { font-size: 11px !important; animation: none; }
-            .gx-pos-xs::after, .gx-pos-xs b::before { display: none !important; }
+            .gx-pos-xs::before, .gx-pos-xs b::after { bottom: 0 !important; }
+            .gx-pos-xs b { font-size: 11px !important; animation: none !important; }
+            .gx-pos-xs::after, .gx-pos-xs b::before, .gx-pos-xs b::after { display: none !important; }
+
+            /* tela de carregamento: o ponto só pisca enquanto ela aparece */
+            #gx-carga.gx-carga-fora .gx-carga-msg i { animation: none !important; }
+        }
+    </style>
+    <script id="gx-holo-visivel">
+        /* 🛰️ 31/10/2026: liga o movimento dos hologramas só nos números que estão na tela (aba escondida, outra tela ou fora da rolagem = parado).
+           Observa números novos quando o Dash redesenha as tabelas; solta os que saíram da página. Não mexe em dados nem em lógica. */
+        (function () {
+            if (!('IntersectionObserver' in window)) return;
+            var vistos = new WeakSet();
+            var io = new IntersectionObserver(function (lista) {
+                lista.forEach(function (e) {
+                    var el = e.target;
+                    if (!el.isConnected) { io.unobserve(el); return; }
+                    el.classList.toggle('gx-holo-on', e.isIntersecting);
+                });
+            }, { threshold: 0.2 });
+            function varrer() {
+                var els = document.querySelectorAll('.gx-pos:not(.gx-pos-xs)');
+                for (var k = 0; k < els.length; k++) { if (!vistos.has(els[k])) { vistos.add(els[k]); io.observe(els[k]); } }
+            }
+            var fila = false;
+            function agendar() { if (fila) return; fila = true; setTimeout(function () { fila = false; varrer(); }, 400); }
+            function iniciar() { varrer(); new MutationObserver(agendar).observe(document.body, { childList: true, subtree: true }); }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+        })();
+    </script>
+    <style id="gx-recuperado-verde">
+        /* 31/10/2026: o valor RECUPERADO (o que a empresa recuperou) fica em verde para admin e agente, nos dois temas — exceção à regra dos cartões neutros */
+        @layer utilities {
+            html body #card-recuperado-total { color: #059669 !important; }
+            html.dark body #card-recuperado-total { color: #34d399 !important; text-shadow: 0 0 18px rgba(52, 211, 153, 0.25); }
         }
     </style>
 </head>
@@ -5331,7 +5368,7 @@
             const qas = (qa.agentes || []).map(q => ({ q, chave: comNorm(q.nome) })).filter(x => x.chave);
             const ligarQA = (p, x) => {
                 if (p.qa != null) p.obs.push('2 notas de Qualidade com o mesmo nome: ficou a primeira');
-                else { const qv = Number(x.q.qual); p.qa = x.q.qual == null || x.q.qual === '' || isNaN(qv) ? null : qv; p.ciclos = [x.q.c1, x.q.c2, x.q.c3, x.q.c4]; p.timeQA = x.q.time || null; }
+                else { const qv = Number(x.q.qual); p.qa = x.q.qual == null || x.q.qual === '' || isNaN(qv) ? null : qv; p.ciclos = [x.q.c1, x.q.c2, x.q.c3, x.q.c4]; p.timeQA = x.q.time || null; p.adaptacao = (Array.isArray(x.q.adapt) && x.q.adapt.length > 0) || x.q.emAdaptacao === true || String(x.q.time || '').toUpperCase() === 'ADAPTACAO'; }   // 31/10/2026: teve monitoria de Adaptação no mês
                 juntar(p, x.chave, x.q.nome, 'Qualidade');
             };
             const pendQA = [];
@@ -5370,12 +5407,14 @@
                     p.kpi1 = p.prereq === true ? comValorTRV(p.trv) : 0;
                 } else { p.valorMov = null; p.metaValor = null; p.prereq = null; p.trv = null; p.kpi1 = 0; }
                 p.teto = p.participaTRV ? COM_PLANO.maximo : COM_PLANO.tetoSemTRV;
+                if (p.adaptacao) { p.kpi1 = 0; p.kpi2 = 0; p.kpi3 = 0; p.teto = 0; }   // 31/10/2026: Adaptação no mês = fora da régua de comissão (só informativo)
                 p.total = p.kpi1 + p.kpi2 + p.kpi3;
                 // observações (curtas, o que falta ou o que conferir)
                 const o = [];
+                if (p.adaptacao) o.push('Adaptação no mês: fora da régua de comissão (Tickets, Resultado e Qualidade); os números ficam só para informação');
                 const qtd = x => `${x.toLocaleString('pt-BR')} ${x === 1 ? 'ticket' : 'tickets'}`;
-                if (p.tickets < 1600) o.push(`${falta} ${qtd(1600 - p.tickets)} p/ R$ 375`);
-                else if (p.tickets < 2000) o.push(`${falta} ${qtd(2000 - p.tickets)} p/ R$ 500`);
+                if (!p.adaptacao && p.tickets < 1600) o.push(`${falta} ${qtd(1600 - p.tickets)} p/ R$ 375`);
+                else if (!p.adaptacao && p.tickets < 2000) o.push(`${falta} ${qtd(2000 - p.tickets)} p/ R$ 500`);
                 if (p.qa == null) o.push(qa.mes ? 'sem nota de QA no mês' : 'mês sem notas de QA');
                 if (p.ret && p.prereq === false) o.push(`meta de valor não batida (${fmtUS(p.valorMov)} de ${fmtUS(p.metaValor)})`);
                 if (p.ret && p.prereq === null) o.push('sem meta de valor na planilha (KPI 1 não pago)');
@@ -5535,17 +5574,18 @@
                 };
                 v(2, i + 1, '0', { font: fonte(9, C.cinzaClaro, true) });
                 v(3, p.nome, null, { font: fonte(10, C.texto, true), alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } });
-                v(4, COM_TIMES[p.time] || (p.time || '—'), null, { font: fonte(9, C.cinza, true) });
+                const ad = !!p.adaptacao;   // 31/10/2026: Adaptação no mês — informativo, fora da régua
+                v(4, (p.time === 'ADAPTACAO' ? 'Adaptação' : (COM_TIMES[p.time] || (p.time || '—')) + (ad ? ' · Adaptação' : '')), null, { font: ad ? fonte(9, C.ambarTxt, true) : fonte(9, C.cinza, true), fill: ad ? fill(C.ambar) : fill(z) });
                 v(5, p.tickets, '#,##0');
                 v(6, { formula: `E${r}*7/${per.dias}`, result: p.tickets * 7 / per.dias }, '#,##0');
-                v(7, { formula: `IF(E${r}>=2000,500,IF(E${r}>=1600,375,0))`, result: p.kpi2 }, RS);
+                v(7, ad ? 0 : { formula: `IF(E${r}>=2000,500,IF(E${r}>=1600,375,0))`, result: p.kpi2 }, RS);
                 v(8, p.qa == null ? null : Math.round(p.qa * 100) / 10000, '0.00%');
-                v(9, { formula: `IF(ISNUMBER(H${r}),IF(ROUND(H${r},4)>=1,375,IF(ROUND(H${r},4)>=0.9,250,IF(ROUND(H${r},4)>=0.8,125,0))),0)`, result: p.kpi3 }, RS);
+                v(9, ad ? 0 : { formula: `IF(ISNUMBER(H${r}),IF(ROUND(H${r},4)>=1,375,IF(ROUND(H${r},4)>=0.9,250,IF(ROUND(H${r},4)>=0.8,125,0))),0)`, result: p.kpi3 }, RS);
                 v(10, p.valorMov == null ? null : p.valorMov, US);
                 v(11, p.metaValor == null ? null : p.metaValor, US);
                 v(12, { formula: `IF(AND(ISNUMBER(J${r}),ISNUMBER(K${r})),IF(J${r}>=K${r},"Sim","Não"),"—")`, result: p.prereq === true ? 'Sim' : (p.prereq === false ? 'Não' : '—') }, null, { font: fonte(10, C.cinzaClaro, true) });
                 v(13, p.trv == null ? null : Math.round(p.trv * 100) / 10000, '0.00%');
-                v(14, { formula: `IF(L${r}="Sim",IF(ROUND(M${r},4)>0.6,750,IF(ROUND(M${r},4)>=0.51,500,IF(ROUND(M${r},4)>=0.4,250,0))),0)`, result: p.kpi1 }, RS);
+                v(14, ad ? 0 : { formula: `IF(L${r}="Sim",IF(ROUND(M${r},4)>0.6,750,IF(ROUND(M${r},4)>=0.51,500,IF(ROUND(M${r},4)>=0.4,250,0))),0)`, result: p.kpi1 }, RS);
                 v(15, { formula: `G${r}+I${r}+N${r}`, result: p.total }, RS, { font: fonte(11, C.texto, true) });
                 v(16, p.teto, RS0, { font: fonte(9, C.cinza) });
                 v(17, { formula: `IF(P${r}>0,O${r}/P${r},0)`, result: p.teto ? p.total / p.teto : 0 }, '0%', { font: fonte(9, C.texto, true) });
