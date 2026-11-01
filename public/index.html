@@ -2020,6 +2020,14 @@
                                     .sla-fila-clic:hover, .sla-fila-clic:focus-visible { border-color: var(--sla-forte); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sla-forte) 18%, transparent); outline: none; transform: translateY(-1px); }
                                     .sla-fila-ver { color: var(--sla-forte); opacity: .75; }
                                     .sla-fila-clic:hover .sla-fila-ver { opacity: 1; }
+                                    .sla-fila-quem { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .6rem; }
+                                    .sla-fila-chip { font-size: 10px; font-weight: 700; line-height: 1; padding: .3rem .5rem; border-radius: 99px; border: 1px solid var(--gx-line); color: var(--gx-ink-muted); background: transparent; cursor: pointer; transition: border-color .15s, color .15s; }
+                                    .sla-fila-chip b { color: var(--gx-ink); font-variant-numeric: tabular-nums; margin-left: .2rem; }
+                                    .sla-fila-chip:hover, .sla-fila-chip:focus-visible { border-color: var(--sla-forte); color: var(--sla-forte); outline: none; }
+                                    .sla-fila-chip.sla-crit-chip b { color: var(--sla-crit); }
+                                    .sla-fila-novos { display: inline-block; margin-top: .45rem; font-size: 10.5px; font-weight: 600; color: var(--gx-ink-muted); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+                                    .sla-fila-novos b { color: var(--gx-ink); }
+                                    .sla-fila-novos:hover { color: var(--sla-forte); }
                                     #tkrec-sla thead th, #tkrec-agentes thead th { color: var(--gx-ink-muted); }
                                 }
                             </style>
@@ -2104,22 +2112,26 @@
                                 </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <!-- 31/10/2026: cada bloco abre os tickets (mesma lógica do "Ver Tickets") -->
-                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('nunca')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();slaFilaAbrir('nunca')}" title="Conversa aberta que nunca recebeu resposta de agente · clique para ver os tickets">
-                                        <div class="flex items-center gap-2 rc-eyebrow mb-2"><span class="rc-dot" style="background:var(--sla-crit)"></span>Nunca respondida</div>
+                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('nunca')" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();slaFilaAbrir('nunca')}" title="Conversa aberta há mais de 24h sem nenhuma resposta de agente · clique para ver os tickets">
+                                        <div class="flex items-center gap-2 rc-eyebrow mb-2"><span class="rc-dot" style="background:var(--sla-crit)"></span>Não respondido</div>
                                         <div class="rc-num text-3xl sla-crit" id="sla-fila-nunca">—</div>
-                                        <div class="text-[11px] font-semibold rc-mut mt-1.5">sem resposta ainda</div>
+                                        <div class="text-[11px] font-semibold rc-mut mt-1.5">sem resposta há mais de 24h</div>
+                                        <div class="sla-fila-quem" id="sla-fila-quem-nunca"></div>
+                                        <div id="sla-fila-novos"></div>
                                         <div class="sla-fila-ver text-[10px] font-bold mt-2">Ver tickets ›</div>
                                     </div>
-                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('esperando')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();slaFilaAbrir('esperando')}" title="Já respondida; o cliente falou por último e aguarda retorno · clique para ver os tickets">
+                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('esperando')" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();slaFilaAbrir('esperando')}" title="Já respondida; o cliente falou por último e aguarda retorno · clique para ver os tickets">
                                         <div class="flex items-center gap-2 rc-eyebrow mb-2"><span class="rc-dot" style="background:var(--sla-amb)"></span>Cliente esperando</div>
                                         <div class="rc-num text-3xl" id="sla-fila-esperando">—</div>
                                         <div class="text-[11px] font-semibold rc-mut mt-1.5">o cliente falou por último</div>
+                                        <div class="sla-fila-quem" id="sla-fila-quem-esperando"></div>
                                         <div class="sla-fila-ver text-[10px] font-bold mt-2">Ver tickets ›</div>
                                     </div>
-                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('followup')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();slaFilaAbrir('followup')}" title="Nós falamos por último (cobrando o retorno) — não é falha, é a cadência de follow-up · clique para ver os tickets">
+                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('followup')" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();slaFilaAbrir('followup')}" title="Nós falamos por último (cobrando o retorno) — não é falha, é a cadência de follow-up · clique para ver os tickets">
                                         <div class="flex items-center gap-2 rc-eyebrow mb-2"><span class="rc-dot" style="background:var(--rc-f)"></span>Follow-up nosso</div>
                                         <div class="rc-num text-3xl" id="sla-fila-followup">—</div>
                                         <div class="text-[11px] font-semibold rc-mut mt-1.5">nós falamos por último · não é falha</div>
+                                        <div class="sla-fila-quem" id="sla-fila-quem-followup"></div>
                                         <div class="sla-fila-ver text-[10px] font-bold mt-2">Ver tickets ›</div>
                                     </div>
                                 </div>
@@ -3220,7 +3232,7 @@
             <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-t48-conteudo"></div>
         </div>
     </div>
-    <!-- MODAL: FILA ABERTA DO SLA (31/10/2026) — Ver tickets de Nunca respondida / Cliente esperando / Follow-up nosso -->
+    <!-- MODAL: FILA ABERTA DO SLA (31/10/2026) — Ver tickets de Não respondido (+24h) / Novos / Cliente esperando / Follow-up nosso -->
     <div id="modal-sla-fila" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
@@ -11029,9 +11041,19 @@ async function exportarExcelCartPanda() {
         }
         function slaRenderAgora() {
             const Lf = (slaEstado.resp.linhas || []).filter(x => x.bloco === 'fila');
-            let fNunca = 0, fEsp = 0, fFup = 0, fTot = 0;
-            Lf.forEach(x => { fNunca += +x.v1 || 0; fEsp += +x.v2 || 0; fFup += +x.v3 || 0; fTot += +x.n || 0; });
+            let fNunca = 0, fEsp = 0, fFup = 0, fTot = 0, fNovo = 0;
+            const q = { nunca: { sem: 0, robo: 0 }, esperando: { sem: 0, robo: 0 }, followup: { sem: 0, robo: 0 } };   // 31/10/2026: sem agente e com robô/IA em cada bloco
+            Lf.forEach(x => { fNunca += +x.v1 || 0; fEsp += +x.v2 || 0; fFup += +x.v3 || 0; fTot += +x.n || 0; fNovo += +x.v4 || 0;
+                q.nunca.sem += +x.v5 || 0; q.nunca.robo += +x.v6 || 0; q.esperando.sem += +x.v7 || 0; q.esperando.robo += +x.v8 || 0; q.followup.sem += +x.v9 || 0; q.followup.robo += +x.v10 || 0; });
             setElSla('sla-fila-nunca', tkNum(fNunca)); setElSla('sla-fila-esperando', tkNum(fEsp)); setElSla('sla-fila-followup', tkNum(fFup));
+            const quem = (est, tot) => {   // cada número abre a lista já filtrada (robô/IA · sem agente · com agente)
+                const c = (extra, rot, n, cls, dica) => `<button type="button" class="sla-fila-chip ${cls || ''}" title="${dica}" onclick="event.stopPropagation();slaFilaAbrir('${est}', ${extra})">${rot}<b>${tkNum(n)}</b></button>`;
+                const el = document.getElementById('sla-fila-quem-' + est);
+                if (el) el.innerHTML = c("{robo:'com'}", 'Robô/IA', q[est].robo, '', 'Ver só os que o robô/IA falou') + c("{ag:'sem'}", 'Sem agente', q[est].sem, q[est].sem > 0 ? 'sla-crit-chip' : '', 'Ver só os sem agente atribuído') + c("{ag:'com'}", 'Com agente', Math.max(0, tot - q[est].sem), '', 'Ver só os com agente atribuído');
+            };
+            quem('nunca', fNunca); quem('esperando', fEsp); quem('followup', fFup);
+            const elNovo = document.getElementById('sla-fila-novos');
+            if (elNovo) elNovo.innerHTML = fNovo > 0 ? `<button type="button" class="sla-fila-novos" title="Sem resposta de agente, mas ainda dentro das primeiras 24h" onclick="event.stopPropagation();slaFilaAbrir('novo')">+ <b>${tkNum(fNovo)}</b> novos ainda sem resposta (até 24h) ›</button>` : '';
             setElSla('sla-fila-sub', `${tkNum(fTot)} conversa${fTot === 1 ? '' : 's'} aberta${fTot === 1 ? '' : 's'}`);
             const L = (slaEstado.resp.linhas || []).filter(x => x.bloco === 'agora');
             const porTime = {};
@@ -11047,22 +11069,39 @@ async function exportarExcelCartPanda() {
             const el = document.getElementById('sla-agora-tbody'); if (el) el.innerHTML = linhas || '<tr><td colspan="5" class="py-4 text-center text-gray-500 text-xs font-bold">Ninguém esperando agora 🎉</td></tr>';
         }
         function setElSla(id, txt) { const el = document.getElementById(id); if (el) el.innerText = txt; }
-        // 31/10/2026: "Ver tickets" da Fila aberta — os 3 blocos abrem a lista conversa por conversa (rota /api/recebimento-sla-fila, só leitura),
-        // no mesmo formato do "Ver Tickets" (cartões que filtram, busca, botões no ticket que filtram e "Abrir Conversa"), com o porquê de cada uma.
+        // 31/10/2026: "Ver tickets" da Fila aberta — os blocos abrem a lista conversa por conversa (rota /api/recebimento-sla-fila, só leitura),
+        // no mesmo formato do "Ver Tickets", com o porquê de cada uma. Filtros de seleção múltipla: dentro do mesmo grupo soma (OU), entre grupos cruza (E).
+        // Não respondido = nenhuma resposta de agente e aberta há +24h · Novo = sem resposta, mas ainda nas primeiras 24h.
         const SLA_FILA_EST = {
-            nunca: { rot: 'Nunca respondida', cls: 'bg-red-500/10 text-red-500 border-red-500/30', txt: 'text-red-500', dica: 'Nenhum agente respondeu ainda' },
-            esperando: { rot: 'Cliente esperando', cls: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30', txt: 'text-yellow-500', dica: 'O cliente falou por último e aguarda retorno' },
-            followup: { rot: 'Follow-up nosso', cls: 'bg-gexBlue/10 text-gexCyan border-gexBlue/30', txt: 'text-gexCyan', dica: 'Nós falamos por último — não é falha' }
+            nunca: { rot: 'Não respondido', card: 'Não respondido · +24h', cls: 'bg-red-500/10 text-red-500 border-red-500/30', txt: 'text-red-500', borda: 'border-red-500/60' },
+            novo: { rot: 'Novo sem resposta', card: 'Novo sem resposta · até 24h', cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30', txt: 'text-sky-500', borda: 'border-sky-500/60' },
+            esperando: { rot: 'Cliente esperando', card: 'Cliente esperando', cls: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30', txt: 'text-yellow-500', borda: 'border-yellow-500/60' },
+            followup: { rot: 'Follow-up nosso', card: 'Follow-up nosso', cls: 'bg-gexBlue/10 text-gexCyan border-gexBlue/30', txt: 'text-gexCyan', borda: 'border-gexCyan/60' }
         };
-        const slaFila = { dados: null, ref: null, filtro: 'nunca', busca: '', pill: '', pillRot: '', carregando: false };
-        async function slaFilaAbrir(estado) {
+        const SLA_FILA_ORDEM_EST = ['nunca', 'novo', 'esperando', 'followup'];
+        const SLA_FILA_DIMS = ['est', 'robo', 'ag', 'fx', 'time', 'agente', 'cx'];
+        const SLA_FILA_ROT = {   // rótulo de cada filtro (chips "Filtrando por")
+            est: v => SLA_FILA_EST[v] ? SLA_FILA_EST[v].rot : v,
+            robo: v => v === 'com' ? 'Com robô/IA' : 'Sem robô/IA',
+            ag: v => v === 'com' ? 'Com agente' : 'Sem agente',
+            fx: v => ['', 'Parado até 24h', 'Parado 24–48h', 'Parado +48h'][+v] || v,
+            time: v => 'Time ' + (TK_NOME_TIME[v] || v),
+            agente: v => 'Agente: ' + v,
+            cx: v => 'Caixa: ' + v
+        };
+        const slaFila = { dados: null, ref: null, sel: {}, busca: '', ordem: 'antigo', carregando: false };
+        function slaFilaZerarSel() { slaFila.sel = {}; SLA_FILA_DIMS.forEach(d => { slaFila.sel[d] = new Set(); }); }
+        slaFilaZerarSel();
+        async function slaFilaAbrir(estado, extra) {
             if (!usuarioAtual || usuarioAtual.role !== 'admin') return;
-            slaFila.filtro = estado || 'nunca'; slaFila.busca = ''; slaFila.pill = ''; slaFila.pillRot = '';
+            slaFilaZerarSel(); slaFila.busca = '';
+            if (estado) slaFila.sel.est.add(estado);
+            Object.entries(extra || {}).forEach(([d, v]) => { if (slaFila.sel[d]) slaFila.sel[d].add(String(v)); });
             document.getElementById('modal-sla-fila').classList.remove('hidden');
             const ref = (slaEstado.resp && slaEstado.resp.gerado_em) || '';
             if (slaFila.dados && slaFila.ref === ref) return slaFilaRender(true);
             const cont = document.getElementById('modal-sla-fila-conteudo');
-            document.getElementById('modal-sla-fila-titulo').innerText = 'Fila aberta · ' + SLA_FILA_EST[slaFila.filtro].rot;
+            document.getElementById('modal-sla-fila-titulo').innerText = 'Fila aberta' + (estado && SLA_FILA_EST[estado] ? ' · ' + SLA_FILA_EST[estado].rot : '');
             cont.innerHTML = '<p class="text-gexCyan text-center py-8 font-bold text-sm">⏳ Carregando os tickets...</p>';
             if (slaFila.carregando) return;
             slaFila.carregando = true;
@@ -11078,49 +11117,66 @@ async function exportarExcelCartPanda() {
         }
         function slaFilaFechar() { document.getElementById('modal-sla-fila').classList.add('hidden'); }
         function slaFilaFaixa(m) { return m == null ? 0 : (m < 1440 ? 1 : (m <= 2880 ? 2 : 3)); }   // 1 = até 24h · 2 = 24–48h · 3 = mais de 48h (as mesmas do "Ver Tickets")
-        function slaFilaEspera(tk) {   // o tempo que define a urgência de cada estado
-            return tk.estado === 'nunca' ? tk.aberto_ha_min : (tk.estado === 'esperando' ? tk.ult_cli_min : tk.ult_nos_min);
+        function slaFilaEspera(tk) {   // o tempo parado que define a urgência de cada estado
+            return (tk.estado === 'nunca' || tk.estado === 'novo') ? tk.aberto_ha_min : (tk.estado === 'esperando' ? tk.ult_cli_min : tk.ult_nos_min);
+        }
+        function slaFilaValor(tk, d) {   // valor do ticket em cada grupo de filtro
+            if (d === 'est') return tk.estado;
+            if (d === 'robo') return tk.n_robo > 0 ? 'com' : 'sem';
+            if (d === 'ag') return tk.agente ? 'com' : 'sem';
+            if (d === 'fx') return String(slaFilaFaixa(slaFilaEspera(tk)));
+            if (d === 'time') return tk.setor || 'OUTROS';
+            if (d === 'agente') return tk.agente || 'Sem agente';
+            if (d === 'cx') return tk.caixa || '';
+            return '';
+        }
+        function slaFilaPassa(tk, exceto) {
+            return SLA_FILA_DIMS.every(d => d === exceto || !slaFila.sel[d].size || slaFila.sel[d].has(slaFilaValor(tk, d)));
         }
         function slaFilaPorque(tk) {
             const d = t48Dur, msg = n => n + (n === 1 ? ' mensagem' : ' mensagens');
-            if (tk.estado === 'nunca') {
-                let t = `Aberta há <b>${d(tk.aberto_ha_min)}</b> e <b>nenhum agente respondeu</b> ainda.`;
-                t += tk.n_cli > 0 ? ` O cliente mandou ${msg(tk.n_cli)}, a última há <b>${d(tk.ult_cli_min)}</b>.` : ' Ainda não há mensagem do cliente na conversa.';
-                if (tk.n_robo > 0) t += ` Só o robô/automação falou (${msg(tk.n_robo)}, a última há ${d(tk.ult_robo_min)}) — robô não conta como resposta.`;
-                if (!tk.agente) t += ' Está <b>sem agente atribuído</b>.';
-                return t;
-            }
+            const robo = tk.n_robo > 0 ? ` Só o robô/IA falou (${msg(tk.n_robo)}, a última há ${d(tk.ult_robo_min)}) — robô não conta como resposta.` : '';
+            const cli = tk.n_cli > 0 ? ` O cliente mandou ${msg(tk.n_cli)}, a última há <b>${d(tk.ult_cli_min)}</b>.` : ' Ainda não há mensagem do cliente na conversa.';
+            const semAg = !tk.agente ? ' Está <b>sem agente atribuído</b>.' : '';
+            if (tk.estado === 'nunca') return `Aberta há <b>${d(tk.aberto_ha_min)}</b> (mais de 24h) e <b>nenhum agente respondeu</b>.` + cli + robo + semAg;
+            if (tk.estado === 'novo') return `Aberta há <b>${d(tk.aberto_ha_min)}</b> e ainda sem resposta de agente — está dentro das primeiras 24h.` + cli + robo + semAg;
             if (tk.estado === 'esperando') {
                 let t = `O <b>cliente falou por último</b>: mandou mensagem há <b>${d(tk.ult_cli_min)}</b> e ainda não respondemos.`;
                 t += ` Nossa última resposta foi há ${d(tk.ult_nos_min)} (nós: ${msg(tk.n_nos)} · cliente: ${msg(tk.n_cli)}).`;
                 if (tk.ult_cli_min != null && tk.ult_cli_min > 2880) t += ' <b>Fora do SLA</b> (cliente +48h sem resposta).';
-                return t;
+                if (tk.n_robo > 0) t += ` O robô/IA também falou (${msg(tk.n_robo)}).`;
+                return t + semAg;
             }
             let t = `<b>Nós falamos por último</b> há <b>${d(tk.ult_nos_min)}</b> (cobrando o retorno) e o cliente ainda não respondeu.`;
             t += tk.n_cli > 0 ? ` A última mensagem do cliente foi há ${d(tk.ult_cli_min)}.` : ' O cliente não mandou mensagem nesta conversa.';
-            return t + ' Não é falha — é a cadência de follow-up.';
+            if (tk.n_robo > 0) t += ` O robô/IA também falou (${msg(tk.n_robo)}).`;
+            return t + ' Não é falha — é a cadência de follow-up.' + semAg;
+        }
+        function slaFilaBtn(d, v, txt, cls, titulo) {   // botão de filtro (seleção múltipla): liga/desliga o valor no grupo
+            const on = slaFila.sel[d] && slaFila.sel[d].has(String(v));
+            return `<button type="button" onclick="slaFilaTog(this)" data-d="${d}" data-v="${t48xEsc(v)}" title="${t48xEsc(titulo || ('Filtrar: ' + SLA_FILA_ROT[d](v)))}" class="text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer hover:brightness-125 transition ${on ? 'ring-2 ring-gexCyan ' : ''}${cls}">${txt}</button>`;
         }
         function slaFilaCard(tk) {
-            const E = SLA_FILA_EST[tk.estado], FX = ['', 'até 24h', '24–48h', 'mais de 48h'];
-            const btn = (chave, rot, txt, cls) => `<button type="button" onclick="slaFilaPill(this)" data-pill="${t48xEsc(chave)}" data-pillrot="${t48xEsc(rot)}" title="Filtrar: ${t48xEsc(rot)}" class="text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer hover:brightness-125 transition ${slaFila.pill === chave ? 'ring-2 ring-gexCyan ' : ''}${cls}">${txt}</button>`;
+            const E = SLA_FILA_EST[tk.estado] || SLA_FILA_EST.nunca, FX = ['', 'até 24h', '24–48h', 'mais de 48h'];
             const esp = slaFilaEspera(tk), fx = slaFilaFaixa(esp);
             const corFx = ['', 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30', 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30', 'bg-red-500/10 text-red-500 border-red-500/30'][fx];
-            const rotEsp = tk.estado === 'nunca' ? '⏱️ Sem resposta há ' : (tk.estado === 'esperando' ? '💬 Cliente sem resposta há ' : '⌛ Aguardando o cliente há ');
+            const rotEsp = (tk.estado === 'nunca' || tk.estado === 'novo') ? '⏱️ Sem resposta há ' : (tk.estado === 'esperando' ? '💬 Cliente sem resposta há ' : '⌛ Aguardando o cliente há ');
             const time = TK_NOME_TIME[tk.setor] || tk.setor || 'Sem time', agente = tk.agente || 'Sem agente';
-            const p = [btn('est:' + tk.estado, E.rot, E.rot, E.cls)];
-            if (fx) p.push(btn('fx:' + fx, rotEsp + FX[fx] + (tk.estado === 'esperando' && fx === 3 ? ' (fora do SLA)' : ''), rotEsp + t48Dur(esp) + (tk.estado === 'esperando' && fx === 3 ? ' · fora do SLA' : ''), tk.estado === 'followup' ? 'bg-sky-500/10 text-sky-500 border-sky-500/30' : corFx));
-            p.push(btn('ag:' + agente, '👤 ' + agente, t48xEsc(agente), tk.agente ? 'bg-gexBlue/10 text-gexCyan border-gexBlue/30' : 'bg-red-500/10 text-red-500 border-red-500/30'));
-            p.push(btn('time:' + tk.setor, '👥 Time ' + time, '👥 ' + t48xEsc(time), 'bg-gray-500/10 text-gray-400 border-gray-500/30'));
-            if (tk.caixa) p.push(btn('cx:' + tk.caixa, '📥 ' + tk.caixa, '📥 ' + t48xEsc(tk.caixa), 'bg-gray-500/10 text-gray-500 border-gray-500/20'));
+            const p = [slaFilaBtn('est', tk.estado, E.rot, E.cls)];
+            if (fx) p.push(slaFilaBtn('fx', fx, rotEsp + t48Dur(esp) + (tk.estado === 'esperando' && fx === 3 ? ' · fora do SLA' : ''), tk.estado === 'followup' ? 'bg-sky-500/10 text-sky-500 border-sky-500/30' : corFx, 'Filtrar: parado há ' + FX[fx]));
+            p.push(tk.n_robo > 0 ? slaFilaBtn('robo', 'com', '🤖 Robô/IA · ' + tk.n_robo, 'bg-purple-500/10 text-purple-400 border-purple-500/30') : slaFilaBtn('robo', 'sem', 'Sem robô', 'bg-gray-500/10 text-gray-400 border-gray-500/20'));
+            p.push(tk.agente ? slaFilaBtn('ag', 'com', 'Com agente', 'bg-gexBlue/10 text-gexCyan border-gexBlue/30') : slaFilaBtn('ag', 'sem', 'Sem agente', 'bg-red-500/10 text-red-500 border-red-500/30'));
+            if (tk.agente) p.push(slaFilaBtn('agente', agente, t48xEsc(agente), 'bg-gexBlue/10 text-gexCyan border-gexBlue/30'));
+            p.push(slaFilaBtn('time', tk.setor || 'OUTROS', '👥 ' + t48xEsc(time), 'bg-gray-500/10 text-gray-400 border-gray-500/30'));
+            if (tk.caixa) p.push(slaFilaBtn('cx', tk.caixa, '📥 ' + t48xEsc(tk.caixa), 'bg-gray-500/10 text-gray-500 border-gray-500/20'));
             p.push(`<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-gray-500/10 text-gray-500 border-gray-500/20">✉️ ${tk.n_cli} do cliente · ${tk.n_nos} nossas</span>`);
-            if (tk.n_robo > 0) p.push(btn('robo:1', '🤖 Robô falou', '🤖 ' + tk.n_robo + ' do robô', 'bg-purple-500/10 text-purple-400 border-purple-500/30'));
             const url = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
             return `<div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
                 <div class="min-w-0">
                     <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente || '(sem nome)')}</p>
                     <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${t48xEsc(tk.id)} · 📅 Criado ${t48DataBR(tk.criado_em)}</p>
                     <p class="text-[11px] font-bold mt-1 ${tk.agente ? 'text-gexCyan' : 'text-red-500'}">👤 ${t48xEsc(agente)}</p>
-                    <div class="mt-2 rounded-lg border-l-2 ${tk.estado === 'nunca' ? 'border-red-500/60' : (tk.estado === 'esperando' ? 'border-yellow-500/60' : 'border-gexCyan/60')} bg-white/60 dark:bg-black/30 px-3 py-2">
+                    <div class="mt-2 rounded-lg border-l-2 ${E.borda} bg-white/60 dark:bg-black/30 px-3 py-2">
                         <p class="text-[9px] font-black uppercase tracking-widest text-gray-500">Por que está aqui</p>
                         <p class="text-[11.5px] leading-relaxed text-gray-600 dark:text-gray-300 mt-0.5">${slaFilaPorque(tk)}</p>
                     </div>
@@ -11130,64 +11186,85 @@ async function exportarExcelCartPanda() {
                 <a href="${url}" target="_blank" rel="noopener" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">Abrir Conversa ↗️</a>
             </div>`;
         }
-        function slaFilaChave(tk, k) {
-            if (k === 'est') return tk.estado;
-            if (k === 'fx') return String(slaFilaFaixa(slaFilaEspera(tk)));
-            if (k === 'time') return tk.setor;
-            if (k === 'cx') return tk.caixa;
-            if (k === 'robo') return tk.n_robo > 0 ? '1' : '0';
-            if (k === 'ag') return tk.agente || 'Sem agente';
-            return '';
+        function slaFilaContar(d, todos) {   // quantos tickets cada valor do grupo teria com os OUTROS filtros ligados
+            const c = {}; todos.forEach(t => { if (slaFilaPassa(t, d)) { const v = slaFilaValor(t, d); c[v] = (c[v] || 0) + 1; } }); return c;
+        }
+        function slaFilaTopo(todos) {
+            const cEst = slaFilaContar('est', todos), cRobo = slaFilaContar('robo', todos), cAg = slaFilaContar('ag', todos), cFx = slaFilaContar('fx', todos), cTime = slaFilaContar('time', todos);
+            const totEst = Object.values(cEst).reduce((a, b) => a + b, 0);
+            const card = (v, rot, cls, dica) => { const on = slaFila.sel.est.has(v); return `<button type="button" onclick="slaFilaTog(this)" data-d="est" data-v="${v}" title="${dica}" class="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-black/30 px-3 py-2 hover:border-gexCyan transition-colors cursor-pointer ${on ? 'ring-2 ring-gexCyan' : ''}"><p class="text-[9px] font-black uppercase tracking-widest text-gray-500">${rot}</p><p class="text-lg font-black font-mono ${cls}">${tkNum(cEst[v] || 0)}</p></button>`; };
+            const chip = (d, v, rot, n, extra) => { const on = slaFila.sel[d].has(String(v)); return `<button type="button" onclick="slaFilaTog(this)" data-d="${d}" data-v="${t48xEsc(v)}" class="text-[11px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${on ? 'border-gexCyan text-gexCyan bg-gexBlue/10 ring-1 ring-gexCyan' : 'border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:border-gexCyan'} ${extra || ''}">${rot} <b class="font-mono ${on ? '' : 'text-gray-800 dark:text-white'}">${tkNum(n || 0)}</b></button>`; };
+            const grupo = (rot, html) => `<div class="flex flex-wrap items-center gap-1.5"><span class="text-[9px] font-black uppercase tracking-widest text-gray-500 w-full sm:w-28 shrink-0">${rot}</span>${html}</div>`;
+            const times = Object.keys(cTime).sort((a, b) => cTime[b] - cTime[a]);
+            const ativos = [];
+            SLA_FILA_DIMS.forEach(d => slaFila.sel[d].forEach(v => ativos.push(`<button type="button" onclick="slaFilaTog(this)" data-d="${d}" data-v="${t48xEsc(v)}" title="Tirar este filtro" class="text-[10px] font-bold px-2 py-0.5 rounded-full border border-gexCyan/50 text-gexCyan bg-gexBlue/10 hover:border-red-500/60 hover:text-red-500">${t48xEsc(SLA_FILA_ROT[d](v))} ✕</button>`)));
+            return `<div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    ${card('nunca', '🔴 Não respondido +24h', SLA_FILA_EST.nunca.txt, 'Sem nenhuma resposta de agente e aberta há mais de 24h')}
+                    ${card('novo', 'Novo · até 24h', SLA_FILA_EST.novo.txt, 'Sem resposta de agente, mas ainda dentro das primeiras 24h')}
+                    ${card('esperando', '🟡 Cliente esperando', SLA_FILA_EST.esperando.txt, 'O cliente falou por último e aguarda retorno')}
+                    ${card('followup', '🔵 Follow-up nosso', SLA_FILA_EST.followup.txt, 'Nós falamos por último — não é falha')}
+                    <button type="button" onclick="slaFilaLimpar('est')" title="Mostrar todos os estados" class="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-black/30 px-3 py-2 hover:border-gexCyan transition-colors cursor-pointer ${slaFila.sel.est.size ? '' : 'ring-2 ring-gexCyan'}"><p class="text-[9px] font-black uppercase tracking-widest text-gray-500">Todas abertas</p><p class="text-lg font-black font-mono text-gray-800 dark:text-white">${tkNum(totEst)}</p></button>
+                </div>
+                <div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white/40 dark:bg-black/20 px-3 py-2.5 space-y-2">
+                    ${grupo('Quem está no caso', chip('robo', 'com', '🤖 Com robô/IA', cRobo.com) + chip('robo', 'sem', 'Sem robô', cRobo.sem) + '<span class="w-2"></span>' + chip('ag', 'com', 'Com agente', cAg.com) + chip('ag', 'sem', 'Sem agente', cAg.sem))}
+                    ${grupo('Tempo parado', chip('fx', '1', 'até 24h', cFx['1']) + chip('fx', '2', '24–48h', cFx['2']) + chip('fx', '3', '+48h', cFx['3']))}
+                    ${grupo('Time', times.map(t => chip('time', t, t48xEsc(TK_NOME_TIME[t] || t), cTime[t])).join(''))}
+                </div>
+                ${ativos.length ? `<div class="flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-gexCyan"><span>🔎 Filtrando por:</span>${ativos.join('')}<button type="button" onclick="slaFilaLimpar()" class="text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-700 text-gray-500 hover:text-red-500 hover:border-red-500/50">✕ limpar tudo</button></div>` : ''}
+                <p class="text-[10px] font-semibold text-gray-500">Dá para marcar mais de um: no mesmo grupo soma (ex.: Não respondido + Novo), entre grupos cruza (ex.: Não respondido + Sem agente + Com robô/IA). Os botões de cada ticket também filtram.</p>`;
         }
         function slaFilaRender(montar) {
             const cont = document.getElementById('modal-sla-fila-conteudo'); if (!cont || !slaFila.dados) return;
             const todos = slaFila.dados.tickets || [];
-            const qtd = { todos: todos.length, nunca: 0, esperando: 0, followup: 0 };
-            todos.forEach(t => { qtd[t.estado] = (qtd[t.estado] || 0) + 1; });
-            const ordemEst = { nunca: 0, esperando: 1, followup: 2 };
             const busca = slaFila.busca.trim().toLowerCase();
-            let lista = todos.filter(t => slaFila.filtro === 'todos' || t.estado === slaFila.filtro);
+            let lista = todos.filter(t => slaFilaPassa(t));
             if (busca) lista = lista.filter(t => (t.cliente + ' ' + t.id + ' ' + t.agente + ' ' + t.caixa).toLowerCase().includes(busca));
-            if (slaFila.pill) { const i = slaFila.pill.indexOf(':'), k = slaFila.pill.slice(0, i), v = slaFila.pill.slice(i + 1); lista = lista.filter(t => slaFilaChave(t, k) === v); }
-            lista.sort((a, b) => (ordemEst[a.estado] - ordemEst[b.estado]) || ((slaFilaEspera(b) || 0) - (slaFilaEspera(a) || 0)));   // mais antigo primeiro
+            const ordEst = t => SLA_FILA_ORDEM_EST.indexOf(t.estado), esp = t => slaFilaEspera(t) || 0;
+            const ORD = {
+                antigo: (a, b) => (ordEst(a) - ordEst(b)) || (esp(b) - esp(a)),
+                recente: (a, b) => (ordEst(a) - ordEst(b)) || (esp(a) - esp(b)),
+                parado: (a, b) => esp(b) - esp(a),
+                agente: (a, b) => ((a.agente ? 0 : 1) - (b.agente ? 0 : 1)) || String(a.agente).localeCompare(String(b.agente), 'pt-BR') || (esp(b) - esp(a)),
+                time: (a, b) => String(TK_NOME_TIME[a.setor] || a.setor).localeCompare(String(TK_NOME_TIME[b.setor] || b.setor), 'pt-BR') || (esp(b) - esp(a)),
+                robo: (a, b) => (b.n_robo > 0) - (a.n_robo > 0) || (esp(b) - esp(a))
+            };
+            lista.sort(ORD[slaFila.ordem] || ORD.antigo);
             const hora = slaFila.dados.gerado_em ? new Date(slaFila.dados.gerado_em).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '';
-            document.getElementById('modal-sla-fila-titulo').innerText = slaFila.filtro === 'todos' ? `Fila aberta · Todas (${qtd.todos})` : `Fila aberta · ${SLA_FILA_EST[slaFila.filtro].rot} (${qtd[slaFila.filtro] || 0})`;
+            const ests = Array.from(slaFila.sel.est);
+            document.getElementById('modal-sla-fila-titulo').innerText = 'Fila aberta · ' + (ests.length ? ests.map(e => SLA_FILA_EST[e] ? SLA_FILA_EST[e].rot : e).join(' + ') : 'Todas') + ` (${tkNum(lista.length)})`;
             document.getElementById('modal-sla-fila-sub').innerText = `Conversas abertas neste momento, por quem falou por último${hora ? ' · lista de ' + hora : ''}`;
-            const MAX = 300, mostra = lista.slice(0, MAX);
-            const cards = mostra.length ? mostra.map(slaFilaCard).join('') + (lista.length > MAX ? `<p class="text-gray-500 text-center py-3 font-bold text-[11px]">Mostrando os ${MAX} mais antigos de ${lista.length}. Use a busca ou os botões do ticket para filtrar.</p>` : '')
-                : '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket encontrado.</p>';
             if (montar || !cont.querySelector('#sla-fila-lista')) {
-                const card = (f, rot, cls, dica) => `<button type="button" onclick="slaFilaFiltrar('${f}')" data-slaf="${f}" title="${dica}" class="sla-fila-card text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-black/30 px-3 py-2 hover:border-gexCyan transition-colors cursor-pointer"><p class="text-[9px] font-black uppercase tracking-widest text-gray-500">${rot}</p><p class="text-lg font-black font-mono ${cls}">${tkNum(qtd[f] || 0)}</p></button>`;
-                cont.innerHTML = `<div class="space-y-2">
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        ${card('nunca', '🔴 Nunca respondida', SLA_FILA_EST.nunca.txt, 'Mostrar só as que nenhum agente respondeu')}
-                        ${card('esperando', '🟡 Cliente esperando', SLA_FILA_EST.esperando.txt, 'Mostrar só as que o cliente falou por último')}
-                        ${card('followup', '🔵 Follow-up nosso', SLA_FILA_EST.followup.txt, 'Mostrar só as que nós falamos por último')}
-                        ${card('todos', 'Todas abertas', 'text-gray-800 dark:text-white', 'Mostrar todas as conversas abertas')}
-                    </div>
-                    <div class="sla-fila-pill-ativo hidden flex flex-wrap items-center gap-2 text-[11px] font-bold text-gexCyan"><span>🔎 Filtrando por:</span><span class="sla-fila-pill-rot text-gray-800 dark:text-white"></span><button type="button" onclick="slaFilaPill(null)" class="text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-700 text-gray-500 hover:text-red-500 hover:border-red-500/50">✕ limpar</button></div>
-                    <div class="flex items-center gap-2">
-                        <input type="text" id="sla-fila-busca" oninput="slaFilaBuscar(this)" placeholder="🔎 Buscar por cliente, nº do ticket, agente ou caixa..." class="flex-1 bg-gray-100 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-gexCyan">
-                        <span id="sla-fila-contagem" class="text-[10px] font-bold text-gray-500 whitespace-nowrap"></span>
-                    </div>
+                cont.innerHTML = `<div id="sla-fila-topo" class="space-y-2"></div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <input type="text" id="sla-fila-busca" oninput="slaFilaBuscar(this)" placeholder="🔎 Buscar por cliente, nº do ticket, agente ou caixa..." class="flex-1 min-w-[200px] bg-gray-100 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-gexCyan">
+                    <select id="sla-fila-ordem" onchange="slaFila.ordem = this.value; slaFilaRender(false)" title="Organizar a lista" class="select-moderno text-[11px] font-bold py-1.5">
+                        <option value="antigo">Mais antigo primeiro</option>
+                        <option value="recente">Mais recente primeiro</option>
+                        <option value="parado">Mais tempo parado (todos juntos)</option>
+                        <option value="agente">Por agente (A–Z)</option>
+                        <option value="time">Por time</option>
+                        <option value="robo">Com robô/IA primeiro</option>
+                    </select>
+                    <span id="sla-fila-contagem" class="text-[10px] font-bold text-gray-500 whitespace-nowrap"></span>
                 </div>
                 <div id="sla-fila-lista" class="space-y-3"></div>`;
+                const sel = document.getElementById('sla-fila-ordem'); if (sel) sel.value = slaFila.ordem;
             }
-            cont.querySelectorAll('.sla-fila-card').forEach(b => { const on = b.dataset.slaf === slaFila.filtro; b.classList.toggle('ring-2', on); b.classList.toggle('ring-gexCyan', on); });
-            const chip = cont.querySelector('.sla-fila-pill-ativo');
-            if (chip) { chip.classList.toggle('hidden', !slaFila.pill); chip.querySelector('.sla-fila-pill-rot').textContent = slaFila.pill ? slaFila.pillRot : ''; }
-            const base = slaFila.filtro === 'todos' ? qtd.todos : (qtd[slaFila.filtro] || 0);
-            document.getElementById('sla-fila-contagem').textContent = `Mostrando ${lista.length} de ${base}`;
-            document.getElementById('sla-fila-lista').innerHTML = cards;
+            document.getElementById('sla-fila-topo').innerHTML = slaFilaTopo(todos);
+            const MAX = 300, mostra = lista.slice(0, MAX);
+            document.getElementById('sla-fila-contagem').textContent = `Mostrando ${tkNum(Math.min(lista.length, MAX))} de ${tkNum(lista.length)}`;
+            document.getElementById('sla-fila-lista').innerHTML = mostra.length
+                ? mostra.map(slaFilaCard).join('') + (lista.length > MAX ? `<p class="text-gray-500 text-center py-3 font-bold text-[11px]">Mostrando os ${MAX} primeiros de ${tkNum(lista.length)}. Use a busca ou os filtros para achar o resto.</p>` : '')
+                : '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket com esses filtros.</p>';
             if (montar) cont.scrollTop = 0;
         }
-        function slaFilaFiltrar(f) { slaFila.filtro = (slaFila.filtro === f && f !== 'todos') ? 'todos' : f; slaFilaRender(false); }   // clicar de novo no mesmo cartão mostra todas
-        function slaFilaBuscar(el) { slaFila.busca = el.value || ''; slaFilaRender(false); }
-        function slaFilaPill(el) {
-            const chave = el ? (el.dataset.pill || '') : '';
-            if (chave && slaFila.pill !== chave) { slaFila.pill = chave; slaFila.pillRot = el.dataset.pillrot || ''; } else { slaFila.pill = ''; slaFila.pillRot = ''; }   // clicar de novo (ou em "limpar") tira o filtro
+        function slaFilaTog(el) {   // liga/desliga um valor do filtro (pode marcar vários)
+            const d = el.dataset.d, v = el.dataset.v; if (!slaFila.sel[d]) return;
+            if (slaFila.sel[d].has(v)) slaFila.sel[d].delete(v); else slaFila.sel[d].add(v);
             slaFilaRender(false);
         }
+        function slaFilaLimpar(d) { if (d) slaFila.sel[d].clear(); else { slaFilaZerarSel(); } slaFilaRender(false); }
+        function slaFilaBuscar(el) { slaFila.busca = el.value || ''; slaFilaRender(false); }
         // 📥 Excel do SLA: Resumo · Por hora · Por período do dia · Por canal e caixa · Por dia · Agora
         async function exportarExcelSla() {
             if (usuarioAtual && usuarioAtual.role !== 'admin') return;
