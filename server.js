@@ -5022,6 +5022,61 @@ app.get('/api/recebimento-sla', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+// 31/10/2026: "Ver tickets" da FILA ABERTA do SLA — a mesma regra do bloco 8 do SLA_SQL (nunca respondida / cliente esperando / follow-up nosso),
+// agora conversa por conversa, com o porquê de cada uma (mensagens do cliente e nossas). SOMENTE ADMIN · só leitura (SELECT).
+const SLA_FILA_SQL = `
+SELECT c2.display_id, c2.id AS conv_id, c2.created_at, c2.cached_label_list AS etiquetas,
+  ct.name AS cliente, u.name AS agente, i.name AS caixa,
+  CASE WHEN COALESCE(c2.cached_label_list,'') ILIKE '%time-48h%' OR COALESCE(c2.cached_label_list,'') ILIKE '%painel-do-pedido%' THEN '48H'
+    WHEN i.name = '[GEX] SMS Support' THEN 'SMS' WHEN t.name ILIKE '%reten%' THEN 'RET' WHEN t.name ILIKE '%sac%' THEN 'SAC'
+    WHEN t.name ILIKE '%back office%' OR t.name ILIKE '%backoffice%' OR t.name ILIKE '%bko%' THEN 'BKO'
+    WHEN t.name ILIKE '%sms%' THEN 'SMS' ELSE 'OUTROS' END AS setor,
+  lm.message_type AS ult, lm.created_at AS ult_em,
+  mm.n_cli, mm.ult_cli, mm.n_nos, mm.pri_nos, mm.ult_nos, mm.n_robo, mm.ult_robo
+FROM conversations c2
+LEFT JOIN teams t ON t.id = c2.team_id LEFT JOIN inboxes i ON i.id = c2.inbox_id
+LEFT JOIN contacts ct ON ct.id = c2.contact_id LEFT JOIN users u ON u.id = c2.assignee_id
+LEFT JOIN LATERAL (SELECT m.message_type, m.created_at FROM messages m
+   WHERE m.conversation_id = c2.id AND m.private = FALSE AND m.message_type IN (0, 1)
+     AND (m.message_type = 0 OR (m.sender_type = 'User' AND m.sender_id IS NOT NULL AND m.sender_id <> 2))
+   ORDER BY m.created_at DESC LIMIT 1) lm ON TRUE
+LEFT JOIN LATERAL (SELECT
+     count(*) FILTER (WHERE m.message_type = 0) AS n_cli,
+     max(m.created_at) FILTER (WHERE m.message_type = 0) AS ult_cli,
+     count(*) FILTER (WHERE m.message_type = 1 AND m.sender_type = 'User' AND m.sender_id <> 2) AS n_nos,
+     min(m.created_at) FILTER (WHERE m.message_type = 1 AND m.sender_type = 'User' AND m.sender_id <> 2) AS pri_nos,
+     max(m.created_at) FILTER (WHERE m.message_type = 1 AND m.sender_type = 'User' AND m.sender_id <> 2) AS ult_nos,
+     count(*) FILTER (WHERE m.message_type = 1 AND NOT (m.sender_type = 'User' AND m.sender_id IS NOT NULL AND m.sender_id <> 2)) AS n_robo,
+     max(m.created_at) FILTER (WHERE m.message_type = 1 AND NOT (m.sender_type = 'User' AND m.sender_id IS NOT NULL AND m.sender_id <> 2)) AS ult_robo
+   FROM messages m WHERE m.conversation_id = c2.id AND m.private = FALSE AND m.message_type IN (0, 1)) mm ON TRUE
+WHERE c2.account_id = 1 AND c2.status = 0
+  AND COALESCE(c2.cached_label_list, '') NOT ILIKE '%duplicado%'
+  AND (i.name IS NULL OR i.name NOT IN ('Atendimento | Brasil', 'Pitaco Teste'))
+`;
+app.get('/api/recebimento-sla-fila', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const t0 = Date.now();
+        const { rows } = await pool.query(SLA_FILA_SQL);
+        const agora = Date.now(), min = v => v ? Math.max(0, (agora - new Date(v).getTime()) / 60000) : null;
+        const tickets = rows.map(r => {
+            const nNos = parseInt(r.n_nos) || 0, ult = r.ult === null || r.ult === undefined ? null : parseInt(r.ult);
+            const estado = nNos === 0 ? 'nunca' : (ult === 0 ? 'esperando' : 'followup');   // igual ao bloco 8 do SLA_SQL: sem resposta humana · cliente falou por último · nós falamos por último
+            return {
+                id: r.display_id || r.conv_id, estado: estado, cliente: r.cliente || '', agente: r.agente || '', caixa: r.caixa || '', setor: r.setor, etiquetas: r.etiquetas || '',
+                criado_em: r.created_at, aberto_ha_min: min(r.created_at),
+                n_cli: parseInt(r.n_cli) || 0, ult_cli_min: min(r.ult_cli),
+                n_nos: nNos, pri_nos_min: min(r.pri_nos), ult_nos_min: min(r.ult_nos),
+                n_robo: parseInt(r.n_robo) || 0, ult_robo_min: min(r.ult_robo)
+            };
+        });
+        console.log(`⏱️ Fila aberta do SLA (tickets): ${tickets.length} conversas em ${Date.now() - t0} ms`);
+        res.json({ success: true, gerado_em: new Date().toISOString(), tickets: tickets });
+    } catch (error) {
+        console.error("Erro Fila aberta do SLA:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 // ==========================================
 // 15.5C 👥 AGENTES do Recebimento (17/10/2026) — produção por HORÁRIO, por MENSAGENS ENVIADAS · SOMENTE ADMIN
