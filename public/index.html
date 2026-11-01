@@ -2015,6 +2015,11 @@
                                     .sla-crit { color: var(--sla-crit); }
                                     .sla-amb { color: var(--sla-amb); }
                                     .sla-bloco { background: var(--rc-trilho); border-radius: .75rem; }
+                                    /* 31/10/2026: blocos da Fila aberta clicáveis (abrem os tickets) */
+                                    .sla-fila-clic { cursor: pointer; border: 1px solid transparent; transition: border-color .15s, box-shadow .15s, transform .15s; }
+                                    .sla-fila-clic:hover, .sla-fila-clic:focus-visible { border-color: var(--sla-forte); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sla-forte) 18%, transparent); outline: none; transform: translateY(-1px); }
+                                    .sla-fila-ver { color: var(--sla-forte); opacity: .75; }
+                                    .sla-fila-clic:hover .sla-fila-ver { opacity: 1; }
                                     #tkrec-sla thead th, #tkrec-agentes thead th { color: var(--gx-ink-muted); }
                                 }
                             </style>
@@ -2098,20 +2103,24 @@
                                     <span class="text-[11px] font-semibold rc-mut" id="sla-fila-sub">—</span>
                                 </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div class="sla-bloco p-4" title="Conversa aberta que nunca recebeu resposta de agente">
+                                    <!-- 31/10/2026: cada bloco abre os tickets (mesma lógica do "Ver Tickets") -->
+                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('nunca')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();slaFilaAbrir('nunca')}" title="Conversa aberta que nunca recebeu resposta de agente · clique para ver os tickets">
                                         <div class="flex items-center gap-2 rc-eyebrow mb-2"><span class="rc-dot" style="background:var(--sla-crit)"></span>Nunca respondida</div>
                                         <div class="rc-num text-3xl sla-crit" id="sla-fila-nunca">—</div>
                                         <div class="text-[11px] font-semibold rc-mut mt-1.5">sem resposta ainda</div>
+                                        <div class="sla-fila-ver text-[10px] font-bold mt-2">Ver tickets ›</div>
                                     </div>
-                                    <div class="sla-bloco p-4" title="Já respondida; o cliente falou por último e aguarda retorno">
+                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('esperando')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();slaFilaAbrir('esperando')}" title="Já respondida; o cliente falou por último e aguarda retorno · clique para ver os tickets">
                                         <div class="flex items-center gap-2 rc-eyebrow mb-2"><span class="rc-dot" style="background:var(--sla-amb)"></span>Cliente esperando</div>
                                         <div class="rc-num text-3xl" id="sla-fila-esperando">—</div>
                                         <div class="text-[11px] font-semibold rc-mut mt-1.5">o cliente falou por último</div>
+                                        <div class="sla-fila-ver text-[10px] font-bold mt-2">Ver tickets ›</div>
                                     </div>
-                                    <div class="sla-bloco p-4" title="Nós falamos por último (cobrando o retorno) — não é falha, é a cadência de follow-up">
+                                    <div class="sla-bloco sla-fila-clic p-4" role="button" tabindex="0" onclick="slaFilaAbrir('followup')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();slaFilaAbrir('followup')}" title="Nós falamos por último (cobrando o retorno) — não é falha, é a cadência de follow-up · clique para ver os tickets">
                                         <div class="flex items-center gap-2 rc-eyebrow mb-2"><span class="rc-dot" style="background:var(--rc-f)"></span>Follow-up nosso</div>
                                         <div class="rc-num text-3xl" id="sla-fila-followup">—</div>
                                         <div class="text-[11px] font-semibold rc-mut mt-1.5">nós falamos por último · não é falha</div>
+                                        <div class="sla-fila-ver text-[10px] font-bold mt-2">Ver tickets ›</div>
                                     </div>
                                 </div>
                             </div>
@@ -3022,30 +3031,61 @@
     </div>
 
     <!-- 💰 MODAL DO RELATÓRIO DE COMISSÃO (16/10/2026): escolhe o mês e gera o Excel (TRV + Tickets + Qualidade de todos os agentes) -->
+    <!-- 31/10/2026: visual do cartão da comissão no padrão do "KPI 2 · Tickets" (vidro azul/ciano em tudo) — só aparência, ids e funções iguais -->
+    <style>
+        @layer utilities {
+            #modal-comissao { --com-ciano: #0e7490; --com-azul: #052fd3; --com-borda: rgba(5, 47, 211, .22); --com-vidro: linear-gradient(160deg, rgba(5, 47, 211, .07), rgba(14, 116, 144, .04) 60%, transparent); --com-brilho: rgba(5, 47, 211, .18); --com-trilho: rgba(5, 47, 211, .10); }
+            html.dark #modal-comissao { --com-ciano: #22d3ee; --com-azul: #3d63ff; --com-borda: rgba(34, 211, 238, .30); --com-vidro: linear-gradient(160deg, rgba(34, 211, 238, .09), rgba(5, 47, 211, .07) 60%, rgba(5, 47, 211, .02)); --com-brilho: rgba(34, 211, 238, .22); --com-trilho: rgba(255, 255, 255, .07); }
+            #modal-comissao .com-caixa { border-color: var(--com-borda); box-shadow: 0 0 0 1px var(--com-borda), 0 24px 60px -20px var(--com-brilho), 0 20px 50px -12px rgba(0, 0, 0, .45); }
+            #modal-comissao .com-topo { background: var(--com-vidro); border-bottom-color: var(--com-borda); }
+            #modal-comissao .com-rodape { border-top-color: var(--com-borda); }
+            #modal-comissao .com-icone { width: 2.5rem; height: 2.5rem; border-radius: .75rem; display: grid; place-items: center; color: var(--com-ciano); background: var(--com-vidro); border: 1px solid var(--com-borda); box-shadow: 0 0 18px -6px var(--com-brilho), inset 0 1px 0 rgba(255, 255, 255, .06); }
+            #modal-comissao .com-sub { color: var(--com-ciano); }
+            #modal-comissao .com-desc b { color: var(--com-ciano); font-weight: 700; }
+            #modal-comissao .com-kpi { position: relative; overflow: hidden; text-align: left; border-radius: .9rem; border: 1px solid var(--com-borda); background: var(--com-vidro); padding: .75rem .8rem .7rem; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 0 22px -12px var(--com-brilho); transition: box-shadow .2s, transform .2s; }
+            #modal-comissao .com-kpi:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 0 26px -8px var(--com-brilho); }
+            #modal-comissao .com-kpi::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--com-ciano), var(--com-azul), transparent); opacity: .85; }
+            #modal-comissao .com-kpi-rot { white-space: nowrap; color: var(--com-ciano); font-size: 9px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+            #modal-comissao .com-kpi-n { display: inline-grid; place-items: center; padding: 0 .3rem; height: 1.15rem; margin-right: .4rem; letter-spacing: .08em; border-radius: .35rem; font-size: 9px; color: var(--com-ciano); border: 1px solid var(--com-borda); background: var(--com-trilho); }
+            #modal-comissao .com-kpi-val { font-family: var(--font-display, inherit); font-weight: 600; font-size: 1.15rem; line-height: 1.2; margin-top: .45rem; font-variant-numeric: tabular-nums; }
+            #modal-comissao .com-kpi-val small { font-size: 10px; font-weight: 700; opacity: .65; margin-right: .25rem; }
+            #modal-comissao .com-kpi-desc { font-size: 10px; font-weight: 600; margin-top: .1rem; color: var(--gx-ink-muted, #6b7280); }
+            #modal-comissao .com-kpi-barra { height: 4px; border-radius: 99px; background: var(--com-trilho); margin-top: .6rem; overflow: hidden; }
+            #modal-comissao .com-kpi-barra > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--com-azul), var(--com-ciano)); box-shadow: 0 0 10px var(--com-brilho); }
+            #modal-comissao .com-gerar { background: linear-gradient(135deg, #052fd3, #3d63ff); box-shadow: 0 8px 22px -10px rgba(5, 47, 211, .8); }
+            #modal-comissao .com-gerar:hover { filter: brightness(1.12); }
+        }
+    </style>
     <div id="modal-comissao" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
-                <h3 class="text-lg font-black text-gray-800 dark:text-white">💰 Relatório de Comissão</h3>
+        <div class="com-caixa bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+            <div class="com-topo px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                <div class="flex items-center gap-3">
+                    <span class="com-icone" aria-hidden="true"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"></ellipse><path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6"></path><path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6"></path></svg></span>
+                    <div>
+                        <h3 class="text-lg font-black text-gray-800 dark:text-white leading-tight">Relatório de Comissão</h3>
+                        <p class="com-sub text-[10px] font-bold uppercase tracking-widest mt-0.5">TRV · Tickets · Qualidade → Excel</p>
+                    </div>
+                </div>
                 <button onclick="fecharModalComissao()" class="text-gray-500 hover:text-red-500 transition-colors" title="Fechar">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
             <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                <p class="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed">Junta o <b>TRV</b> (Resultados), os <b>Tickets</b> (mensagens enviadas) e a <b>nota de Qualidade</b> de todos os agentes no mês e calcula a comissão pelo plano. O Excel sai com a aba <b>Comissionamento</b> (critérios e resultado de cada agente) e a aba <b>Gráficos</b>.</p>
+                <p class="com-desc text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed">Junta o <b>TRV</b> (Resultados), os <b>Tickets</b> (mensagens enviadas) e a <b>nota de Qualidade</b> de todos os agentes no mês e calcula a comissão pelo plano. O Excel sai com a aba <b>Comissionamento</b> (critérios e resultado de cada agente) e a aba <b>Gráficos</b>.</p>
                 <div>
                     <label for="com-mes" class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Mês da comissão</label>
                     <select id="com-mes" class="select-moderno w-full mt-1 text-[12px] font-bold"></select>
                 </div>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                    <div class="rounded-xl border border-blue-500/30 bg-blue-500/5 px-2 py-2"><p class="text-[9px] font-black uppercase tracking-widest text-blue-500">KPI 1 · TRV</p><p class="text-[13px] font-black text-gray-800 dark:text-white">até R$ 750</p></div>
-                    <div class="rounded-xl border border-cyan-500/30 bg-cyan-500/5 px-2 py-2"><p class="text-[9px] font-black uppercase tracking-widest text-cyan-500">KPI 2 · Tickets</p><p class="text-[13px] font-black text-gray-800 dark:text-white">até R$ 500</p></div>
-                    <div class="rounded-xl border border-violet-500/30 bg-violet-500/5 px-2 py-2"><p class="text-[9px] font-black uppercase tracking-widest text-violet-500">KPI 3 · Qualidade</p><p class="text-[13px] font-black text-gray-800 dark:text-white">até R$ 375</p></div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div class="com-kpi"><p class="com-kpi-rot"><span class="com-kpi-n">KPI 1</span>TRV</p><p class="com-kpi-val text-gray-800 dark:text-white"><small>até</small>R$ 750</p><p class="com-kpi-desc">Resultados</p><div class="com-kpi-barra"><i style="width:100%"></i></div></div>
+                    <div class="com-kpi"><p class="com-kpi-rot"><span class="com-kpi-n">KPI 2</span>Tickets</p><p class="com-kpi-val text-gray-800 dark:text-white"><small>até</small>R$ 500</p><p class="com-kpi-desc">Mensagens enviadas</p><div class="com-kpi-barra"><i style="width:66.7%"></i></div></div>
+                    <div class="com-kpi"><p class="com-kpi-rot"><span class="com-kpi-n">KPI 3</span>Qualidade</p><p class="com-kpi-val text-gray-800 dark:text-white"><small>até</small>R$ 375</p><p class="com-kpi-desc">Nota de Qualidade</p><div class="com-kpi-barra"><i style="width:50%"></i></div></div>
                 </div>
                 <div id="com-status" class="text-[12px] font-bold min-h-[1.25rem] text-gexCyan"></div>
             </div>
-            <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2 bg-gray-50 dark:bg-black/20">
+            <div class="com-rodape px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2 bg-gray-50 dark:bg-black/20">
                 <button onclick="fecharModalComissao()" class="px-4 py-2 rounded-lg text-[12px] font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">Fechar</button>
-                <button id="btn-com-gerar" onclick="exportarComissaoGerar()" class="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-[12px] font-bold px-5 py-2 rounded-lg transition-colors shadow-sm">📥 Gerar Excel</button>
+                <button id="btn-com-gerar" onclick="exportarComissaoGerar()" class="com-gerar disabled:opacity-50 text-white text-[12px] font-bold px-5 py-2 rounded-lg transition shadow-sm">📥 Gerar Excel</button>
             </div>
         </div>
     </div>
@@ -3178,6 +3218,21 @@
                 </button>
             </div>
             <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-t48-conteudo"></div>
+        </div>
+    </div>
+    <!-- MODAL: FILA ABERTA DO SLA (31/10/2026) — Ver tickets de Nunca respondida / Cliente esperando / Follow-up nosso -->
+    <div id="modal-sla-fila" class="hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-navy-850 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-black/20">
+                <div>
+                    <h3 class="text-lg font-black text-gray-800 dark:text-white" id="modal-sla-fila-titulo">Fila aberta agora</h3>
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1" id="modal-sla-fila-sub">Conversas abertas neste momento, por quem falou por último</p>
+                </div>
+                <button onclick="slaFilaFechar()" class="text-gray-500 hover:text-red-500 transition-colors" title="Fechar">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-3" id="modal-sla-fila-conteudo"></div>
         </div>
     </div>
     <!-- MODAL: TIME 48H POR ETIQUETA (Ver Tickets das abas Etiqueta 48H / Etiqueta Painel) -->
@@ -10992,6 +11047,147 @@ async function exportarExcelCartPanda() {
             const el = document.getElementById('sla-agora-tbody'); if (el) el.innerHTML = linhas || '<tr><td colspan="5" class="py-4 text-center text-gray-500 text-xs font-bold">Ninguém esperando agora 🎉</td></tr>';
         }
         function setElSla(id, txt) { const el = document.getElementById(id); if (el) el.innerText = txt; }
+        // 31/10/2026: "Ver tickets" da Fila aberta — os 3 blocos abrem a lista conversa por conversa (rota /api/recebimento-sla-fila, só leitura),
+        // no mesmo formato do "Ver Tickets" (cartões que filtram, busca, botões no ticket que filtram e "Abrir Conversa"), com o porquê de cada uma.
+        const SLA_FILA_EST = {
+            nunca: { rot: 'Nunca respondida', cls: 'bg-red-500/10 text-red-500 border-red-500/30', txt: 'text-red-500', dica: 'Nenhum agente respondeu ainda' },
+            esperando: { rot: 'Cliente esperando', cls: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30', txt: 'text-yellow-500', dica: 'O cliente falou por último e aguarda retorno' },
+            followup: { rot: 'Follow-up nosso', cls: 'bg-gexBlue/10 text-gexCyan border-gexBlue/30', txt: 'text-gexCyan', dica: 'Nós falamos por último — não é falha' }
+        };
+        const slaFila = { dados: null, ref: null, filtro: 'nunca', busca: '', pill: '', pillRot: '', carregando: false };
+        async function slaFilaAbrir(estado) {
+            if (!usuarioAtual || usuarioAtual.role !== 'admin') return;
+            slaFila.filtro = estado || 'nunca'; slaFila.busca = ''; slaFila.pill = ''; slaFila.pillRot = '';
+            document.getElementById('modal-sla-fila').classList.remove('hidden');
+            const ref = (slaEstado.resp && slaEstado.resp.gerado_em) || '';
+            if (slaFila.dados && slaFila.ref === ref) return slaFilaRender(true);
+            const cont = document.getElementById('modal-sla-fila-conteudo');
+            document.getElementById('modal-sla-fila-titulo').innerText = 'Fila aberta · ' + SLA_FILA_EST[slaFila.filtro].rot;
+            cont.innerHTML = '<p class="text-gexCyan text-center py-8 font-bold text-sm">⏳ Carregando os tickets...</p>';
+            if (slaFila.carregando) return;
+            slaFila.carregando = true;
+            try {
+                const resp = await fetch('/api/recebimento-sla-fila?ref=' + encodeURIComponent(ref));
+                const data = await resp.json();
+                if (!data.success) throw new Error(data.error || 'falha ao carregar');
+                slaFila.dados = data; slaFila.ref = ref;
+                slaFilaRender(true);
+            } catch (e) {
+                cont.innerHTML = `<p class="text-red-500 text-center py-8 font-bold text-sm">Não foi possível carregar os tickets: ${t48xEsc(e.message)}</p>`;
+            } finally { slaFila.carregando = false; }
+        }
+        function slaFilaFechar() { document.getElementById('modal-sla-fila').classList.add('hidden'); }
+        function slaFilaFaixa(m) { return m == null ? 0 : (m < 1440 ? 1 : (m <= 2880 ? 2 : 3)); }   // 1 = até 24h · 2 = 24–48h · 3 = mais de 48h (as mesmas do "Ver Tickets")
+        function slaFilaEspera(tk) {   // o tempo que define a urgência de cada estado
+            return tk.estado === 'nunca' ? tk.aberto_ha_min : (tk.estado === 'esperando' ? tk.ult_cli_min : tk.ult_nos_min);
+        }
+        function slaFilaPorque(tk) {
+            const d = t48Dur, msg = n => n + (n === 1 ? ' mensagem' : ' mensagens');
+            if (tk.estado === 'nunca') {
+                let t = `Aberta há <b>${d(tk.aberto_ha_min)}</b> e <b>nenhum agente respondeu</b> ainda.`;
+                t += tk.n_cli > 0 ? ` O cliente mandou ${msg(tk.n_cli)}, a última há <b>${d(tk.ult_cli_min)}</b>.` : ' Ainda não há mensagem do cliente na conversa.';
+                if (tk.n_robo > 0) t += ` Só o robô/automação falou (${msg(tk.n_robo)}, a última há ${d(tk.ult_robo_min)}) — robô não conta como resposta.`;
+                if (!tk.agente) t += ' Está <b>sem agente atribuído</b>.';
+                return t;
+            }
+            if (tk.estado === 'esperando') {
+                let t = `O <b>cliente falou por último</b>: mandou mensagem há <b>${d(tk.ult_cli_min)}</b> e ainda não respondemos.`;
+                t += ` Nossa última resposta foi há ${d(tk.ult_nos_min)} (nós: ${msg(tk.n_nos)} · cliente: ${msg(tk.n_cli)}).`;
+                if (tk.ult_cli_min != null && tk.ult_cli_min > 2880) t += ' <b>Fora do SLA</b> (cliente +48h sem resposta).';
+                return t;
+            }
+            let t = `<b>Nós falamos por último</b> há <b>${d(tk.ult_nos_min)}</b> (cobrando o retorno) e o cliente ainda não respondeu.`;
+            t += tk.n_cli > 0 ? ` A última mensagem do cliente foi há ${d(tk.ult_cli_min)}.` : ' O cliente não mandou mensagem nesta conversa.';
+            return t + ' Não é falha — é a cadência de follow-up.';
+        }
+        function slaFilaCard(tk) {
+            const E = SLA_FILA_EST[tk.estado], FX = ['', 'até 24h', '24–48h', 'mais de 48h'];
+            const btn = (chave, rot, txt, cls) => `<button type="button" onclick="slaFilaPill(this)" data-pill="${t48xEsc(chave)}" data-pillrot="${t48xEsc(rot)}" title="Filtrar: ${t48xEsc(rot)}" class="text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer hover:brightness-125 transition ${slaFila.pill === chave ? 'ring-2 ring-gexCyan ' : ''}${cls}">${txt}</button>`;
+            const esp = slaFilaEspera(tk), fx = slaFilaFaixa(esp);
+            const corFx = ['', 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30', 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30', 'bg-red-500/10 text-red-500 border-red-500/30'][fx];
+            const rotEsp = tk.estado === 'nunca' ? '⏱️ Sem resposta há ' : (tk.estado === 'esperando' ? '💬 Cliente sem resposta há ' : '⌛ Aguardando o cliente há ');
+            const time = TK_NOME_TIME[tk.setor] || tk.setor || 'Sem time', agente = tk.agente || 'Sem agente';
+            const p = [btn('est:' + tk.estado, E.rot, E.rot, E.cls)];
+            if (fx) p.push(btn('fx:' + fx, rotEsp + FX[fx] + (tk.estado === 'esperando' && fx === 3 ? ' (fora do SLA)' : ''), rotEsp + t48Dur(esp) + (tk.estado === 'esperando' && fx === 3 ? ' · fora do SLA' : ''), tk.estado === 'followup' ? 'bg-sky-500/10 text-sky-500 border-sky-500/30' : corFx));
+            p.push(btn('ag:' + agente, '👤 ' + agente, t48xEsc(agente), tk.agente ? 'bg-gexBlue/10 text-gexCyan border-gexBlue/30' : 'bg-red-500/10 text-red-500 border-red-500/30'));
+            p.push(btn('time:' + tk.setor, '👥 Time ' + time, '👥 ' + t48xEsc(time), 'bg-gray-500/10 text-gray-400 border-gray-500/30'));
+            if (tk.caixa) p.push(btn('cx:' + tk.caixa, '📥 ' + tk.caixa, '📥 ' + t48xEsc(tk.caixa), 'bg-gray-500/10 text-gray-500 border-gray-500/20'));
+            p.push(`<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-gray-500/10 text-gray-500 border-gray-500/20">✉️ ${tk.n_cli} do cliente · ${tk.n_nos} nossas</span>`);
+            if (tk.n_robo > 0) p.push(btn('robo:1', '🤖 Robô falou', '🤖 ' + tk.n_robo + ' do robô', 'bg-purple-500/10 text-purple-400 border-purple-500/30'));
+            const url = `https://chat.institutoexperience.com/app/accounts/1/conversations/${encodeURIComponent(tk.id)}`;
+            return `<div class="bg-gray-50 dark:bg-navy-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                <div class="min-w-0">
+                    <p class="text-sm font-black text-gray-800 dark:text-white">${t48xEsc(tk.cliente || '(sem nome)')}</p>
+                    <p class="text-[10px] text-gray-400 font-mono mt-2">Ticket #${t48xEsc(tk.id)} · 📅 Criado ${t48DataBR(tk.criado_em)}</p>
+                    <p class="text-[11px] font-bold mt-1 ${tk.agente ? 'text-gexCyan' : 'text-red-500'}">👤 ${t48xEsc(agente)}</p>
+                    <div class="mt-2 rounded-lg border-l-2 ${tk.estado === 'nunca' ? 'border-red-500/60' : (tk.estado === 'esperando' ? 'border-yellow-500/60' : 'border-gexCyan/60')} bg-white/60 dark:bg-black/30 px-3 py-2">
+                        <p class="text-[9px] font-black uppercase tracking-widest text-gray-500">Por que está aqui</p>
+                        <p class="text-[11.5px] leading-relaxed text-gray-600 dark:text-gray-300 mt-0.5">${slaFilaPorque(tk)}</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5 mt-2">${p.join('')}</div>
+                    ${tk.etiquetas ? `<p class="text-[10px] text-gray-400 mt-1.5">🏷️ ${t48xEsc(tk.etiquetas)}</p>` : ''}
+                </div>
+                <a href="${url}" target="_blank" rel="noopener" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0">Abrir Conversa ↗️</a>
+            </div>`;
+        }
+        function slaFilaChave(tk, k) {
+            if (k === 'est') return tk.estado;
+            if (k === 'fx') return String(slaFilaFaixa(slaFilaEspera(tk)));
+            if (k === 'time') return tk.setor;
+            if (k === 'cx') return tk.caixa;
+            if (k === 'robo') return tk.n_robo > 0 ? '1' : '0';
+            if (k === 'ag') return tk.agente || 'Sem agente';
+            return '';
+        }
+        function slaFilaRender(montar) {
+            const cont = document.getElementById('modal-sla-fila-conteudo'); if (!cont || !slaFila.dados) return;
+            const todos = slaFila.dados.tickets || [];
+            const qtd = { todos: todos.length, nunca: 0, esperando: 0, followup: 0 };
+            todos.forEach(t => { qtd[t.estado] = (qtd[t.estado] || 0) + 1; });
+            const ordemEst = { nunca: 0, esperando: 1, followup: 2 };
+            const busca = slaFila.busca.trim().toLowerCase();
+            let lista = todos.filter(t => slaFila.filtro === 'todos' || t.estado === slaFila.filtro);
+            if (busca) lista = lista.filter(t => (t.cliente + ' ' + t.id + ' ' + t.agente + ' ' + t.caixa).toLowerCase().includes(busca));
+            if (slaFila.pill) { const i = slaFila.pill.indexOf(':'), k = slaFila.pill.slice(0, i), v = slaFila.pill.slice(i + 1); lista = lista.filter(t => slaFilaChave(t, k) === v); }
+            lista.sort((a, b) => (ordemEst[a.estado] - ordemEst[b.estado]) || ((slaFilaEspera(b) || 0) - (slaFilaEspera(a) || 0)));   // mais antigo primeiro
+            const hora = slaFila.dados.gerado_em ? new Date(slaFila.dados.gerado_em).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '';
+            document.getElementById('modal-sla-fila-titulo').innerText = slaFila.filtro === 'todos' ? `Fila aberta · Todas (${qtd.todos})` : `Fila aberta · ${SLA_FILA_EST[slaFila.filtro].rot} (${qtd[slaFila.filtro] || 0})`;
+            document.getElementById('modal-sla-fila-sub').innerText = `Conversas abertas neste momento, por quem falou por último${hora ? ' · lista de ' + hora : ''}`;
+            const MAX = 300, mostra = lista.slice(0, MAX);
+            const cards = mostra.length ? mostra.map(slaFilaCard).join('') + (lista.length > MAX ? `<p class="text-gray-500 text-center py-3 font-bold text-[11px]">Mostrando os ${MAX} mais antigos de ${lista.length}. Use a busca ou os botões do ticket para filtrar.</p>` : '')
+                : '<p class="text-gray-500 text-center py-4 font-bold text-sm">Nenhum ticket encontrado.</p>';
+            if (montar || !cont.querySelector('#sla-fila-lista')) {
+                const card = (f, rot, cls, dica) => `<button type="button" onclick="slaFilaFiltrar('${f}')" data-slaf="${f}" title="${dica}" class="sla-fila-card text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-black/30 px-3 py-2 hover:border-gexCyan transition-colors cursor-pointer"><p class="text-[9px] font-black uppercase tracking-widest text-gray-500">${rot}</p><p class="text-lg font-black font-mono ${cls}">${tkNum(qtd[f] || 0)}</p></button>`;
+                cont.innerHTML = `<div class="space-y-2">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        ${card('nunca', '🔴 Nunca respondida', SLA_FILA_EST.nunca.txt, 'Mostrar só as que nenhum agente respondeu')}
+                        ${card('esperando', '🟡 Cliente esperando', SLA_FILA_EST.esperando.txt, 'Mostrar só as que o cliente falou por último')}
+                        ${card('followup', '🔵 Follow-up nosso', SLA_FILA_EST.followup.txt, 'Mostrar só as que nós falamos por último')}
+                        ${card('todos', 'Todas abertas', 'text-gray-800 dark:text-white', 'Mostrar todas as conversas abertas')}
+                    </div>
+                    <div class="sla-fila-pill-ativo hidden flex flex-wrap items-center gap-2 text-[11px] font-bold text-gexCyan"><span>🔎 Filtrando por:</span><span class="sla-fila-pill-rot text-gray-800 dark:text-white"></span><button type="button" onclick="slaFilaPill(null)" class="text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-700 text-gray-500 hover:text-red-500 hover:border-red-500/50">✕ limpar</button></div>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="sla-fila-busca" oninput="slaFilaBuscar(this)" placeholder="🔎 Buscar por cliente, nº do ticket, agente ou caixa..." class="flex-1 bg-gray-100 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 outline-none focus:border-gexCyan">
+                        <span id="sla-fila-contagem" class="text-[10px] font-bold text-gray-500 whitespace-nowrap"></span>
+                    </div>
+                </div>
+                <div id="sla-fila-lista" class="space-y-3"></div>`;
+            }
+            cont.querySelectorAll('.sla-fila-card').forEach(b => { const on = b.dataset.slaf === slaFila.filtro; b.classList.toggle('ring-2', on); b.classList.toggle('ring-gexCyan', on); });
+            const chip = cont.querySelector('.sla-fila-pill-ativo');
+            if (chip) { chip.classList.toggle('hidden', !slaFila.pill); chip.querySelector('.sla-fila-pill-rot').textContent = slaFila.pill ? slaFila.pillRot : ''; }
+            const base = slaFila.filtro === 'todos' ? qtd.todos : (qtd[slaFila.filtro] || 0);
+            document.getElementById('sla-fila-contagem').textContent = `Mostrando ${lista.length} de ${base}`;
+            document.getElementById('sla-fila-lista').innerHTML = cards;
+            if (montar) cont.scrollTop = 0;
+        }
+        function slaFilaFiltrar(f) { slaFila.filtro = (slaFila.filtro === f && f !== 'todos') ? 'todos' : f; slaFilaRender(false); }   // clicar de novo no mesmo cartão mostra todas
+        function slaFilaBuscar(el) { slaFila.busca = el.value || ''; slaFilaRender(false); }
+        function slaFilaPill(el) {
+            const chave = el ? (el.dataset.pill || '') : '';
+            if (chave && slaFila.pill !== chave) { slaFila.pill = chave; slaFila.pillRot = el.dataset.pillrot || ''; } else { slaFila.pill = ''; slaFila.pillRot = ''; }   // clicar de novo (ou em "limpar") tira o filtro
+            slaFilaRender(false);
+        }
         // 📥 Excel do SLA: Resumo · Por hora · Por período do dia · Por canal e caixa · Por dia · Agora
         async function exportarExcelSla() {
             if (usuarioAtual && usuarioAtual.role !== 'admin') return;
