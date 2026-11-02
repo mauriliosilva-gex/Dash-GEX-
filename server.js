@@ -963,6 +963,10 @@ const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas, nomesDaPlanilha
 // ==========================================
 // 6. ROTA DE RETENÇÃO (PLANILHA A)
 // ==========================================
+// 📅 MÊS DA PLANILHA DE RESULTADOS — troque só o nome do mês (ex.: 'Outubro' → 'Novembro') quando a aba nova estiver pronta.
+// Precisa ser igual ao final do nome da aba "📊 Análise | Metas | <Mês>" (com acento: 'Março').
+const MES_PLANILHA_RESULTADOS = 'Outubro';
+
 app.get('/api/retencao', async (req, res) => {
     try {
         const agoraBR = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
@@ -985,11 +989,11 @@ app.get('/api/retencao', async (req, res) => {
         } catch (e) {}
 
         // --- Meses selecionados: ?aba= (1 ou vários), validados; padrão Setembro ---
-        // 14/10/2026: aba padrão = a do mês atual de Brasília; se ainda não existir, a mais recente (antes fixa em "Outubro": em 01/11 o agente continuava vendo Outubro).
-        // Mês depois do atual é do ano anterior ("Dezembro" vista em janeiro/2027 = 2026).
+        // 02/11/2026: aba padrão FIXA de novo (pedido do Maurílio). Para virar o mês, troque só MES_PLANILHA_RESULTADOS (acima da rota).
+        // Se a aba escrita não existir na planilha, o painel abre na última aba de Metas que existir.
+        // Mês depois do atual é do ano anterior ('Dezembro' vista em janeiro = ano passado).
         const ordemDaAbaRet = (aba) => { const m = MESES_PT.findIndex(mm => aba.toLowerCase().includes(mm.toLowerCase())); return (m > agoraBR.getMonth() ? anoPlanilha - 1 : anoPlanilha) * 12 + m; };
-        const abaDoMesAtualRet = '📊 Análise | Metas | ' + MESES_PT[agoraBR.getMonth()];
-        const PADRAO_ABA = abasDisponiveis.includes(abaDoMesAtualRet) ? abaDoMesAtualRet : (abasDisponiveis.reduce((melhor, t) => (melhor === null || ordemDaAbaRet(t) > ordemDaAbaRet(melhor)) ? t : melhor, null) || abaDoMesAtualRet);
+        const PADRAO_ABA = '📊 Análise | Metas | ' + MES_PLANILHA_RESULTADOS;   // o mês vem da constante MES_PLANILHA_RESULTADOS (acima da rota)
         let selecionadas = req.query.aba;
         if (typeof selecionadas === 'string') selecionadas = [selecionadas];
         if (!Array.isArray(selecionadas)) selecionadas = [];
