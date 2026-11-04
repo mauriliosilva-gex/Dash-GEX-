@@ -630,6 +630,8 @@ const cacheMiddleware = (req, res, next) => {
     if (chaveUrl.includes('/api/qualidade') || chaveUrl.includes('/api/retencao') || chaveUrl.includes('/api/sinalizacoes')) {
         tempoCacheMinutos = 15;
     }
+    // 04/11/2026: BuyGoods Fila Geral — o robô grava a cada 10 min; aqui 5 min (+ até 5 min do bgLer) = o Dash nunca segura mais de ~10 min
+    if (chaveUrl.includes('/api/bg-')) tempoCacheMinutos = 5;
 
     // 14/10/2026: ?fresh=1 de AGENTE só fura o cache se o dado guardado tiver mais de 1 min (o 🔄 Recarregar do Tickets Atual do agente continua; repetir fresh=1 não martela o banco). Admin e chamada interna furam sempre.
     // 26/10/2026: a trava de refresh passa a valer para TODO MUNDO (antes só o agente era segurado).
@@ -5581,6 +5583,49 @@ app.get('/api/bg-recebimento-sla-fila', async (req, res) => {
         });
         res.json({ success: true, fonte: 'buygoods', gerado_em: new Date().toISOString(), tickets });
     } catch (error) { console.error('Erro BuyGoods fila:', error); res.status(500).json({ success: false, error: error.message }); }
+});
+
+// ---- 📂 CASOS EM ABERTO (04/11/2026 · Recebimento › BuyGoods) — só leitura da planilha ----
+// Fila de AGORA = aba Tickets (última leitura do robô): status "Aberto" no Help Desk, teste fora (mesma base do bgAbertos / SLA).
+// "Esperando nossa resposta" = o cliente falou por último (aguardando_desde_utc) · "aguardando o cliente" = a última mensagem é nossa.
+// Evolução = aba Fotos (1 linha por caixa a cada execução do robô) dentro do período da tela; a variação compara a última
+// execução com ~1 h e ~24 h antes dela (independe do período).
+function bgFotoNum(v) { const n = Number(v); return isFinite(n) ? n : 0; }
+app.get('/api/bg-recebimento-abertos', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const p = bgPeriodo(req, BG_MAX_DIAS, BG_MAX_DIAS_COMPARACAO); if (p.erro) return res.status(400).json({ success: false, error: p.erro });
+        const agora = Date.now(), d = await bgLer(req.query.fresh === '1');
+        const minDe = iso => { const x = Date.parse(iso); return isNaN(x) ? null : Math.max(0, Math.round((agora - x) / 60000)); };
+        const tickets = bgAbertos(d, agora).map(o => {
+            const t = o.t;
+            return { conta: Number(t.conta) || 0, caixa: t.produto || String(t.conta), ticket: String(t.ticket), setor: o.setor,
+                tipo: t.tipo || 'Outros', assunto: String(t.assunto || '').slice(0, 90),
+                nao_lido: /^n[aã]o lido$/i.test(String(t.lido || '').trim()), responsavel: String(t.claimed || '').trim(),
+                esperando: o.ult === 0, espera_min: o.ult === 0 ? Math.max(0, Math.round(o.espera)) : null,
+                ja_respondido: o.temResp, aberto_ha_min: Math.max(0, Math.round((agora - o.criado) / 60000)), ult_msg_min: minDe(t.ultima_msg_utc), link: t.link || '' };
+        });
+        // Fotos -> 1 ponto por execução (as caixas da mesma execução têm o mesmo quando_utc): [abertos, esperando, +1h, +24h, não lidos] por conta
+        const porRodada = new Map(), caixas = {};
+        (d.fotos || []).forEach(f => {
+            const t = Date.parse(f.quando_utc), conta = String(f.conta || ''); if (isNaN(t) || !conta) return;
+            caixas[conta] = f.produto || conta;
+            const r = porRodada.get(t) || { t, c: {} };
+            r.c[conta] = [bgFotoNum(f.abertos), bgFotoNum(f.aguardando), bgFotoNum(f.aguardando_mais_1h), bgFotoNum(f.aguardando_mais_24h), bgFotoNum(f.nao_lidos)];
+            porRodada.set(t, r);
+        });
+        const rodadas = [...porRodada.values()].sort((a, b) => a.t - b.t), ult = rodadas[rodadas.length - 1] || null;
+        const perto = (alvo, tol) => rodadas.reduce((m, r) => (Math.abs(r.t - alvo) <= tol && (!m || Math.abs(r.t - alvo) < Math.abs(m.t - alvo))) ? r : m, null);
+        const pt = r => r ? { t: new Date(r.t).toISOString(), c: r.c } : null;
+        // série do período (dia de Brasília = 03:00 UTC): até 2 dias = cada execução · até 14 dias = a última de cada hora · mais = a última de cada 4 h
+        const iniT = Date.parse(p.ini + 'T03:00:00Z'), fimT = Date.parse(p.fim + 'T03:00:00Z') + 86400000;
+        const passo = p.dias <= 2 ? 0 : (p.dias <= 14 ? 3600000 : 4 * 3600000);
+        let serie = rodadas.filter(r => r.t >= iniT && r.t < fimT);
+        if (passo) { const m = new Map(); serie.forEach(r => m.set(Math.floor(r.t / passo), r)); serie = [...m.values()]; }
+        res.json(Object.assign({ success: true, fonte: 'buygoods' }, p.cab, { gerado_em: new Date(agora).toISOString(), atualizado_planilha: bgUltimaFoto(d),
+            tickets, caixas, colunas: ['abertos', 'esperando', 'mais_1h', 'mais_24h', 'nao_lidos'], passo_min: passo / 60000, serie: serie.map(pt),
+            ref: { ultima: pt(ult), h1: ult ? pt(perto(ult.t - 3600000, 20 * 60000)) : null, h24: ult ? pt(perto(ult.t - 86400000, 40 * 60000)) : null } }));
+    } catch (error) { console.error('Erro BuyGoods abertos:', error); res.status(500).json({ success: false, error: error.message }); }
 });
 
 // ---- 👥 Agentes (mesmo formato de /api/recebimento-agentes) + roster (ninguém de fora) + TIMES pela tag do ticket ----
