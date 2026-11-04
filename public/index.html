@@ -229,6 +229,7 @@
         /* 🔥 ESTRUTURA ADMIN x AGENTE */
         .admin-hidden { transition: all 0.3s ease; }
         body.is-admin .admin-hidden { display: none !important; }
+        body:not(.is-admin) .tk-eq-dir { margin-left: auto; }   /* 04/11/2026: Equipe da aba Tickets à direita só para o agente (admin fica como antes) */
 
         #admin-sidebar { display: none; }
         body.is-admin #admin-sidebar { display: flex; }
@@ -1467,7 +1468,7 @@
                         <button id="btn-bgtk-passada" onclick="bgTkSemana(-1)" class="bg-gray-200 dark:bg-black/30 border border-white/5 text-gray-700 dark:text-gray-300 px-4 py-1.5 rounded-lg text-xs font-bold transition-all">Semana Passada</button>
                     </div>
                 </div>
-                <p class="px-6 pt-3 text-[11px] font-semibold text-gray-500">Conta igual ao Tickets: cada <b>mensagem enviada ao cliente</b> no Help Desk da BuyGoods no dia (00:00–23:59) = 1. Nota interna não conta. Os números chegam da BuyGoods a cada 30 min.</p>
+                <p class="px-6 pt-3 text-[11px] font-semibold text-gray-500">Conta igual ao Tickets: cada <b>mensagem enviada ao cliente</b> no Help Desk da BuyGoods no dia (00:00–23:59) = 1. Nota interna não conta. Os números chegam da BuyGoods a cada 10 min.</p>
                 <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4 mt-2">
                     <table class="w-full text-left border-separate" style="border-spacing: 0 0.5rem;">
                         <thead class="z-20 bg-transparent"><tr id="bgtk-thead" class="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-transparent"></tr></thead>
@@ -1480,9 +1481,11 @@
         <div id="aba-tickets" class="hidden space-y-6">
             <div class="glass-panel bg-lightCard border border-lightBorder rounded-2xl p-0 flex flex-col h-[max(700px,calc(100vh_-_114px))] overflow-hidden shadow-2xl">
                 
-                <!-- SUB-MENU DE TICKETS (VISÍVEL APENAS PARA AGENTES) -->
-                <div class="px-5 py-4 border-b border-lightBorder dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/20 shrink-0 admin-hidden">
-                    <div class="flex items-center gap-2">
+                <!-- 04/11/2026: SUB-MENU + EQUIPE numa linha só. AGENTE: mesmo modelo da aba BuyGoods (sub-abas à esquerda, Equipe à direita).
+                     ADMIN: igual a antes (sub-abas escondidas pelo admin-hidden, Equipe sozinha à esquerda; o .tk-eq-dir só empurra para a direita fora do admin).
+                     A Equipe vale para TODAS as sub-abas (ldFiltrarTickets). -->
+                <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex justify-between items-center gap-3 flex-wrap bg-gray-50/50 dark:bg-black/20 shrink-0">
+                    <div class="flex items-center gap-2 admin-hidden">
                         <button id="btn-sub-tk-atual" onclick="mudarSubAbaTk('atual')" class="btn-setor btn-setor-ativo">Tickets Atual</button>
                         <button id="btn-sub-tk-semanal" onclick="mudarSubAbaTk('semanal')" class="btn-setor btn-setor-inativo">Visão Mensal</button>
                         <button id="btn-sub-tk-geral" onclick="mudarSubAbaTk('geral')" class="btn-setor btn-setor-inativo">Tickets Geral</button>
@@ -1494,17 +1497,14 @@
                         <button id="btn-sub-tk-prod" onclick="mudarSubAbaTk('prod')" class="btn-setor btn-setor-inativo">⏱️ Produtividade</button>
                         <!-- ADMIN-HTML-FIM: botões Status de Casos, Distribuição e Produtividade -->
                     </div>
-                </div>
-
-                <!-- 30/10/2026: ABA POR LÍDER DA TICKETS — uma barra só, aqui no topo, valendo para TODAS as sub-abas.
-                     Fica FORA do admin-hidden de propósito: aparece para admin e para agente. -->
-                <div class="px-5 py-3 border-b border-lightBorder dark:border-white/5 flex items-center gap-2 flex-wrap shrink-0 bg-gray-50/50 dark:bg-black/20">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
-                    <button onclick="ldFiltrarTickets('todos')" id="btn-ld-tickets-todos" class="btn-setor btn-setor-ativo">Todos</button>
-                    <button onclick="ldFiltrarTickets('flavia')" id="btn-ld-tickets-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
-                    <button onclick="ldFiltrarTickets('adevania')" id="btn-ld-tickets-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
-                    <button onclick="ldFiltrarTickets('camila')" id="btn-ld-tickets-camila" class="btn-setor btn-setor-inativo">Camila</button>
-                    <span class="text-[10px] font-bold text-gray-500 ml-2" id="lbl-ld-tickets"></span>
+                    <div class="flex items-center gap-2 flex-wrap tk-eq-dir">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 mr-1">Equipe</span>
+                        <button onclick="ldFiltrarTickets('todos')" id="btn-ld-tickets-todos" class="btn-setor btn-setor-ativo">Todos</button>
+                        <button onclick="ldFiltrarTickets('flavia')" id="btn-ld-tickets-flavia" class="btn-setor btn-setor-inativo">Flávia</button>
+                        <button onclick="ldFiltrarTickets('adevania')" id="btn-ld-tickets-adevania" class="btn-setor btn-setor-inativo">Adevânia</button>
+                        <button onclick="ldFiltrarTickets('camila')" id="btn-ld-tickets-camila" class="btn-setor btn-setor-inativo">Camila</button>
+                        <span class="text-[10px] font-bold text-gray-500 ml-2" id="lbl-ld-tickets"></span>
+                    </div>
                 </div>
 
                 <!-- SUB-ABA 1: ATUAL -->
@@ -1947,6 +1947,107 @@
                                 .rc-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
                             }
                         </style>
+                        <!-- 📂 04/11/2026: CASOS EM ABERTO — só na fonte BuyGoods (tkRecPintarFonte mostra/esconde) · /api/bg-recebimento-abertos (só leitura) -->
+                        <section id="bg-ab-bloco" class="hidden space-y-4">
+                            <style>
+                                @layer utilities {
+                                    #tela-tk-recebimento { --ab-esp: var(--rc-n); --ab-cli: #0e7490; --ab-alerta: #b45309; --ab-crit: #dc2626; }
+                                    html.dark #tela-tk-recebimento { --ab-cli: #22d3ee; --ab-alerta: #f59e0b; --ab-crit: #f87171; }
+                                    #tela-tk-recebimento .ab-faixa { border-left: 3px solid var(--ab-esp); }
+                                    #tela-tk-recebimento .ab-kpi { position: relative; overflow: hidden; }
+                                    #tela-tk-recebimento .ab-kpi::before { content: ''; position: absolute; left: 0; top: 0; right: 0; height: 3px; background: var(--ab-cor, var(--ab-esp)); opacity: .9; }
+                                    #tela-tk-recebimento .ab-clicavel { cursor: pointer; transition: border-color .15s ease, transform .15s ease; }
+                                    #tela-tk-recebimento .ab-clicavel:hover, #tela-tk-recebimento .ab-clicavel:focus-visible { border-color: var(--ab-cor, var(--ab-esp)); transform: translateY(-1px); outline: none; }
+                                    #tela-tk-recebimento .ab-pill { border-radius: 9999px; padding: 2px 8px; font-size: 10px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
+                                    #tela-tk-recebimento .ab-sel { box-shadow: inset 0 0 0 1.5px var(--ab-esp); }
+                                }
+                            </style>
+                            <div class="ab-faixa pl-4 flex flex-wrap items-end justify-between gap-3">
+                                <div>
+                                    <h3 class="font-display text-lg font-bold text-gray-800 dark:text-white tracking-tight">📂 Casos em aberto</h3>
+                                    <p class="text-xs rc-mut mt-1">A fila de <b class="rc-ink">agora</b> no Help Desk da BuyGoods (última leitura do robô, a cada 10 min). O período escolhido muda só a <b class="rc-ink">evolução</b>; o filtro de caixa vale para tudo.</p>
+                                </div>
+                                <div class="flex items-center gap-3 flex-wrap">
+                                    <span id="bg-ab-selo" class="text-[11px] font-semibold rc-mut"></span>
+                                    <button type="button" onclick="bgAbVerFila('todos')" class="bg-gexBlue hover:bg-gexCyan text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition-colors shadow-sm">Ver fila completa</button>
+                                </div>
+                            </div>
+                            <div id="bg-ab-cards" class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                                <div class="rc-card p-5 col-span-2 xl:col-span-4"><p class="text-gexCyan text-center py-4 font-bold text-xs uppercase tracking-widest">⏳ Carregando casos em aberto...</p></div>
+                            </div>
+                            <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+                                <div class="rc-card p-6 xl:col-span-3 min-w-0">
+                                    <div class="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <h3 class="font-display text-base font-bold text-gray-800 dark:text-white tracking-tight">Evolução da fila</h3>
+                                            <p class="text-xs rc-mut mt-1" id="bg-ab-evol-sub">Casos em aberto a cada leitura do robô, no período.</p>
+                                        </div>
+                                        <div id="bg-ab-evol-legenda"></div>
+                                    </div>
+                                    <div id="bg-ab-evol"></div>
+                                </div>
+                                <div class="rc-card p-6 xl:col-span-2 min-w-0">
+                                    <h3 class="font-display text-base font-bold text-gray-800 dark:text-white tracking-tight">Há quanto tempo o cliente espera</h3>
+                                    <p class="text-xs rc-mut mt-1" id="bg-ab-idade-sub">Casos esperando nossa resposta, pelo tempo desde a última mensagem do cliente.</p>
+                                    <div id="bg-ab-idade"></div>
+                                </div>
+                            </div>
+                            <div class="rc-card overflow-hidden">
+                                <div class="px-6 py-4 flex flex-wrap items-start justify-between gap-2" style="border-bottom:1px solid var(--gx-line)">
+                                    <div>
+                                        <h3 class="font-display text-base font-bold text-gray-800 dark:text-white tracking-tight">Em aberto por caixa</h3>
+                                        <p class="text-xs rc-mut mt-1">Clique numa linha para filtrar a tela por essa caixa (de novo, volta para todas).</p>
+                                    </div>
+                                    <span class="text-[11px] font-semibold rc-mut" id="bg-ab-caixas-sub"></span>
+                                </div>
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left border-separate min-w-[980px]" style="border-spacing: 0 0.5rem; padding: 0 1rem;">
+                                        <thead>
+                                            <tr class="rc-eyebrow bg-transparent">
+                                                <th class="py-3 px-3 pl-4">Caixa</th>
+                                                <th class="py-3 px-3 text-center">Em aberto</th>
+                                                <th class="py-3 px-3 text-center"><span class="rc-dot mr-1.5 align-middle" style="background:var(--ab-esp)"></span>Esperando resposta</th>
+                                                <th class="py-3 px-3 text-center"><span class="rc-dot mr-1.5 align-middle" style="background:var(--ab-cli)"></span>Aguardando cliente</th>
+                                                <th class="py-3 px-3 text-center" title="Esperando há mais de 1 hora">+1 h</th>
+                                                <th class="py-3 px-3 text-center" title="Esperando há mais de 24 horas">+24 h</th>
+                                                <th class="py-3 px-3 text-center" title="Casos esperando resposta sem ninguém com o ticket (claim)">Sem responsável</th>
+                                                <th class="py-3 px-3 text-center" title="Ainda não abertos no Help Desk">Não lidos</th>
+                                                <th class="py-3 px-3 text-center">Mais antiga</th>
+                                                <th class="py-3 px-3 text-center" title="Metade dos casos esperando espera menos que isso">Mediana</th>
+                                                <th class="py-3 px-3 text-center" title="Em aberto agora × 24 h antes (leituras do robô)">vs 24 h</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="bg-ab-tabela" class="text-sm"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+                                <div class="rc-card p-6 xl:col-span-3 min-w-0">
+                                    <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+                                        <div>
+                                            <h3 class="font-display text-base font-bold text-gray-800 dark:text-white tracking-tight">Esperando há mais tempo</h3>
+                                            <p class="text-xs rc-mut mt-1">Os casos que precisam de atenção primeiro (cliente falou por último).</p>
+                                        </div>
+                                        <button type="button" onclick="bgAbVerFila('esperando')" class="text-[11px] font-bold text-gexCyan hover:underline">Ver todos esperando →</button>
+                                    </div>
+                                    <div id="bg-ab-antigos" class="space-y-2"></div>
+                                </div>
+                                <div class="rc-card p-6 xl:col-span-2 min-w-0">
+                                    <h3 class="font-display text-base font-bold text-gray-800 dark:text-white tracking-tight">Onde está a fila</h3>
+                                    <p class="text-xs rc-mut mt-1">Casos em aberto por setor (etiqueta do ticket) e por assunto.</p>
+                                    <div id="bg-ab-onde" class="mt-4 space-y-5"></div>
+                                </div>
+                            </div>
+                            <details class="rc-card px-6 py-4">
+                                <summary class="rc-eyebrow cursor-pointer select-none">Como os casos em aberto são contados</summary>
+                                <div class="text-[11px] font-medium rc-mut mt-3 space-y-1 leading-relaxed">
+                                    <p><b>Em aberto</b> = ticket com status Aberto no Help Desk da BuyGoods na última leitura do robô (tickets de teste ficam fora). É a mesma base da "Fila aberta agora" do SLA.</p>
+                                    <p><b>Esperando nossa resposta</b> = o cliente mandou a última mensagem; o tempo conta dessa mensagem até agora. <b>Aguardando o cliente</b> = a última mensagem é nossa e o ticket continua aberto.</p>
+                                    <p><b>Sem responsável</b> = ninguém pegou o ticket (claim) no Help Desk. <b>Não lido</b> = ninguém abriu o ticket ainda (o robô não lê esses, para não marcar como lido).</p>
+                                    <p><b>Evolução</b> e <b>vs 24 h</b> vêm da aba Fotos da planilha (uma foto da fila por caixa a cada execução do robô). Datas no horário de Brasília.</p>
+                                </div>
+                            </details>
+                        </section>
                         <p class="text-[11px] font-semibold rc-mut leading-relaxed flex flex-wrap items-center gap-x-5 gap-y-1">
                             <span class="inline-flex items-center gap-1.5"><span class="rc-dot" style="background:var(--rc-n)"></span><b class="rc-ink">Novo</b> = o cliente abriu uma conversa</span>
                             <span class="inline-flex items-center gap-1.5"><span class="rc-dot" style="background:var(--rc-r)"></span><b class="rc-ink">Retorno</b> = o cliente voltou a escrever numa conversa que já existia</span>
@@ -3644,9 +3745,9 @@
                 bgGeralCarregar(`?since=${Math.floor(ds[0].getTime() / 1000)}&until=${Math.floor(dF.getTime() / 1000)}`);
             });
         }
-        async function bgGeralCarregar(p) {
+        async function bgGeralCarregar(p, silencioso) {   // silencioso = atualização automática (não pisca "Carregando...")
             bgTk.perGeral = p || ''; const seq = ++bgTk.seqG, tb = document.getElementById('bgtk-body');
-            if (tb && bgTk.sub === 'geral') tb.innerHTML = '<tr><td colspan="12" class="py-6 text-center text-gexCyan font-bold">⏳ Carregando...</td></tr>';
+            if (tb && bgTk.sub === 'geral' && !silencioso) tb.innerHTML = '<tr><td colspan="12" class="py-6 text-center text-gexCyan font-bold">⏳ Carregando...</td></tr>';
             try {
                 const j = await (await fetch('/api/bg-tickets-geral' + (p || ''))).json();
                 if (seq !== bgTk.seqG) return;
@@ -3655,6 +3756,8 @@
             } catch (e) { if (tb && seq === bgTk.seqG && bgTk.sub === 'geral') tb.innerHTML = `<tr><td colspan="12" class="py-6 text-center text-red-500 font-bold">⚠️ ${t48xEsc(e.message)}</td></tr>`; }
         }
         function bgTkAbrir() { if (!bgTk.dados) bgTkCarregar(); }
+        // 04/11/2026: o robô grava a cada 10 min -> com a aba BuyGoods aberta (e o navegador visível), recarrega sozinha a cada 10 min, sem piscar
+        function bgTkAtualizarSozinho() { if (bgTk.dados) bgTkCarregar(true); if (bgTk.geral) bgGeralCarregar(bgTk.perGeral, true); }
         function bgTkSetor(s) { bgTk.setor = s; ['TODOS', 'RET', 'SAC', 'BKO', 'SMS', '48H'].forEach(b => { const el = document.getElementById('btn-bgtk-' + b); if (el) el.className = 'btn-setor ' + (b === s ? 'btn-setor-ativo' : 'btn-setor-inativo'); }); bgTkRender(); }
         function bgTkSemana(n) {
             bgTk.semana = n;
@@ -3662,11 +3765,11 @@
             const a = document.getElementById('btn-bgtk-atual'), p = document.getElementById('btn-bgtk-passada'); if (a) a.className = n === 0 ? on : off; if (p) p.className = n === -1 ? on : off;
             bgTkCarregar();
         }
-        async function bgTkCarregar() {
+        async function bgTkCarregar(silencioso) {
             const tb = document.getElementById('bgtk-body'), seq = ++bgTk.seq;
             const h = new Date(), seg = new Date(h.getFullYear(), h.getMonth(), h.getDate() - (h.getDay() === 0 ? 6 : h.getDay() - 1) + 7 * bgTk.semana), dom = new Date(seg.getFullYear(), seg.getMonth(), seg.getDate() + 6);
             const ux = (d, fim) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 3) / 1000 + (fim ? 86399 : 0);
-            if (tb) tb.innerHTML = '<tr><td colspan="10" class="py-6 text-center text-gexCyan font-bold">⏳ Carregando...</td></tr>';
+            if (tb && !silencioso) tb.innerHTML = '<tr><td colspan="10" class="py-6 text-center text-gexCyan font-bold">⏳ Carregando...</td></tr>';
             try {
                 const j = await (await fetch(`/api/bg-tickets?since=${ux(seg)}&until=${ux(dom, true)}`)).json();
                 if (seq !== bgTk.seq) return;
@@ -3900,7 +4003,8 @@
             ['tela-cw-time48',         () => carregarTime48(''),         1800000],
             ['tela-qual-monitoria',    () => carregarQualidade(''),      1800000],
             ['tela-qual-sinalizacoes', () => carregarSinalizacoes(''),   1800000],
-            ['tela-qual-monitoriatk',  () => carregarMonitoriaTk(''),    1800000]
+            ['tela-qual-monitoriatk',  () => carregarMonitoriaTk(''),    1800000],
+            ['aba-buygoods',           () => bgTkAtualizarSozinho(),     600000]    // 04/11/2026: aba BuyGoods do agente a cada 10 min (o robô grava a cada 10 min)
         ];
         const _ultRefreshTela = {};
         function tocarTelaAberta() {
@@ -5391,7 +5495,8 @@
             ldTkGeral = ldCasos = ldProd = ldAtd = k;
             ldPintarBotoes('btn-ld-tickets-', k);
             const lbl = document.getElementById('lbl-ld-tickets');
-            if (lbl) lbl.textContent = (k !== 'todos' && TK_LIDERES[k]) ? `turno ${TK_LIDERES[k].turno} \u00b7 ` + ((typeof tkRecFonte !== 'undefined' && tkRecFonte === 'bg') ? 'na BuyGoods vale para Agentes e Times (Recebimento e SLA s\u00e3o por caixa)' : 'o Recebimento de Tickets n\u00e3o se divide por l\u00edder') : '';
+            if (lbl && k !== 'todos' && TK_LIDERES[k] && !document.body.classList.contains('is-admin')) lbl.textContent = `turno ${TK_LIDERES[k].turno}`;   // 04/11/2026: agente v\u00ea s\u00f3 o turno (igual \u00e0 aba BuyGoods)
+            else if (lbl) lbl.textContent = (k !== 'todos' && TK_LIDERES[k]) ? `turno ${TK_LIDERES[k].turno} \u00b7 ` + ((typeof tkRecFonte !== 'undefined' && tkRecFonte === 'bg') ? 'na BuyGoods vale para Agentes e Times (Recebimento e SLA s\u00e3o por caixa)' : 'o Recebimento de Tickets n\u00e3o se divide por l\u00edder') : '';
             if (typeof bgAgLider === 'function') bgAgLider(k);   // 04/11/2026: BuyGoods — Agentes e Times seguem a Equipe (função só existe para admin)
             [ 'renderTabelaTickets', 'renderTabelaTicketsSemanal', 'renderTabelaTkGeral', 'renderTabelaCasos',
               'renderTabelaDist', 'renderTabelaProdutividade', 'renderAtendimentoAgentes' ].forEach(fn => {
@@ -11185,7 +11290,7 @@ function abrirModalCartPanda(index) {
         // Uma consulta por carga (/api/recebimento-aberturas, só leitura); os chips de CANAL e a caixa filtram na tela, sem consultar de novo.
         const TK_REC_CANAIS = ['E-mail', 'SMS', 'Chat web', 'Outros'];
         const TK_REC_COR = { N: 'var(--rc-n)', R: 'var(--rc-r)', S: 'var(--rc-f)' };   // 30/10/2026: cores no CSS da tela (claro/escuro) — Novo = azul · Retorno (cliente) = laranja · Follow-up (nosso) = roxo
-        // 🛒 04/11/2026: FONTE do Recebimento — 'cw' = Chatwoot (como sempre) · 'bg' = BuyGoods (planilha "BuyGoods Fila Geral", robô n8n a cada 30 min).
+        // 🛒 04/11/2026: FONTE do Recebimento — 'cw' = Chatwoot (como sempre) · 'bg' = BuyGoods (planilha "BuyGoods Fila Geral", robô n8n a cada 10 min).
         // As 3 sub-abas (Recebimento · SLA · Agentes), o comparativo e o Excel são os MESMOS; só a rota muda (/api/bg-recebimento-*, mesmo formato).
         let tkRecFonte = 'cw';
         function tkRecUrl(rota) { return tkRecFonte === 'bg' ? String(rota).replace('/api/recebimento-', '/api/bg-recebimento-') : rota; }
@@ -11197,8 +11302,8 @@ function abrirModalCartPanda(index) {
             t('tkrec-titulo-sla', '⏱️ SLA do Recebimento', '⏱️ SLA · BuyGoods');
             t('tkrec-titulo-ag', '👥 Agentes do Recebimento', '👥 Agentes · BuyGoods');
             const selo = document.getElementById('tkrec-fonte-selo');
-            if (selo) { selo.classList.toggle('hidden', !bg); selo.textContent = 'Fonte: Help Desk BuyGoods · atualiza a cada 30 min'; }
-            ['bg-ag-times', 'bg-ag-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !bg); });
+            if (selo) { selo.classList.toggle('hidden', !bg); selo.textContent = 'Fonte: Help Desk BuyGoods · atualiza a cada 10 min'; }
+            ['bg-ag-times', 'bg-ag-nota', 'bg-ab-bloco'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !bg); });
         }
         function tkRecAbrirFonte(f) {
             const mudou = tkRecFonte !== f;
@@ -11229,6 +11334,7 @@ function abrirModalCartPanda(index) {
             if (usuarioAtual && usuarioAtual.role !== 'admin') return;
             const st = tkRecEstado, btn = document.getElementById('btn-aplicar-tk-rec'), alvo = document.getElementById('tk-rec-graf-hora');
             const seq = st.seq = (st.seq || 0) + 1;   // só a resposta do último pedido desenha
+            if (tkRecFonte === 'bg') bgAbCarregar();   // 04/11/2026: 📂 Casos em aberto (só BuyGoods), em paralelo
             try {
                 if (btn) btn.innerHTML = '⏳';
                 if (alvo) alvo.innerHTML = '<p class="text-gexCyan text-center py-8 font-bold text-xs uppercase tracking-widest">⏳ Carregando...</p>';
@@ -11418,11 +11524,189 @@ function abrirModalCartPanda(index) {
             const totalRow = { clientes: totalClientes, N: a.novos, R: a.retornos, media: a.media, ant: ant ? ant.clientes : 0, mediaAnt: mediaAnt, varPct: varPct };
             setH('tk-rec-tabela-caixas', linhasCaixa.map(m => linhaCaixaHtml(m, false)).join('') + linhaCaixaHtml(totalRow, true));
             set('tk-rec-caixas-sub', `Período: ${tkPeriodoTxt(r.periodo)} · anterior: ${antTxt}`);
+            bgAbRender();   // 04/11/2026: 📂 Casos em aberto segue os filtros de caixa/canal (só BuyGoods)
         }
         // clientes de uma caixa SÓ de hoje (para tirar o dia parcial da média por caixa)
         function tkRecClientesCaixaHoje(r, inboxId, canal) {
             const hoje = tkRecHojeBR();
             return (r.linhas || []).filter(x => x.inbox_id === inboxId && x.dia === hoje && (x.tipo === 'N' || x.tipo === 'R') && (canal === 'TODOS' || x.canal === canal)).reduce((s, x) => s + x.aberturas, 0);
+        }
+        // ── 📂 CASOS EM ABERTO (04/11/2026 · Recebimento › BuyGoods) — fila de AGORA (aba Tickets) + evolução no período (aba Fotos)
+        // Rota /api/bg-recebimento-abertos (só leitura). Segue o filtro de CAIXA e de canal da tela (BuyGoods = só e-mail); o período muda só a evolução.
+        const bgAb = { resp: null, seq: 0 };
+        const BG_AB_FAIXAS = [[15, 'até 15 min'], [30, '15–30 min'], [60, '30–60 min'], [120, '1–2 h'], [240, '2–4 h'], [480, '4–8 h'], [1440, '8–24 h'], [Infinity, '+24 h']];
+        const BG_AB_SETOR = { RET: 'Retenção', SAC: 'SAC', BKO: 'Backoffice', OUTROS: 'Sem setor na etiqueta' };
+        function bgAbCor(min) { return min == null ? 'var(--ab-cli)' : (min > 1440 ? 'var(--ab-crit)' : (min > 60 ? 'var(--ab-alerta)' : 'var(--ab-esp)')); }
+        function bgAbTempo(min) {
+            if (min == null || !isFinite(min)) return '—';
+            min = Math.round(min);
+            if (min < 60) return min + ' min';
+            const h = Math.floor(min / 60), m = min % 60;
+            return h < 48 ? h + 'h' + String(m).padStart(2, '0') : Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
+        }
+        function bgAbMediana(arr) { const s = arr.filter(x => x != null).sort((a, b) => a - b); if (!s.length) return null; const k = (s.length - 1) / 2; return (s[Math.floor(k)] + s[Math.ceil(k)]) / 2; }
+        function bgAbHoraBR(t, comDia) { return new Date(t).toLocaleString('pt-BR', Object.assign({ timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }, comDia ? { day: '2-digit', month: '2-digit' } : {})); }
+        async function bgAbCarregar() {
+            const st = tkRecEstado, seq = ++bgAb.seq;
+            try {
+                const r = await (await fetch('/api/bg-recebimento-abertos' + tkParamsPeriodo(st))).json();
+                if (seq !== bgAb.seq || tkRecFonte !== 'bg') return;
+                if (!r.success) throw new Error(r.error || 'falha ao carregar');
+                bgAb.resp = r; bgAbRender();
+            } catch (e) {
+                if (seq !== bgAb.seq) return;
+                const el = document.getElementById('bg-ab-cards');
+                if (el) el.innerHTML = `<div class="rc-card p-5 col-span-2 xl:col-span-4"><p class="text-red-500 text-center py-4 font-bold text-xs uppercase tracking-widest">⚠️ Casos em aberto: ${t48xEsc(e.message)}</p></div>`;
+            }
+        }
+        // soma das caixas filtradas numa foto da fila · i: 0 abertos · 1 esperando · 2 +1h · 3 +24h · 4 não lidos
+        function bgAbSomaFoto(pt, i, cx) { if (!pt || !pt.c) return null; return Object.entries(pt.c).filter(([k]) => cx === 'TODAS' || Number(k) === cx).reduce((s, [, v]) => s + (Number(v[i]) || 0), 0); }
+        function bgAbDelta(atual, antes, rot) {
+            if (atual == null || antes == null) return '';
+            const d = atual - antes;
+            return d === 0 ? `<span class="rc-mut">= igual a ${rot}</span>` : `<span class="rc-ink font-bold">${d > 0 ? '▲' : '▼'} ${tkNum(Math.abs(d))}</span> <span class="rc-mut">vs ${rot}</span>`;
+        }
+        function bgAbCaixa(v) {   // linha da tabela: filtra a tela pela caixa (2º clique volta para todas)
+            const st = tkRecEstado;
+            if (v === 'TODAS' || st.caixa === v) return tkRecCaixa('TODAS');
+            const sel = document.getElementById('sel-tk-rec-caixa'), r = bgAb.resp;
+            if (sel && ![...sel.options].some(o => o.value === String(v))) {   // caixa com casos em aberto mas sem chegada no período: entra no seletor
+                const t = r && (r.tickets || []).find(x => x.conta === v), o = document.createElement('option');
+                o.value = String(v); o.textContent = t ? t.caixa : ((r && r.caixas && r.caixas[String(v)]) || String(v)); sel.appendChild(o);
+            }
+            tkRecCaixa(v);
+        }
+        async function bgAbVerFila(qual) {   // abre o modal "Fila aberta" do SLA (mesma base), já filtrado pela caixa da tela
+            if (tkRecFonte !== 'bg' || typeof slaFilaAbrir !== 'function') return;
+            const st = tkRecEstado, r = bgAb.resp, extra = {};
+            if (st.caixa !== 'TODAS' && r) { const t = (r.tickets || []).find(x => x.conta === st.caixa), nome = t ? t.caixa : (r.caixas || {})[String(st.caixa)]; if (nome) extra.cx = nome; }
+            slaFila.dados = null; slaFila.ref = null;   // sempre a fila de agora
+            await slaFilaAbrir(null, extra);
+            if (qual === 'esperando' && slaFila.dados) { ['nunca', 'novo', 'esperando'].forEach(e => slaFila.sel.est.add(e)); slaFilaRender(false); }
+        }
+        // gráfico de linha da fila no período: em aberto (área), esperando resposta e esperando +1 h (tracejado)
+        function bgAbEvolucao(pts, passoMin) {
+            if (pts.length < 2) return `<p class="rc-mut text-center py-12 font-bold text-sm">${pts.length ? 'Só 1 leitura do robô neste período: a linha aparece a partir da 2ª.' : 'Nenhuma leitura do robô neste período.'}</p>`;
+            const t0 = pts[0].t, t1 = pts[pts.length - 1].t, span = Math.max(1, t1 - t0);
+            const e = tkRecEixo(Math.max(1, ...pts.map(p => p.ab))), y = v => v / e.topo * 100, X = t => (t - t0) / span * 100;
+            const linha = k => pts.map(p => `${(X(p.t) * 10).toFixed(1)},${(100 - y(p[k])).toFixed(2)}`).join(' ');
+            const traco = (k, cor, larg, dash) => `<polyline points="${linha(k)}" fill="none" stroke="${cor}" stroke-width="${larg}" ${dash ? 'stroke-dasharray="5 4"' : ''} vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline>`;
+            const svg = `<svg class="absolute inset-0 w-full h-full overflow-visible pointer-events-none" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">`
+                + `<polygon points="0,100 ${linha('ab')} 1000,100" fill="var(--ab-esp)" fill-opacity=".12"></polygon>`
+                + traco('ab', 'var(--ab-esp)', 3) + traco('es', 'var(--ab-cli)', 1.75) + traco('h1', 'var(--ab-alerta)', 2, true) + '</svg>';   // esperando por cima (quando é igual ao em aberto, as duas aparecem)
+            const ult = pts[pts.length - 1];
+            const ponto = (k, cor) => `<span class="absolute w-2.5 h-2.5 rounded-full pointer-events-none" style="left:100%;bottom:${y(ult[k]).toFixed(2)}%;transform:translate(-50%,50%);background:${cor};box-shadow:0 0 0 2px var(--gx-surface)"></span>`;
+            const comDia = span > 20 * 3600000;
+            const faixas = pts.map((p, i) => {
+                const a = i ? (X(pts[i - 1].t) + X(p.t)) / 2 : 0, b = i < pts.length - 1 ? (X(p.t) + X(pts[i + 1].t)) / 2 : 100;
+                return `<div class="rc-col absolute top-0 bottom-0" tabindex="0" style="left:${a.toFixed(3)}%;width:${Math.max(0.2, b - a).toFixed(3)}%" data-q3tip="${t48xEsc(bgAbHoraBR(p.t, true))}${passoMin ? ' (última leitura da ' + (passoMin === 60 ? 'hora' : 'faixa de ' + (passoMin / 60) + ' h') + ')' : ''}|${tkNum(p.ab)} em aberto · ${tkNum(p.es)} esperando resposta · ${tkNum(p.h1)} esperando +1 h"></div>`;
+            }).join('');
+            const nTicks = Math.min(6, pts.length);
+            const ticks = Array.from({ length: nTicks }, (_, k) => t0 + span * k / (nTicks - 1)).map((t, k) => {
+                const rot = span > 3 * 86400000 ? new Date(t).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }) : bgAbHoraBR(t, comDia);
+                const al = k === 0 ? 'translateX(0)' : (k === nTicks - 1 ? 'translateX(-100%)' : 'translateX(-50%)');
+                return `<span class="absolute text-[10px] rc-mut tabular-nums whitespace-nowrap" style="left:${X(t).toFixed(2)}%;transform:${al}">${rot}</span>`;
+            }).join('');
+            return `<div class="relative ml-10 mt-6 h-56">${tkRecGrade(e, y)}${svg}${ponto('ab', 'var(--ab-esp)')}${ponto('es', 'var(--ab-cli)')}${ponto('h1', 'var(--ab-alerta)')}${faixas}</div><div class="relative ml-10 mt-2 h-4">${ticks}</div>`;
+        }
+        // histograma do tempo de espera (quem está esperando nossa resposta)
+        function bgAbIdade(esp) {
+            if (!esp.length) return '<p class="rc-mut text-center py-12 font-bold text-sm">Ninguém esperando nossa resposta agora.</p>';
+            const cont = BG_AB_FAIXAS.map(() => 0);
+            esp.forEach(t => { const i = BG_AB_FAIXAS.findIndex(f => (t.espera_min || 0) <= f[0]); cont[i < 0 ? cont.length - 1 : i]++; });
+            const corF = i => i <= 2 ? 'var(--ab-esp)' : (i <= 6 ? 'var(--ab-alerta)' : 'var(--ab-crit)');
+            const e = tkRecEixo(Math.max(1, ...cont)), y = v => v / e.topo * 100;
+            const cols = cont.map((v, i) => `<div class="rc-col relative flex-1 min-w-0 h-full flex flex-col justify-end px-[3px]" tabindex="0" data-q3tip="Esperando ${BG_AB_FAIXAS[i][1]}|${tkNum(v)} caso${v === 1 ? '' : 's'} · ${tkNum(v / esp.length * 100)}% de quem espera">`
+                + (v ? `<span class="absolute left-1/2 -translate-x-1/2 rc-num text-[12px] pointer-events-none" style="bottom:calc(${y(v).toFixed(2)}% + 4px)">${tkNum(v)}</span><div class="w-full rounded-t-[4px]" style="height:${y(v).toFixed(2)}%;background:${corF(i)}"></div>` : '') + '</div>').join('');
+            const rot = BG_AB_FAIXAS.map(f => `<div class="flex-1 min-w-0 text-center text-[10px] rc-mut leading-tight">${f[1]}</div>`).join('');
+            const g = [cont.slice(0, 3), cont.slice(3, 7), cont.slice(7)].map(a => a.reduce((s, v) => s + v, 0));
+            const chip = (cor, rot, v) => `<span class="inline-flex items-center gap-1.5"><span class="rc-dot" style="background:${cor}"></span>${rot}: <b class="rc-ink">${tkNum(v)}</b> <span class="rc-mut">(${tkNum(v / esp.length * 100)}%)</span></span>`;
+            return `<div class="relative ml-10 mt-8 h-44">${tkRecGrade(e, y)}<div class="absolute inset-0 flex items-end gap-[3px]">${cols}</div></div><div class="flex gap-[3px] ml-10 mt-2">${rot}</div>`
+                + `<div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold rc-mut mt-4">${chip('var(--ab-esp)', 'até 1 h', g[0])}${chip('var(--ab-alerta)', '1 a 24 h', g[1])}${chip('var(--ab-crit)', '+24 h', g[2])}</div>`;
+        }
+        function bgAbBarras(titulo, lista) {   // barras horizontais: esperando resposta + aguardando o cliente
+            if (!lista.length) return '';
+            const max = Math.max(1, ...lista.map(x => x.n));
+            return `<div><div class="rc-eyebrow mb-2">${titulo}</div><div class="space-y-2">` + lista.map(x => `<div class="flex items-center gap-3 rounded-md outline-none" tabindex="0" data-q3tip="${t48xEsc(x.rot)}|${tkNum(x.n)} em aberto: ${tkNum(x.es)} esperando resposta · ${tkNum(x.n - x.es)} aguardando o cliente${x.h1 ? ' · ' + tkNum(x.h1) + ' esperando +1 h' : ''}">`
+                + `<div class="w-36 shrink-0 text-[11px] font-semibold rc-ink truncate">${t48xEsc(x.rot)}</div>`
+                + `<div class="flex-1 h-2.5 rounded-full overflow-hidden flex" style="background:var(--rc-trilho)"><div class="h-full" style="width:${(x.es / max * 100).toFixed(2)}%;background:var(--ab-esp)"></div><div class="h-full" style="width:${((x.n - x.es) / max * 100).toFixed(2)}%;background:var(--ab-cli);opacity:.85"></div></div>`
+                + `<div class="w-8 text-right rc-num text-[13px]">${tkNum(x.n)}</div></div>`).join('') + '</div></div>';
+        }
+        function bgAbRender() {
+            const r = bgAb.resp, st = tkRecEstado; if (!r || tkRecFonte !== 'bg') return;
+            const setH = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
+            const cx = st.caixa, canalOk = st.canal === 'TODOS' || st.canal === 'E-mail', ref = r.ref || {};
+            const lida = ref.ultima ? Date.parse(ref.ultima.t) : Date.parse(r.atualizado_planilha || '');
+            setH('bg-ab-selo', isNaN(lida) ? '' : 'leitura do robô ' + t48xEsc(bgAbHoraBR(lida, true)));
+            if (!canalOk) {
+                setH('bg-ab-cards', '<div class="rc-card p-5 col-span-2 xl:col-span-4"><p class="rc-mut text-center py-4 font-bold text-sm">A BuyGoods só tem e-mail: escolha <b class="rc-ink">Geral</b> ou <b class="rc-ink">E-mail</b> para ver os casos em aberto.</p></div>');
+                ['bg-ab-evol', 'bg-ab-idade', 'bg-ab-tabela', 'bg-ab-antigos', 'bg-ab-onde', 'bg-ab-evol-legenda', 'bg-ab-caixas-sub'].forEach(id => setH(id, ''));
+                return;
+            }
+            const todos = r.tickets || [], tks = todos.filter(t => cx === 'TODAS' || t.conta === cx);
+            const esp = tks.filter(t => t.esperando).sort((a, b) => (b.espera_min || 0) - (a.espera_min || 0)), cli = tks.filter(t => !t.esperando);
+            const n1 = esp.filter(t => t.espera_min > 60).length, n2 = esp.filter(t => t.espera_min > 120).length, n24 = esp.filter(t => t.espera_min > 1440).length;
+            const semResp = esp.filter(t => !t.responsavel).length, naoLidos = tks.filter(t => t.nao_lido).length, med = bgAbMediana(esp.map(t => t.espera_min)), velho = esp[0] || null;
+            const fx = (pt, i) => bgAbSomaFoto(pt, i, cx);
+            const varAb = bgAbDelta(fx(ref.ultima, 0), fx(ref.h24, 0), '24 h atrás') || bgAbDelta(fx(ref.ultima, 0), fx(ref.h1, 0), '1 h atrás') || '<span class="rc-mut">sem leitura anterior para comparar</span>';
+            const varEsp = bgAbDelta(fx(ref.ultima, 1), fx(ref.h1, 1), '1 h atrás');
+            // cartões
+            const card = (cor, rot, num, numCor, extra, sub, acao, dica) => `<div class="rc-card ab-kpi p-5${acao ? ' ab-clicavel' : ''}" style="--ab-cor:${cor}"${acao ? ` tabindex="0" role="button" onclick="${acao}" onkeydown="if (event.key === 'Enter') ${acao}"` : ''} title="${t48xEsc(dica)}">`
+                + `<div class="rc-eyebrow mb-3">${rot}</div><div class="rc-num text-4xl"${numCor ? ` style="color:${numCor}"` : ''}>${num}</div>${extra || ''}<p class="text-[11px] font-semibold rc-mut mt-3 leading-relaxed">${sub}</p></div>`;
+            const tot = esp.length + cli.length;
+            const barra = tot ? '<div class="flex w-full h-2 gap-[2px] mt-3">' + [['var(--ab-esp)', esp.length, 'Esperando nossa resposta'], ['var(--ab-cli)', cli.length, 'Aguardando o cliente']].filter(p => p[1] > 0)
+                .map(p => `<div class="rc-marca h-full first:rounded-l-full last:rounded-r-full" tabindex="0" data-q3tip="${p[2]}: ${tkNum(p[1])}|${tkNum(p[1] / tot * 100)}% dos casos em aberto" style="width:${(p[1] / tot * 100).toFixed(2)}%;background:${p[0]}"></div>`).join('') + '</div>' : '';
+            const corSla = n24 ? 'var(--ab-crit)' : (n1 ? 'var(--ab-alerta)' : '');
+            setH('bg-ab-cards',
+                card('var(--ab-esp)', 'Em aberto agora', tkNum(tks.length), '', barra, `<span class="rc-ink font-bold">${tkNum(esp.length)}</span> esperando resposta · <span class="rc-ink font-bold">${tkNum(cli.length)}</span> aguardando o cliente<br>${varAb}`, "bgAbVerFila('todos')", 'Tickets com status Aberto no Help Desk agora · clique para ver a fila')
+                + card('var(--ab-cli)', 'Esperando nossa resposta', tkNum(esp.length), '', '', `${tkNum(semResp)} sem responsável · ${tkNum(naoLidos)} não lido${naoLidos === 1 ? '' : 's'}${varEsp ? '<br>' + varEsp : ''}`, "bgAbVerFila('esperando')", 'O cliente mandou a última mensagem · clique para ver a lista')
+                + card(corSla || 'var(--ab-esp)', 'Esperando há +1 h', tkNum(n1), corSla, '', `+2 h: <b class="rc-ink">${tkNum(n2)}</b> · +24 h: <b class="rc-ink">${tkNum(n24)}</b>${esp.length ? ` · ${tkNum(n1 / esp.length * 100)}% de quem espera` : ''}`, "bgAbVerFila('esperando')", 'Casos esperando nossa resposta há mais de 1 hora (SLA de 1 h)')
+                + card(velho ? bgAbCor(velho.espera_min) : 'var(--ab-esp)', 'Espera mais antiga', velho ? bgAbTempo(velho.espera_min) : '—', velho ? bgAbCor(velho.espera_min) : '', '', velho ? `#${t48xEsc(velho.ticket)} · ${t48xEsc(velho.caixa)} · ${t48xEsc(BG_AB_SETOR[velho.setor] || velho.setor)}<br>mediana de quem espera: <b class="rc-ink">${bgAbTempo(med)}</b>` : 'ninguém esperando', '', 'Há quanto tempo o cliente mais antigo espera a nossa resposta'));
+            // evolução
+            const pts = (r.serie || []).map(p => ({ t: Date.parse(p.t), ab: fx(p, 0), es: fx(p, 1), h1: fx(p, 2) })).filter(p => !isNaN(p.t)).sort((a, b) => a.t - b.t);
+            setH('bg-ab-evol', bgAbEvolucao(pts, r.passo_min || 0));
+            setH('bg-ab-evol-legenda', tkRecLegenda([['var(--ab-esp)', 'Em aberto'], ['var(--ab-cli)', 'Esperando resposta'], ['var(--ab-alerta)', 'Esperando +1 h (tracejado)']]));
+            const pico = pts.reduce((m, p) => (!m || p.ab > m.ab) ? p : m, null);
+            const el = document.getElementById('bg-ab-evol-sub');
+            if (el) el.textContent = pts.length ? `${tkNum(pts.length)} leitura${pts.length === 1 ? '' : 's'} do robô em ${tkPeriodoTxt(r.periodo)}${r.passo_min ? ' (a última de cada ' + (r.passo_min === 60 ? 'hora' : r.passo_min / 60 + ' h') + ')' : ''}` + (pico ? ` · pico de ${tkNum(pico.ab)} em aberto em ${bgAbHoraBR(pico.t, true)}` : '') : 'Casos em aberto a cada leitura do robô, no período.';
+            // idade da espera
+            setH('bg-ab-idade', bgAbIdade(esp));
+            // tabela por caixa (ignora o filtro de caixa, marca a escolhida)
+            const grupos = new Map();
+            todos.forEach(t => { const g = grupos.get(t.conta) || { conta: t.conta, caixa: t.caixa, l: [] }; g.l.push(t); grupos.set(t.conta, g); });
+            if (ref.h24) Object.entries(ref.h24.c || {}).forEach(([k, v]) => { const c = Number(k); if ((Number(v[0]) || 0) > 0 && !grupos.has(c)) grupos.set(c, { conta: c, caixa: (r.caixas || {})[k] || k, l: [] }); });   // zerou nas últimas 24 h: aparece com a queda
+            const lin = (g, total) => {
+                const l = g.l, es = l.filter(t => t.esperando), h1 = es.filter(t => t.espera_min > 60).length, h24 = es.filter(t => t.espera_min > 1440).length;
+                const antiga = es.reduce((m, t) => Math.max(m, t.espera_min || 0), 0), cxL = total ? 'TODAS' : g.conta;
+                const dAtual = bgAbSomaFoto(ref.ultima, 0, cxL), dAntes = bgAbSomaFoto(ref.h24, 0, cxL), d = (dAtual == null || dAntes == null) ? null : dAtual - dAntes;
+                const sel = !total && st.caixa === g.conta;
+                const n = (v, cor) => `<td class="py-3 px-3 text-center text-[13px] tabular-nums font-bold${v && cor ? '' : ' rc-ink'}"${v && cor ? ` style="color:${cor}"` : ''}>${tkNum(v)}</td>`;
+                return `<tr class="ranking-row row-normal cursor-pointer hover:ring-1 hover:ring-gexCyan/50${sel ? ' ab-sel' : ''}" onclick="bgAbCaixa(${total ? "'TODAS'" : g.conta})">`
+                    + `<td class="py-3 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap">${total ? 'Total' : t48xEsc(g.caixa)}${sel ? ' <span class="ab-pill" style="background:var(--rc-trilho);color:var(--ab-esp)">filtrando</span>' : ''}</td>`
+                    + `<td class="py-3 px-3 text-center rc-num text-[15px]">${tkNum(l.length)}</td>` + n(es.length) + n(l.length - es.length)
+                    + n(h1, 'var(--ab-alerta)') + n(h24, 'var(--ab-crit)') + n(es.filter(t => !t.responsavel).length) + n(l.filter(t => t.nao_lido).length)
+                    + `<td class="py-3 px-3 text-center text-[13px] tabular-nums font-bold" style="color:${es.length ? bgAbCor(antiga) : 'inherit'}">${es.length ? bgAbTempo(antiga) : '—'}</td>`
+                    + `<td class="py-3 px-3 text-center text-[13px] tabular-nums rc-ink">${bgAbTempo(bgAbMediana(es.map(t => t.espera_min)))}</td>`
+                    + `<td class="py-3 px-3 text-center text-[12px] tabular-nums">${d === null ? '<span class="rc-mut">—</span>' : (d === 0 ? '<span class="rc-mut">=</span>' : `<span class="rc-ink font-bold">${d > 0 ? '▲' : '▼'} ${tkNum(Math.abs(d))}</span>`)}</td></tr>`;
+            };
+            const linhas = [...grupos.values()].sort((a, b) => b.l.length - a.l.length || String(a.caixa).localeCompare(String(b.caixa)));
+            setH('bg-ab-tabela', linhas.length ? linhas.map(g => lin(g, false)).join('') + lin({ l: todos }, true) : '<tr><td colspan="11" class="py-8 text-center rc-mut font-bold text-sm">Nenhum caso em aberto agora.</td></tr>');
+            setH('bg-ab-caixas-sub', `agora · ${tkNum(todos.length)} em aberto em ${tkNum(linhas.filter(g => g.l.length).length)} caixa${linhas.filter(g => g.l.length).length === 1 ? '' : 's'} · caixas sem caso em aberto não aparecem`);
+            // esperando há mais tempo (8 primeiros)
+            const item = t => {
+                const cor = bgAbCor(t.espera_min), lk = /^https?:\/\//i.test(t.link || '');
+                const num = lk ? `<a href="${t48xEsc(t.link)}" target="_blank" rel="noopener" class="hover:underline" title="Abrir no Help Desk da BuyGoods (abrir marca o ticket como lido)">#${t48xEsc(t.ticket)}</a>` : '#' + t48xEsc(t.ticket);
+                return `<div class="flex items-center gap-3 rounded-xl px-3 py-2.5" style="background:var(--rc-trilho)">`
+                    + `<span class="ab-pill rc-num shrink-0 text-center min-w-[70px] text-[12px]" style="background:color-mix(in srgb, ${cor} 16%, transparent);color:${cor}">${bgAbTempo(t.espera_min)}</span>`
+                    + `<div class="min-w-0 flex-1"><div class="text-[12px] font-bold rc-ink truncate">${num} <span class="rc-mut font-semibold">· ${t48xEsc(t.caixa)} · ${t48xEsc(BG_AB_SETOR[t.setor] || t.setor)}${t.ja_respondido ? '' : ' · nunca respondido'}</span></div>`
+                    + `<div class="text-[11px] rc-mut truncate" title="${t48xEsc(t.assunto)}">${t48xEsc(t.tipo)} · ${t48xEsc(t.assunto)}</div></div>`
+                    + `<div class="shrink-0 text-right space-y-1"><div class="text-[11px] font-bold${t.responsavel ? ' rc-ink' : ''}"${t.responsavel ? '' : ' style="color:var(--ab-alerta)"'}>${t.responsavel ? t48xEsc(t.responsavel) : 'sem responsável'}</div>${t.nao_lido ? '<span class="ab-pill" style="background:var(--gx-surface);color:var(--ab-cli)">não lido</span>' : ''}</div></div>`;
+            };
+            setH('bg-ab-antigos', esp.length ? esp.slice(0, 8).map(item).join('') + (esp.length > 8 ? `<p class="text-[11px] rc-mut font-semibold pt-1">+ ${tkNum(esp.length - 8)} esperando · use "Ver todos esperando".</p>` : '') : '<p class="rc-mut text-center py-8 font-bold text-sm">Ninguém esperando nossa resposta agora.</p>');
+            // onde está a fila: setor e assunto
+            const agrupa = (f) => { const m = new Map(); tks.forEach(t => { const k = f(t); const x = m.get(k) || { rot: k, n: 0, es: 0, h1: 0 }; x.n++; if (t.esperando) { x.es++; if (t.espera_min > 60) x.h1++; } m.set(k, x); }); return [...m.values()].sort((a, b) => b.n - a.n || a.rot.localeCompare(b.rot)); };
+            setH('bg-ab-onde', tks.length ? bgAbBarras('Por setor', agrupa(t => BG_AB_SETOR[t.setor] || t.setor)) + bgAbBarras('Por assunto', agrupa(t => t.tipo || 'Outros'))
+                + `<div class="pt-1">${tkRecLegenda([['var(--ab-esp)', 'Esperando resposta'], ['var(--ab-cli)', 'Aguardando o cliente']])}</div>` : '<p class="rc-mut text-center py-8 font-bold text-sm">Nenhum caso em aberto agora.</p>');
         }
         /* ADMIN-JS-FIM: Atendimento por Agente e Recebimento */
 
