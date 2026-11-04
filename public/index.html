@@ -4148,6 +4148,7 @@
 
         function fecharCardAgenteRet() { const m = document.getElementById('modal-agente-ret'); if (m) m.classList.add('hidden'); }
 
+        let semMesRet = false;   // 04/11/2026: /api/retencao respondeu semMes (mês em branco)
         async function carregarDadosReais(pUrl = '') {
             const nPedRet = novoPedidoTela('retencao');   // 14/10/2026: só a resposta do último pedido é desenhada
             try {
@@ -4165,7 +4166,7 @@
                     mesesDisponiveisRet = Array.isArray(data.meses) ? data.meses : [];
                     if (!mesesSelecionadosRet.length && mesAtualFullRet) mesesSelecionadosRet = [mesAtualFullRet];
                     const selU = document.getElementById('select-mes-unico-ret');
-                    if (selU) selU.innerHTML = mesesDisponiveisRet.map(mm => `<option value="${mm}" ${mm === mesAtualFullRet ? 'selected' : ''}>📅 ${mm.split('|').pop().trim()}</option>`).join('');
+                    if (selU) selU.innerHTML = (mesAtualFullRet ? '' : '<option value="" selected>📅 Sem mês</option>') + mesesDisponiveisRet.map(mm => `<option value="${mm}" ${mm === mesAtualFullRet ? 'selected' : ''}>📅 ${mm.split('|').pop().trim()}</option>`).join('');   // 04/11/2026: "Sem mês" quando o mês está em branco
                     if (comparativoAtivoRet) renderMesesCompBtns();
                     const btnDif = document.getElementById('btn-ver-dif-ret');
                     if (btnDif) btnDif.classList.toggle('hidden', !(comparativoAtivoRet && multiMesRet));
@@ -4175,6 +4176,8 @@
                     const ctrlMesRet = document.getElementById('controles-mes-ret');
                     if (ctrlMesRet) ctrlMesRet.classList.toggle('hidden', !ehAdminRet);
                     if (!ehAdminRet) { multiMesRet = false; comparativoAtivoRet = false; modoComparativoRet = false; }
+                    semMesRet = !!data.semMes;   // 04/11/2026: mês da planilha de resultados em branco = tela vazia
+                    if (semMesRet) { ['card-meta-trv', 'card-trv-medio', 'card-meta-mes', 'card-recuperado-total', 'card-faltam', 'card-meta-min-casos'].forEach(id => { const el = document.getElementById(id); if (el) el.innerText = '—'; }); renderTabelaRetencaoPremium(); if (btnSync) { btnSync.innerHTML = '✅ OK!'; setTimeout(() => btnSync.innerHTML = 'Sincronizar', 2000); } return; }
                     document.getElementById('card-meta-trv').innerText = fmtTrv(data.globais.meta_trv); document.getElementById('card-trv-medio').innerText = fmtTrv(data.globais.trv_medio);
                     document.getElementById('card-meta-mes').innerText = fmtDolar(data.globais.meta_mes); document.getElementById('card-recuperado-total').innerText = fmtDolar(data.globais.recuperado_total);
                     document.getElementById('card-faltam').innerText = fmtDolar(data.globais.faltam); document.getElementById('card-meta-min-casos').innerText = fmtDolar(data.globais.meta_minima_casos);
@@ -4190,6 +4193,7 @@
         function renderTabelaRetencaoPremium() {
             const tb = document.getElementById('tabela-retencao-body'); if (!tb) return;
             if (modoComparativoRet && multiMesRet) return renderComparativoRet();
+            if (semMesRet) { tb.innerHTML = '<tr><td colspan="10" class="py-10 text-center text-sm text-gray-400">Sem dados: o mês da planilha de resultados não está definido.</td></tr>'; return; }   // 04/11/2026
             let rData = dadosAgentes.filter(a => a.time === 'RET');
             tb.innerHTML = rData.map((a, i) => {
                 const recuperado = (a.casos_atual || 0) - (a.refund || 0);
