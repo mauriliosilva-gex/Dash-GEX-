@@ -965,6 +965,7 @@ const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas, nomesDaPlanilha
 // ==========================================
 // 📅 MÊS DA PLANILHA DE RESULTADOS — troque só o nome do mês (ex.: 'Outubro' → 'Novembro') quando a aba nova estiver pronta.
 // Precisa ser igual ao final do nome da aba "📊 Análise | Metas | <Mês>" (com acento: 'Março').
+// 04/11/2026 (pedido do Maurílio): em branco ('') ou aba inexistente = a Retenção abre VAZIA, sem dados (não pega outra aba).
 const MES_PLANILHA_RESULTADOS = '';
 
 app.get('/api/retencao', async (req, res) => {
@@ -998,13 +999,18 @@ app.get('/api/retencao', async (req, res) => {
         if (typeof selecionadas === 'string') selecionadas = [selecionadas];
         if (!Array.isArray(selecionadas)) selecionadas = [];
         selecionadas = selecionadas.map(a => (a || '').trim()).filter(a => abasDisponiveis.includes(a));
-        if (selecionadas.length === 0) selecionadas = abasDisponiveis.includes(PADRAO_ABA) ? [PADRAO_ABA] : (abasDisponiveis.length ? [abasDisponiveis[abasDisponiveis.length - 1]] : [PADRAO_ABA]);
+        // 04/11/2026: sem mês definido (ou aba inexistente) = nenhuma aba (tela em branco); antes caía na última aba de Metas
+        const padraoRet = (MES_PLANILHA_RESULTADOS.trim() && abasDisponiveis.includes(PADRAO_ABA)) ? [PADRAO_ABA] : [];
+        if (selecionadas.length === 0) selecionadas = padraoRet;
 
         // 🔒 Multi-mês/comparativo é só pra ADMIN. Não-admin vê sempre o mês atual (como sempre).
         const emailUserRet = (req.user && req.user.emails && req.user.emails[0]) ? req.user.emails[0].value.toLowerCase() : '';
         const admsRet = (process.env.EMAILS_ADM || 'maurilio@institutoexperience.com.br').split(',').map(e => e.trim().toLowerCase());
         const isAdminRet = admsRet.includes(emailUserRet);
-        if (!isAdminRet) selecionadas = abasDisponiveis.includes(PADRAO_ABA) ? [PADRAO_ABA] : (abasDisponiveis.length ? [abasDisponiveis[abasDisponiveis.length - 1]] : [PADRAO_ABA]);
+        if (!isAdminRet) selecionadas = padraoRet;
+        if (selecionadas.length === 0) {   // 04/11/2026: em branco, sem dados (admin ainda pode escolher um mês no seletor)
+            return res.json({ success: true, semMes: true, globais: { meta_trv: 0, trv_medio: 0, meta_mes: 0, recuperado_total: 0, faltam: 0, meta_minima_casos: 0, dias_mes_atual: 0 }, agentes: [], meses: abasDisponiveis, selecionados: [], mesAtual: '', multiMes: false, mesRecente: '', detalhePorMes: {} });
+        }
 
         const mesDaAba = (aba) => { const i = MESES_PT.findIndex(mm => aba.toLowerCase().includes(mm.toLowerCase())); return i >= 0 ? i : 8; };
         const labelDaAba = (aba) => aba.split('|').pop().trim();
