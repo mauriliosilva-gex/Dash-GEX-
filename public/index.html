@@ -2010,7 +2010,7 @@
                                                 <th class="py-3 px-3 text-center"><span class="rc-dot mr-1.5 align-middle" style="background:var(--ab-cli)"></span>Aguardando cliente</th>
                                                 <th class="py-3 px-3 text-center" title="Esperando há mais de 1 hora">+1 h</th>
                                                 <th class="py-3 px-3 text-center" title="Esperando há mais de 24 horas">+24 h</th>
-                                                <th class="py-3 px-3 text-center" title="Casos esperando resposta sem ninguém com o ticket (claim)">Sem responsável</th>
+                                                <th class="py-3 px-3 text-center" title="Casos esperando resposta sem agente: nenhuma mensagem nossa com o nome provado (assinatura, nome no texto ou tag)">Sem agente</th>
                                                 <th class="py-3 px-3 text-center" title="Ainda não abertos no Help Desk">Não lidos</th>
                                                 <th class="py-3 px-3 text-center">Mais antiga</th>
                                                 <th class="py-3 px-3 text-center" title="Metade dos casos esperando espera menos que isso">Mediana</th>
@@ -2043,7 +2043,8 @@
                                 <div class="text-[11px] font-medium rc-mut mt-3 space-y-1 leading-relaxed">
                                     <p><b>Em aberto</b> = ticket com status Aberto no Help Desk da BuyGoods na última leitura do robô (tickets de teste ficam fora). É a mesma base da "Fila aberta agora" do SLA.</p>
                                     <p><b>Esperando nossa resposta</b> = o cliente mandou a última mensagem; o tempo conta dessa mensagem até agora. <b>Aguardando o cliente</b> = a última mensagem é nossa e o ticket continua aberto.</p>
-                                    <p><b>Sem responsável</b> = ninguém pegou o ticket (claim) no Help Desk. <b>Não lido</b> = ninguém abriu o ticket ainda (o robô não lê esses, para não marcar como lido).</p>
+                                    <p><b>Agente</b> = quem mandou a <b>última mensagem nossa</b> ao cliente (nota interna não conta), pelo nome provado na assinatura, no texto ou na tag do time. Sem essa prova, ou sem nenhuma resposta nossa, o caso fica <b>sem agente</b> ("pegou" mostra quem fez o claim e ainda não respondeu). <b>Não lido</b> = ninguém abriu o ticket ainda (o robô não lê esses, para não marcar como lido).</p>
+                                    <p>Tudo é da <b>última leitura do robô</b> (horário no topo do bloco): uma resposta enviada depois dela só aparece na leitura seguinte (até 10 min).</p>
                                     <p><b>Evolução</b> e <b>vs 24 h</b> vêm da aba Fotos da planilha (uma foto da fila por caixa a cada execução do robô). Datas no horário de Brasília.</p>
                                 </div>
                             </details>
@@ -11646,7 +11647,7 @@ function abrirModalCartPanda(index) {
             const todos = r.tickets || [], tks = todos.filter(t => cx === 'TODAS' || t.conta === cx);
             const esp = tks.filter(t => t.esperando).sort((a, b) => (b.espera_min || 0) - (a.espera_min || 0)), cli = tks.filter(t => !t.esperando);
             const n1 = esp.filter(t => t.espera_min > 60).length, n2 = esp.filter(t => t.espera_min > 120).length, n24 = esp.filter(t => t.espera_min > 1440).length;
-            const semResp = esp.filter(t => !t.responsavel).length, naoLidos = tks.filter(t => t.nao_lido).length, med = bgAbMediana(esp.map(t => t.espera_min)), velho = esp[0] || null;
+            const semResp = esp.filter(t => !t.agente).length, naoLidos = tks.filter(t => t.nao_lido).length, med = bgAbMediana(esp.map(t => t.espera_min)), velho = esp[0] || null;
             const fx = (pt, i) => bgAbSomaFoto(pt, i, cx);
             const varAb = bgAbDelta(fx(ref.ultima, 0), fx(ref.h24, 0), '24 h atrás') || bgAbDelta(fx(ref.ultima, 0), fx(ref.h1, 0), '1 h atrás') || '<span class="rc-mut">sem leitura anterior para comparar</span>';
             const varEsp = bgAbDelta(fx(ref.ultima, 1), fx(ref.h1, 1), '1 h atrás');
@@ -11659,7 +11660,7 @@ function abrirModalCartPanda(index) {
             const corSla = n24 ? 'var(--ab-crit)' : (n1 ? 'var(--ab-alerta)' : '');
             setH('bg-ab-cards',
                 card('var(--ab-esp)', 'Em aberto agora', tkNum(tks.length), '', barra, `<span class="rc-ink font-bold">${tkNum(esp.length)}</span> esperando resposta · <span class="rc-ink font-bold">${tkNum(cli.length)}</span> aguardando o cliente<br>${varAb}`, "bgAbVerFila('todos')", 'Tickets com status Aberto no Help Desk agora · clique para ver a fila')
-                + card('var(--ab-cli)', 'Esperando nossa resposta', tkNum(esp.length), '', '', `${tkNum(semResp)} sem responsável · ${tkNum(naoLidos)} não lido${naoLidos === 1 ? '' : 's'}${varEsp ? '<br>' + varEsp : ''}`, "bgAbVerFila('esperando')", 'O cliente mandou a última mensagem · clique para ver a lista')
+                + card('var(--ab-cli)', 'Esperando nossa resposta', tkNum(esp.length), '', '', `${tkNum(semResp)} sem agente (nenhuma resposta nossa com nome) · ${tkNum(naoLidos)} não lido${naoLidos === 1 ? '' : 's'}${varEsp ? '<br>' + varEsp : ''}`, "bgAbVerFila('esperando')", 'O cliente mandou a última mensagem · clique para ver a lista')
                 + card(corSla || 'var(--ab-esp)', 'Esperando há +1 h', tkNum(n1), corSla, '', `+2 h: <b class="rc-ink">${tkNum(n2)}</b> · +24 h: <b class="rc-ink">${tkNum(n24)}</b>${esp.length ? ` · ${tkNum(n1 / esp.length * 100)}% de quem espera` : ''}`, "bgAbVerFila('esperando')", 'Casos esperando nossa resposta há mais de 1 hora (SLA de 1 h)')
                 + card(velho ? bgAbCor(velho.espera_min) : 'var(--ab-esp)', 'Espera mais antiga', velho ? bgAbTempo(velho.espera_min) : '—', velho ? bgAbCor(velho.espera_min) : '', '', velho ? `#${t48xEsc(velho.ticket)} · ${t48xEsc(velho.caixa)} · ${t48xEsc(BG_AB_SETOR[velho.setor] || velho.setor)}<br>mediana de quem espera: <b class="rc-ink">${bgAbTempo(med)}</b>` : 'ninguém esperando', '', 'Há quanto tempo o cliente mais antigo espera a nossa resposta'));
             // evolução
@@ -11684,7 +11685,7 @@ function abrirModalCartPanda(index) {
                 return `<tr class="ranking-row row-normal cursor-pointer hover:ring-1 hover:ring-gexCyan/50${sel ? ' ab-sel' : ''}" onclick="bgAbCaixa(${total ? "'TODAS'" : g.conta})">`
                     + `<td class="py-3 px-3 pl-4 font-black texto-contraste text-[13px] whitespace-nowrap">${total ? 'Total' : t48xEsc(g.caixa)}${sel ? ' <span class="ab-pill" style="background:var(--rc-trilho);color:var(--ab-esp)">filtrando</span>' : ''}</td>`
                     + `<td class="py-3 px-3 text-center rc-num text-[15px]">${tkNum(l.length)}</td>` + n(es.length) + n(l.length - es.length)
-                    + n(h1, 'var(--ab-alerta)') + n(h24, 'var(--ab-crit)') + n(es.filter(t => !t.responsavel).length) + n(l.filter(t => t.nao_lido).length)
+                    + n(h1, 'var(--ab-alerta)') + n(h24, 'var(--ab-crit)') + n(es.filter(t => !t.agente).length) + n(l.filter(t => t.nao_lido).length)
                     + `<td class="py-3 px-3 text-center text-[13px] tabular-nums font-bold" style="color:${es.length ? bgAbCor(antiga) : 'inherit'}">${es.length ? bgAbTempo(antiga) : '—'}</td>`
                     + `<td class="py-3 px-3 text-center text-[13px] tabular-nums rc-ink">${bgAbTempo(bgAbMediana(es.map(t => t.espera_min)))}</td>`
                     + `<td class="py-3 px-3 text-center text-[12px] tabular-nums">${d === null ? '<span class="rc-mut">—</span>' : (d === 0 ? '<span class="rc-mut">=</span>' : `<span class="rc-ink font-bold">${d > 0 ? '▲' : '▼'} ${tkNum(Math.abs(d))}</span>`)}</td></tr>`;
@@ -11700,7 +11701,10 @@ function abrirModalCartPanda(index) {
                     + `<span class="ab-pill rc-num shrink-0 text-center min-w-[70px] text-[12px]" style="background:color-mix(in srgb, ${cor} 16%, transparent);color:${cor}">${bgAbTempo(t.espera_min)}</span>`
                     + `<div class="min-w-0 flex-1"><div class="text-[12px] font-bold rc-ink truncate">${num} <span class="rc-mut font-semibold">· ${t48xEsc(t.caixa)} · ${t48xEsc(BG_AB_SETOR[t.setor] || t.setor)}${t.ja_respondido ? '' : ' · nunca respondido'}</span></div>`
                     + `<div class="text-[11px] rc-mut truncate" title="${t48xEsc(t.assunto)}">${t48xEsc(t.tipo)} · ${t48xEsc(t.assunto)}</div></div>`
-                    + `<div class="shrink-0 text-right space-y-1"><div class="text-[11px] font-bold${t.responsavel ? ' rc-ink' : ''}"${t.responsavel ? '' : ' style="color:var(--ab-alerta)"'}>${t.responsavel ? t48xEsc(t.responsavel) : 'sem responsável'}</div>${t.nao_lido ? '<span class="ab-pill" style="background:var(--gx-surface);color:var(--ab-cli)">não lido</span>' : ''}</div></div>`;
+                    + `<div class="shrink-0 text-right space-y-0.5">`
+                    + (t.agente ? `<div class="text-[11px] font-bold rc-ink" title="Quem mandou a última mensagem nossa">${t48xEsc(t.agente)}</div><div class="text-[10px] rc-mut">última resposta há ${bgAbTempo(t.ult_nos_min)}</div>`
+                        : `<div class="text-[11px] font-bold" style="color:var(--ab-alerta)">sem agente</div>` + (t.agente_sem_prova ? `<div class="text-[10px] rc-mut" title="A última resposta não tem o nome provado (assinatura, nome no texto ou tag): não conta para ninguém">${t48xEsc(t.agente_sem_prova)} · sem prova</div>` : (t.pegou ? `<div class="text-[10px] rc-mut" title="Pegou o ticket no Help Desk, mas ainda não respondeu">pegou: ${t48xEsc(t.pegou)}</div>` : '')))
+                    + (t.nao_lido ? '<span class="ab-pill inline-block mt-1" style="background:var(--gx-surface);color:var(--ab-cli)">não lido</span>' : '') + '</div></div>';
             };
             setH('bg-ab-antigos', esp.length ? esp.slice(0, 8).map(item).join('') + (esp.length > 8 ? `<p class="text-[11px] rc-mut font-semibold pt-1">+ ${tkNum(esp.length - 8)} esperando · use "Ver todos esperando".</p>` : '') : '<p class="rc-mut text-center py-8 font-bold text-sm">Ninguém esperando nossa resposta agora.</p>');
             // onde está a fila: setor e assunto
@@ -12127,7 +12131,9 @@ function abrirModalCartPanda(index) {
             lista.sort(ORD[slaFila.ordem] || ORD.antigo);
             const hora = slaFila.dados.gerado_em ? new Date(slaFila.dados.gerado_em).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '';
             const ests = Array.from(slaFila.sel.est);
-            document.getElementById('modal-sla-fila-titulo').innerText = 'Fila aberta · ' + (ests.length ? ests.map(e => SLA_FILA_EST[e] ? SLA_FILA_EST[e].rot : e).join(' + ') : 'Todas') + ` (${tkNum(lista.length)})`;
+            document.getElementById('modal-sla-fila-titulo').innerText = 'Fila aberta · ' + (ests.length ? ests.map(e => SLA_FILA_EST[e] ? SLA_FILA_EST[e].rot : e).join(' + ') : 'Todas') + ` (${tkNum(lista.length)})`
+                + (() => { const d = slaFila.dados, dl = d && d.fonte === 'buygoods' && d.atualizado_planilha ? new Date(d.atualizado_planilha) : null;   // 04/11/2026: BuyGoods — de quando é a leitura do robô
+                    return dl && !isNaN(dl) ? ' · leitura do robô ' + dl.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; })();
             document.getElementById('modal-sla-fila-sub').innerText = `Conversas abertas neste momento, por quem falou por último${hora ? ' · lista de ' + hora : ''}`;
             if (montar || !cont.querySelector('#sla-fila-lista')) {
                 cont.innerHTML = `<div id="sla-fila-topo" class="space-y-2"></div>
