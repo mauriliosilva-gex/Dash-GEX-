@@ -5542,22 +5542,50 @@ function bgSlaLinhas(d, p) {
     }
     // AGORA e FILA ABERTA: tickets abertos neste momento (independem do período)
     const abertos = bgAbertos(d, agora);
-    Object.entries(por(abertos.filter(t => t.ult === 0), t => t.setor)).forEach(([s, l]) => {
-        add('agora', 'agora', s, '(sem agente)', { n: l.length, v1: l.filter(t => t.espera <= 1440).length, v2: l.filter(t => t.espera > 1440 && t.espera <= 2880).length, v3: l.filter(t => t.espera > 2880).length });
+    // 04/11/2026: agente = quem mandou a última mensagem nossa (bgAbertos); sem agente provado = "(sem agente)"
+    Object.entries(por(abertos.filter(t => t.ult === 0), t => t.setor + '\u0001' + (t.agente || '(sem agente)'))).forEach(([sk, l]) => {
+        const [s, k] = sk.split('\u0001');
+        add('agora', 'agora', s, k, { n: l.length, v1: l.filter(t => t.espera <= 1440).length, v2: l.filter(t => t.espera > 1440 && t.espera <= 2880).length, v3: l.filter(t => t.espera > 2880).length });
     });
     Object.entries(por(abertos, t => t.setor)).forEach(([s, l]) => {
         const v1 = l.filter(t => !t.temResp && t.velho).length, v2 = l.filter(t => t.temResp && t.ult === 0).length, v3 = l.filter(t => t.ult === 1).length, v4 = l.filter(t => !t.temResp && !t.velho).length;
-        add('fila', 'agora', s, null, { n: l.length, v1, v2, v3, v4, v5: v1, v6: 0, v7: v2, v8: 0, v9: v3, v10: 0 });   // BuyGoods não tem atribuição nem robô: tudo "sem agente / sem robô"
+        const sem = t => !t.agente;   // BuyGoods não tem robô/IA: v6/v8/v10 = 0
+        add('fila', 'agora', s, null, { n: l.length, v1, v2, v3, v4,
+            v5: l.filter(t => !t.temResp && t.velho && sem(t)).length, v6: 0, v7: l.filter(t => t.temResp && t.ult === 0 && sem(t)).length, v8: 0, v9: l.filter(t => t.ult === 1 && sem(t)).length, v10: 0 });
     });
     return out.map(r => Object.assign({ n: null, v1: null, v2: null, v3: null, v4: null, v5: null, v6: null, v7: null, v8: null, v9: null, v10: null }, r));
 }
-// tickets abertos agora: quem falou por último, desde quando, se já teve resposta
+// 04/11/2026 (pedido do usuário): o AGENTE de um ticket aberto = quem mandou a ÚLTIMA mensagem nossa ao cliente (resposta; nota não conta),
+// com o nome que o robô provou (assinatura / nome no texto / tag do time — regra v3). Sem prova ("Rebeca S. (?)") ou nome curto de fora
+// ("Jennifer M." da BuyGoods, "Emerson L." master) = sem agente. Antes a fila do BuyGoods mostrava todos como "Sem agente".
+function bgNomeExibir(nome) {
+    const n = String(nome || '').trim();
+    if (!n || /\(\?\)\s*$/.test(n)) return '';
+    const dash = bgNomeDash(n);
+    if (dash) return dash.replace(/\s-\s.*$/, '');
+    return /^\S+\s+\S\.?$/.test(n) ? '' : n;   // nome completo fora das equipes (liderança) aparece pelo nome
+}
+function bgUltimaResposta(d) {
+    const m = {};
+    (d.respostas || []).forEach(r => {
+        if (bgSim(r.teste)) return;
+        const t = Date.parse(r.quando_utc); if (isNaN(t)) return;
+        const k = r.conta + '|' + r.ticket;
+        if (!m[k] || t > m[k].t) m[k] = { t, bruto: String(r.agente || '').trim() };
+    });
+    return m;
+}
+// tickets abertos agora: quem falou por último, desde quando, se já teve resposta e quem foi o último agente
 function bgAbertos(d, agora) {
+    const ultResp = bgUltimaResposta(d);
     return (d.tickets || []).filter(t => t.status === 'Aberto' && !bgSim(t.teste)).map(t => {
         const criado = Date.parse(t.primeira_msg_utc || t.ultima_msg_utc) || agora;
         const desde = Date.parse(t.aguardando_desde_utc);
         const temResp = Number(t.respostas) > 0 || !!t.primeira_resp_utc;
-        return { t, setor: bgSetor(t.setor), temResp, ult: isNaN(desde) ? 1 : 0, espera: isNaN(desde) ? null : (agora - desde) / 60000, velho: agora - criado >= 86400000, criado };
+        const u = ultResp[t.conta + '|' + t.ticket] || null;
+        const agente = u ? bgNomeExibir(u.bruto) : '';
+        return { t, setor: bgSetor(t.setor), temResp, ult: isNaN(desde) ? 1 : 0, espera: isNaN(desde) ? null : (agora - desde) / 60000, velho: agora - criado >= 86400000, criado,
+            agente, agenteSemProva: (u && !agente) ? u.bruto.replace(/\s*\(\?\)\s*$/, '') : '', ultRespT: u ? u.t : null };
     });
 }
 app.get('/api/bg-recebimento-sla', async (req, res) => {
@@ -5576,12 +5604,12 @@ app.get('/api/bg-recebimento-sla-fila', async (req, res) => {
         const tickets = bgAbertos(d, agora).map(o => {
             const t = o.t, minDesde = iso => { const x = Date.parse(iso); return isNaN(x) ? null : Math.round((agora - x) / 60000); };
             return { id: t.ticket, estado: !o.temResp ? (o.velho ? 'nunca' : 'novo') : (o.ult === 0 ? 'esperando' : 'followup'),
-                cliente: t.cliente || '', agente: '', caixa: t.produto || '', setor: o.setor, etiquetas: t.tags || '', criado_em: new Date(o.criado).toISOString(),
+                cliente: t.cliente || '', agente: o.agente || '', caixa: t.produto || '', setor: o.setor, etiquetas: t.tags || '', criado_em: new Date(o.criado).toISOString(),   // 04/11/2026: agente = autor da última mensagem nossa
                 aberto_ha_min: Math.round((agora - o.criado) / 60000), n_cli: Math.max(1, (Number(t.mensagens) || 0) - (Number(t.respostas) || 0) - (Number(t.notas) || 0)), ult_cli_min: o.ult === 0 ? Math.round(o.espera) : null,
-                n_nos: Number(t.respostas) || 0, pri_nos_min: minDesde(t.primeira_resp_utc), ult_nos_min: null, n_robo: 0, ult_robo_min: null,
+                n_nos: Number(t.respostas) || 0, pri_nos_min: minDesde(t.primeira_resp_utc), ult_nos_min: o.ultRespT ? Math.round((agora - o.ultRespT) / 60000) : null, n_robo: 0, ult_robo_min: null,
                 link: t.link || '', assunto: t.assunto || '', tipo: t.tipo || '', lido: t.lido || '' };
         });
-        res.json({ success: true, fonte: 'buygoods', gerado_em: new Date().toISOString(), tickets });
+        res.json({ success: true, fonte: 'buygoods', gerado_em: new Date().toISOString(), atualizado_planilha: bgUltimaFoto(d), tickets });
     } catch (error) { console.error('Erro BuyGoods fila:', error); res.status(500).json({ success: false, error: error.message }); }
 });
 
@@ -5601,7 +5629,8 @@ app.get('/api/bg-recebimento-abertos', async (req, res) => {
             const t = o.t;
             return { conta: Number(t.conta) || 0, caixa: t.produto || String(t.conta), ticket: String(t.ticket), setor: o.setor,
                 tipo: t.tipo || 'Outros', assunto: String(t.assunto || '').slice(0, 90),
-                nao_lido: /^n[aã]o lido$/i.test(String(t.lido || '').trim()), responsavel: String(t.claimed || '').trim(),
+                nao_lido: /^n[aã]o lido$/i.test(String(t.lido || '').trim()), agente: o.agente || '', agente_sem_prova: o.agenteSemProva || '', pegou: String(t.claimed || '').trim(),
+                ult_nos_min: o.ultRespT ? Math.max(0, Math.round((agora - o.ultRespT) / 60000)) : null,
                 esperando: o.ult === 0, espera_min: o.ult === 0 ? Math.max(0, Math.round(o.espera)) : null,
                 ja_respondido: o.temResp, aberto_ha_min: Math.max(0, Math.round((agora - o.criado) / 60000)), ult_msg_min: minDe(t.ultima_msg_utc), link: t.link || '' };
         });
