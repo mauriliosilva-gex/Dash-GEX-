@@ -965,7 +965,7 @@ const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas, nomesDaPlanilha
 // ==========================================
 // 📅 MÊS DA PLANILHA DE RESULTADOS — troque só o nome do mês (ex.: 'Outubro' → 'Novembro') quando a aba nova estiver pronta.
 // Precisa ser igual ao final do nome da aba "📊 Análise | Metas | <Mês>" (com acento: 'Março').
-const MES_PLANILHA_RESULTADOS = 'Outubro';
+const MES_PLANILHA_RESULTADOS = 'Novembro';
 
 app.get('/api/retencao', async (req, res) => {
     try {
