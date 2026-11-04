@@ -965,7 +965,7 @@ const vincularTickets = (nomePlanilha, ticketsMap, totalSemanas, nomesDaPlanilha
 // ==========================================
 // 📅 MÊS DA PLANILHA DE RESULTADOS — troque só o nome do mês (ex.: 'Outubro' → 'Novembro') quando a aba nova estiver pronta.
 // Precisa ser igual ao final do nome da aba "📊 Análise | Metas | <Mês>" (com acento: 'Março').
-const MES_PLANILHA_RESULTADOS = 'Novembro';
+const MES_PLANILHA_RESULTADOS = '';
 
 app.get('/api/retencao', async (req, res) => {
     try {
@@ -1166,6 +1166,32 @@ const QUAL_NOME_CHATWOOT = {
 };
 // 30/10/2026: quem saiu da empresa não está mais no Chatwoot, mas as monitorias do mês continuam contando para o time em que estava (como no relatório da Qualidade)
 const QUAL_LIDER_DE_QUEM_SAIU = { 'LAVINIA BOAVENTURA': 'flavia', 'VERONICA OLIVEIRA': 'flavia', 'WILLIAN SANTOS': 'flavia' };
+// 03/11/2026: planilha NOVA da Qualidade ("Sistema de Monitoria QA") em GOOGLE_SHEET_ID_QUALIDADE.
+// A ANTIGA continua sendo lida só pelo Q3 (RELATORIO_Q3_2026, BASE DE MÉDIA, BASE_MONITORIA/BASE_SINALIZACOES do Q3) e pelos links do Drive (LINKS_AGENTES),
+// abas que não existem na nova. Trocar a antiga: GOOGLE_SHEET_ID_QUALIDADE_Q3.
+const QUAL_SHEET_ANTIGA = (process.env.GOOGLE_SHEET_ID_QUALIDADE_Q3 || '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk').trim();
+// Mês da planilha nova vem como 202610 -> "outubro-2026" (o mesmo texto da antiga: Notas de Monitoria, Sinalizações e Comissão continuam iguais)
+const QUAL_MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+function qualMesTexto(v) {
+    const s = String(v == null ? '' : v).trim().replace(/[.,]0+$/, '');
+    const m = s.match(/^(20\d{2})\s*[-\/]?\s*(\d{2})$/);
+    if (m) { const i = parseInt(m[2], 10) - 1; if (i >= 0 && i < 12) return QUAL_MESES_PT[i] + '-' + m[1]; }
+    return s;
+}
+// Layout novo: cabeçalho na linha 1 (BASE_MONITORIA: ID | Data/hora | Mês | Ciclo | Analista | Célula | Link | Nota | NCG;
+// BASE_SINALIZACOES: ID monitoria | Data/hora | Mês | Ciclo | Analista | Célula | Link | Código | Item sinalizado | Bloco | Peso | Tipo | Observação do item | Pontos a melhorar | Feedback aplicado?).
+// Acha cada coluna pelo NOME (a ordem pode mudar sem quebrar o Dash). Planilha antiga (sem esse cabeçalho) -> null -> leitura antiga.
+function qualColunasNovas(cab) {
+    const n = (cab || []).map(c => String(c || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim());
+    if (!n.includes('analista') || !n.includes('mes')) return null;
+    const i = (...nomes) => {
+        for (const x of nomes) { const k = n.indexOf(x); if (k >= 0) return k; }
+        for (const x of nomes) { const k = n.findIndex(c => c.startsWith(x)); if (k >= 0) return k; }
+        return -1;
+    };
+    return { id: i('id', 'id monitoria'), mes: i('mes'), ciclo: i('ciclo'), nome: i('analista'), setor: i('celula'), nota: i('nota'), ncg: i('ncg'),
+             item: i('item sinalizado'), tipo: i('tipo'), obs: i('observacao do item'), pontos: i('pontos a melhorar'), feed: i('feedback aplicado?', 'feedback aplicado') };
+}
 
 app.get('/api/qualidade', async (req, res) => {
     try {
@@ -1181,38 +1207,42 @@ app.get('/api/qualidade', async (req, res) => {
         // 1. LER ABA DE MONITORIAS
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_MONITORIA'!A1:Z` });   // 14/10/2026: aba inteira (antes só até a linha 5000: o mês novo sumia sem aviso)
         const rows = response.data.values || [];
+        const colN = qualColunasNovas(rows[0]);   // 03/11/2026: planilha nova (cabeçalho na linha 1) ou antiga (dados da linha 5)
 
-        if (rows.length < 4) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
+        if (rows.length < (colN ? 2 : 4)) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
 
-        // 2. LER NOVA ABA DE LINKS DO DRIVE
+        // 2. LER NOVA ABA DE LINKS DO DRIVE (03/11/2026: a planilha nova não tem LINKS_AGENTES -> tenta nela e depois na antiga)
         let linksDriveAgentes = {};
-        try {
-            const responseLinks = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'LINKS_AGENTES'!A1:B200` });
-            const rowsLinks = responseLinks.data.values || [];
-            
-            rowsLinks.forEach(row => {
-                const nomeAgent = normalizeNome(String(row[0] || '').trim());
-                const linkDrive = String(row[1] || '').trim();
-                if (nomeAgent && linkDrive.startsWith('http')) {
-                    linksDriveAgentes[nomeAgent] = linkDrive;
-                }
-            });
-        } catch (e) { console.log("Aba LINKS_AGENTES vazia ou não encontrada."); }
+        for (const idLinks of [...new Set([sheetIdQualidade, QUAL_SHEET_ANTIGA])]) {
+            try {
+                const responseLinks = await sheets.spreadsheets.values.get({ spreadsheetId: idLinks, range: `'LINKS_AGENTES'!A1:B200` });
+                const rowsLinks = responseLinks.data.values || [];
 
-        // Mapeamento das colunas
-        const idxSetor = 1; // Coluna B
-        const idxNome  = 2; // Coluna C
-        const idxCiclo = 3; // Coluna D
-        const idxNota  = 5; // Coluna F
-        const idxMes   = 8; // Coluna I
+                rowsLinks.forEach(row => {
+                    const nomeAgent = normalizeNome(String(row[0] || '').trim());
+                    const linkDrive = String(row[1] || '').trim();
+                    if (nomeAgent && linkDrive.startsWith('http')) {
+                        linksDriveAgentes[nomeAgent] = linkDrive;
+                    }
+                });
+            } catch (e) { console.log("Aba LINKS_AGENTES vazia ou não encontrada em", idLinks.slice(0, 6)); }
+            if (Object.keys(linksDriveAgentes).length) break;
+        }
+
+        // Mapeamento das colunas (03/11/2026: planilha nova -> pelo nome do cabeçalho)
+        const idxSetor = colN ? colN.setor : 1; // antiga: Coluna B
+        const idxNome  = colN ? colN.nome  : 2; // antiga: Coluna C
+        const idxCiclo = colN ? colN.ciclo : 3; // antiga: Coluna D
+        const idxNota  = colN ? colN.nota  : 5; // antiga: Coluna F
+        const idxMes   = colN ? colN.mes   : 8; // antiga: Coluna I
 
         let mesesSet = new Set();
         let monitoriasGerais = [];
 
-        for (let i = 4; i < rows.length; i++) {
-            const row = rows[i];
+        for (let i = colN ? 1 : 4; i < rows.length; i++) {
+            const row = rows[i] || [];
             const nomeRaw = String(row[idxNome] || '').trim();
-            const mesRaw = String(row[idxMes] || '').trim();
+            const mesRaw = colN ? qualMesTexto(row[idxMes]) : String(row[idxMes] || '').trim();
             
             // Ignora as linhas vazias E ignora o cabeçalho "MES_REF"
             if (!nomeRaw || !mesRaw || mesRaw.toUpperCase() === 'MES_REF') continue;
@@ -1370,29 +1400,52 @@ app.get('/api/sinalizacoes', soAdmin, async (req, res) => {   // 🛡️ 16/10/2
         
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_SINALIZACOES'!A1:Z` });   // 14/10/2026: aba inteira (antes só até a linha 5000: o mês novo sumia sem aviso)
         const rows = response.data.values || [];
+        const colN = qualColunasNovas(rows[0]);   // 03/11/2026: planilha nova (cabeçalho na linha 1) ou antiga
 
-        if (rows.length < 3) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
+        if (rows.length < (colN ? 1 : 3)) return res.json({ success: true, meses: [], mesAtual: '', agentes: [] });
 
-        const idxSetor = 1; // Coluna B
-        const idxNome  = 2; // Coluna C
-        const idxCiclo = 3; // Coluna D
-        const idxItem  = 5; // Coluna F
-        const idxTipo  = 7; // Coluna H
-        const idxData  = 8; // Coluna I
-        const idxQtd   = 9; // Coluna J
-        const idxObs   = 10; // Coluna K
-        const idxFeed  = 11; // Coluna L
-        const idxMes   = 12; // Coluna M
+        // 03/11/2026: na planilha nova cada linha é 1 item sinalizado (sem coluna Quantidade); colunas pelo nome do cabeçalho
+        const idxSetor = colN ? colN.setor : 1; // antiga: Coluna B
+        const idxNome  = colN ? colN.nome  : 2; // antiga: Coluna C
+        const idxCiclo = colN ? colN.ciclo : 3; // antiga: Coluna D
+        const idxItem  = colN ? colN.item  : 5; // antiga: Coluna F
+        const idxTipo  = colN ? colN.tipo  : 7; // antiga: Coluna H
+        const idxData  = 8; // antiga: Coluna I
+        const idxQtd   = colN ? -1 : 9; // antiga: Coluna J (nova: 1 por linha)
+        const idxObs   = colN ? colN.obs   : 10; // antiga: Coluna K (nova: Observação do item; vazia -> Pontos a melhorar)
+        const idxFeed  = colN ? colN.feed  : 11; // antiga: Coluna L
+        const idxMes   = colN ? colN.mes   : 12; // antiga: Coluna M
 
         let mesesSet = new Set();
         let sinalizacoesGerais = [];
 
-        for (let i = 2; i < rows.length; i++) {
-            const row = rows[i];
+        // 03/11/2026: a planilha nova só lista os itens sinalizados. A monitoria SEM item (BASE_MONITORIA) entra como
+        // "Sem sinalizações" — igual à antiga, onde essa linha existia e a tela mostra ✅.
+        if (colN) {
+            try {
+                const rm = await sheets.spreadsheets.values.get({ spreadsheetId: sheetIdQualidade, range: `'BASE_MONITORIA'!A1:Z` });
+                const mRows = rm.data.values || [];
+                const cM = qualColunasNovas(mRows[0]);
+                const idsComItem = new Set();
+                for (let i = 1; i < rows.length; i++) { const id = String((rows[i] || [])[colN.id] || '').trim(); if (id) idsComItem.add(id.replace(/[.,]0+$/, '')); }
+                if (cM) for (let i = 1; i < mRows.length; i++) {
+                    const r = mRows[i] || [];
+                    const id = String(r[cM.id] || '').trim().replace(/[.,]0+$/, ''), nomeRaw = String(r[cM.nome] || '').trim(), mesRaw = qualMesTexto(r[cM.mes]).toLowerCase();
+                    if (!id || !nomeRaw || !mesRaw || idsComItem.has(id)) continue;
+                    const nomeFormatado = normalizeNome(nomeRaw);
+                    mesesSet.add(mesRaw);
+                    sinalizacoesGerais.push({ mes: mesRaw, nome: nomeFormatado, nomeOriginal: nomeRaw, time: qualSiglaDoSetor(String(r[cM.setor] || '').toUpperCase(), nomeFormatado),
+                        ciclo: parseInt(r[cM.ciclo]) || 1, item: 'Sem sinalizações', tipo: '', qtd: 1, obs: '', feedback: false });
+                }
+            } catch (e) { console.log('[sinalizacoes] BASE_MONITORIA indisponivel:', e.message); }
+        }
+
+        for (let i = colN ? 1 : 2; i < rows.length; i++) {
+            const row = rows[i] || [];
             const nomeRaw = String(row[idxNome] || '').trim();
-            
+
             // 🔥 Transforma em minúsculo para agrupar
-            let mesRaw = String(row[idxMes] || '').trim().toLowerCase(); 
+            let mesRaw = (colN ? qualMesTexto(row[idxMes]) : String(row[idxMes] || '').trim()).toLowerCase();
             
             // 🔥 Bloqueia erros de fórmula (#ERROR!, #REF!) e cabeçalhos
             if (!nomeRaw || !mesRaw || mesRaw === 'mes' || mesRaw.startsWith('#') || nomeRaw.toUpperCase() === 'ANALISTA') continue;
@@ -1412,7 +1465,7 @@ app.get('/api/sinalizacoes', soAdmin, async (req, res) => {   // 🛡️ 16/10/2
             sinalizacoesGerais.push({
                 mes: mesRaw, nome: nomeFormatado, nomeOriginal: nomeRaw, time: siglaSetor,
                 ciclo: cicloNum, item: item, tipo: String(row[idxTipo] || '').trim(),
-                qtd: parseInt(row[idxQtd]) || 1, obs: String(row[idxObs] || '').trim(),
+                qtd: parseInt(row[idxQtd]) || 1, obs: String(row[idxObs] || '').trim() || (colN && colN.pontos >= 0 ? String(row[colN.pontos] || '').trim() : ''),
                 feedback: String(row[idxFeed] || '').trim().length > 0 // Se tiver qualquer texto, true.
             });
         }
@@ -2547,7 +2600,7 @@ app.get('/api/qualidade-tickets', async (req, res) => {
                 m.conversation_id,
                 c.display_id,
                 m.message_type,
-                m.content,
+                CASE WHEN m.message_type = 1 THEN LEFT(m.content, 120) ELSE m.content END AS content,   -- 03/11/2026: a tela só mostra 80 caracteres da resposta; antes vinha o e-mail inteiro (até 150 KB cada, ~4,6 MB por dia) e travava o servidor. Ações (tipo 2) seguem inteiras.
                 m.created_at AS m_created_at,
                 c.status AS conv_status,
                 -- 🔥 O HISTORIADOR: Tenta pegar o tempo exato no momento que o botão foi clicado!
@@ -5331,6 +5384,343 @@ app.get('/api/recebimento-aberturas', async (req, res) => {
 
 
 // ==========================================
+// 15.5D 🛒 BUYGOODS FILA GERAL (04/11/2026) — Help Desk da BuyGoods (robô n8n "BuyGoods Fila Geral") -> planilha -> Dash
+// Mesmas telas do Recebimento de Tickets (Recebimento · SLA · Agentes), com as rotas devolvendo o MESMO formato das do Chatwoot,
+// mas calculadas a partir da planilha (abas Tickets · Aberturas · Respostas · Fotos). Só leitura (conta de serviço).
+// Regras: resposta = mensagem enviada ao cliente (nota interna não conta) · dia = 00:00–23:59 de Brasília · ticket de teste fora.
+// SLA: da chegada do cliente (caso novo N ou retorno R) até a 1ª resposta, tempo corrido; "fechada sem resposta" (fechada com nota) fica fora.
+// Nome do agente: a BuyGoods mostra "Aline M."; o robô troca pelo nome completo da caixa e aqui ele vira o nome do Dash ("Aline Martins - RET").
+// ==========================================
+const BG_FILA_ID = (process.env.GOOGLE_SHEET_ID_BUYGOODS_FILA || '').trim();   // .env: planilha "BuyGoods Fila Geral" (mesmo padrão das outras planilhas)
+const BG_MAX_DIAS = 62, BG_MAX_DIAS_COMPARACAO = 31;
+const BG_ALIAS = { 'PATRICIA MAIA': 'Patricia Figueredo' };
+// 04/11/2026 (pedido do usuário): resposta só conta para o agente quando há PROVA (nome completo no texto da resposta ou na tag do time,
+// resolvido pelo robô). "Rebeca S. (?)" / "Lucas A. (?)" = sem prova -> não conta para ninguém (aparece à parte como "sem confirmação").
+const _bgIdxDash = {};
+for (const _k in TK_EQUIPE) _bgIdxDash[tkNorm(_k.replace(/\s-\s(RET|SAC|BKO|SMS|48H)\b.*$/, ''))] = _k;
+// roster = todos os agentes das equipes (ninguém fica de fora, mesmo sem resposta na BuyGoods); id numérico fixo por posição
+const BG_ROSTER = Object.keys(TK_EQUIPE).map((nome, i) => ({ id: 100000 + i, nome, lider: TK_EQUIPE[nome][0] }));
+const _bgIdPorNome = {}; BG_ROSTER.forEach(a => { _bgIdPorNome[a.nome] = a.id; });
+function bgNomeDash(nome) {
+    let n = tkNorm(String(nome || '').replace(/\s*\(\?\)\s*$/, ''));
+    if (BG_ALIAS[n]) n = tkNorm(BG_ALIAS[n]);
+    return _bgIdxDash[n] || null;
+}
+// "Rebeca S. (?)" = o robô não conseguiu separar (Rebeca Silva x Rebeca Souza): fica como está, e herda a líder se as duas forem da mesma
+function bgCandidatos(curto) {
+    const m = String(curto || '').replace(/\s*\(\?\)\s*$/, '').match(/^(\S+)\s+(\S)\.?$/);
+    if (!m) return [];
+    const p = tkNorm(m[1]), ini = tkNorm(m[2]);
+    return BG_ROSTER.filter(a => { const b = tkNorm(a.nome.replace(/\s-\s.*$/, '')).split(' '); return b[0] === p && (b[b.length - 1] || '')[0] === ini; });
+}
+function bgHash(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return 900000 + (h % 90000); }
+// agente da resposta -> { id, nome, lider } do Dash · null = não é agente das equipes (ex.: "Jennifer M." = suporte da própria BuyGoods, "Emerson L." = login master)
+// liderança (Camila Moura, Flavia Lira...) e testes (Leonardo Alves) também ficam fora, como no Chatwoot
+function bgAgente(nomeBG) {
+    if (/\(\?\)\s*$/.test(String(nomeBG || ''))) return null;   // sem prova de quem foi: não conta para ninguém
+    const dash = bgNomeDash(nomeBG);
+    if (dash) return { id: _bgIdPorNome[dash], nome: dash, lider: TK_EQUIPE[dash][0] };
+    const nome = String(nomeBG || '').trim();
+    if (!nome) return null;
+    if (/^\S+\s+\S\.$/.test(nome)) return null;   // nome curto que não é da caixa = de fora (BuyGoods / master)
+    return null;   // nome completo fora das equipes (liderança, testes): igual ao Chatwoot, liderança não entra na contagem (vai para "fora das equipes")
+}
+
+let bgCache = { t: 0, dados: null, prom: null };
+async function bgLer(forcar) {
+    if (!forcar && bgCache.dados && Date.now() - bgCache.t < 5 * 60 * 1000) return bgCache.dados;
+    if (bgCache.prom) return bgCache.prom;
+    bgCache.prom = (async () => {
+        const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').replace(/"/g, '').trim();
+        const auth = new google.auth.GoogleAuth({ credentials: { client_email: (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '').trim(), private_key: privateKey }, scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] });
+        const sheets = google.sheets({ version: 'v4', auth });
+        if (!BG_FILA_ID) throw new Error('Falta GOOGLE_SHEET_ID_BUYGOODS_FILA no .env (planilha "BuyGoods Fila Geral").');
+        const t0 = Date.now();
+        const r = await sheets.spreadsheets.values.batchGet({ spreadsheetId: BG_FILA_ID, ranges: ["'Tickets'!A1:AZ", "'Aberturas'!A1:AZ", "'Respostas'!A1:AZ", "'Fotos'!A1:AZ"], valueRenderOption: 'UNFORMATTED_VALUE' });
+        const abas = (r.data.valueRanges || []).map(v => { const l = v.values || []; const cab = l[0] || []; return l.slice(1).map(x => { const o = {}; cab.forEach((c, i) => { o[c] = x[i] === undefined ? '' : x[i]; }); return o; }); });
+        const dados = { tickets: abas[0] || [], aberturas: abas[1] || [], respostas: abas[2] || [], fotos: abas[3] || [], lido_em: new Date().toISOString() };
+        console.log(`🛒 BuyGoods Fila Geral: ${dados.tickets.length} tickets · ${dados.aberturas.length} aberturas · ${dados.respostas.length} respostas em ${Date.now() - t0} ms`);
+        bgCache = { t: Date.now(), dados, prom: null };
+        return dados;
+    })().catch(e => { bgCache.prom = null; throw e; });
+    return bgCache.prom;
+}
+// UTC (texto ISO) -> Brasília (UTC-3, sem horário de verão)
+function bgBR(iso) { const t = Date.parse(iso); if (isNaN(t)) return null; const d = new Date(t - 3 * 3600000); return { t, dia: d.toISOString().slice(0, 10), hora: d.getUTCHours() }; }
+const bgSim = v => String(v || '').trim().toLowerCase() === 'sim';
+function bgSetor(s) { const p = String(s || '').split('/')[0]; return ['RET', 'SAC', 'BKO'].includes(p) ? p : 'OUTROS'; }
+// período: mesmo esquema das rotas do Recebimento (since/until em unix; padrão = mês atual)
+function bgPeriodo(req, maxDias, maxCmp) {
+    let ini, fim;
+    if (req.query.since && req.query.until) { ini = unixParaYYYYMMDD(req.query.since); fim = unixParaYYYYMMDD(req.query.until); }
+    else { const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })); ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1)); fim = formatarDataSQL(agora); }
+    const DIA_MS = 86400000, ymd = d => d.toISOString().slice(0, 10);
+    const dIni = new Date(ini + 'T00:00:00Z'), dFim = new Date(fim + 'T00:00:00Z');
+    const dias = Math.round((dFim - dIni) / DIA_MS) + 1;
+    if (!(dias >= 1)) return { erro: 'Período inválido.' };
+    if (dias > maxDias) return { erro: `Período máximo de ${maxDias} dias (o escolhido tem ${dias}).` };
+    const comparar = dias <= maxCmp;
+    const antIni = ymd(new Date(dIni.getTime() - dias * DIA_MS)), antFim = ymd(new Date(dIni.getTime() - DIA_MS));
+    const qual = (dia) => (dia >= ini && dia <= fim) ? 'atual' : (comparar && dia >= antIni && dia <= antFim) ? 'anterior' : null;
+    return { ini, fim, dias, comparar, antIni, antFim, qual, cab: { periodo: { inicio: ini, fim, dias }, anterior: comparar ? { inicio: antIni, fim: antFim, dias } : null, comparacao: comparar } };
+}
+// aberturas da base do SLA (clientes N+R; teste e "substituída" fora)
+function bgAberturasBase(d) {
+    return (d.aberturas || []).filter(a => !bgSim(a.teste) && (a.tipo === 'N' || a.tipo === 'R') && a.chegada_utc && !/substitu/i.test(a.situacao)).map(a => {
+        const c = bgBR(a.chegada_utc); if (!c) return null;
+        const resp = a.resposta_utc ? bgBR(a.resposta_utc) : null;
+        const w = (a.espera_min === '' || a.espera_min === null || a.espera_min === undefined || !resp) ? null : Math.max(0, Number(a.espera_min));
+        return { a, c, resp, w, fechadaSemResp: /fechada sem resposta/i.test(a.situacao) };
+    }).filter(Boolean);
+}
+
+// ---- 📥 Recebimento (mesmo formato de /api/recebimento-aberturas) ----
+app.get('/api/bg-recebimento-aberturas', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const p = bgPeriodo(req, BG_MAX_DIAS, BG_MAX_DIAS_COMPARACAO); if (p.erro) return res.status(400).json({ success: false, error: p.erro });
+        const t0 = Date.now(), d = await bgLer(req.query.fresh === '1');
+        const grupos = { atual: {}, anterior: {} };
+        bgAberturasBase(d).forEach(({ a, c, w }) => {
+            const per = p.qual(c.dia); if (!per) return;
+            const k = [c.dia, a.conta, c.hora, a.tipo].join('|');
+            const g = grupos[per][k] = grupos[per][k] || { dia: c.dia, inbox_id: Number(a.conta) || 0, caixa: a.produto || String(a.conta), canal: 'E-mail', hora: c.hora, tipo: a.tipo, aberturas: 0, conversas: new Set(), com_contato: 0, sem_contato: 0, w_soma_seg: 0, w: [0, 0, 0, 0, 0, 0, 0] };
+            g.aberturas++; g.conversas.add(a.ticket);
+            if (w === null) g.sem_contato++;
+            else { g.com_contato++; const s = w * 60; g.w_soma_seg += s; g.w[s <= 300 ? 0 : s <= 900 ? 1 : s <= 1800 ? 2 : s <= 3600 ? 3 : s <= 14400 ? 4 : s <= 86400 ? 5 : 6]++; }
+        });
+        const lista = (o) => Object.values(o).map(g => Object.assign(g, { conversas: g.conversas.size, w_soma_seg: Math.round(g.w_soma_seg) }));
+        res.json(Object.assign({ success: true, fonte: 'buygoods' }, p.cab, { max_dias: BG_MAX_DIAS, max_dias_comparacao: BG_MAX_DIAS_COMPARACAO, gerado_em: new Date().toISOString(), ms: Date.now() - t0, atualizado_planilha: bgUltimaFoto(d), linhas: lista(grupos.atual), linhas_anterior: p.comparar ? lista(grupos.anterior) : null }));
+    } catch (error) { console.error('Erro BuyGoods aberturas:', error); res.status(500).json({ success: false, error: error.message }); }
+});
+function bgUltimaFoto(d) { return (d.fotos || []).map(f => String(f.quando_utc || '')).sort().pop() || null; }
+
+// ---- ⏱️ SLA (mesmo formato longo de /api/recebimento-sla: bloco, periodo, setor, k, n, v1..v10) ----
+function bgMediana(arr, q) { const s = arr.filter(x => x !== null).sort((a, b) => a - b); if (!s.length) return null; const pos = (s.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos); return Math.round(s[lo] + (s[hi] - s[lo]) * (pos - lo)); }
+function bgMedidas(lista) {
+    const n = lista.length, ws = lista.map(x => x.w);
+    return { n, v1: lista.filter(x => x.mad1).length, v2: lista.filter(x => x.mad1 && x.w !== null && x.w <= 60).length, v3: lista.filter(x => x.mad24).length, v4: lista.filter(x => x.mad24 && x.w !== null && x.w <= 1440).length,
+        v5: ws.filter(w => w !== null).length, v6: ws.filter(w => w === null).length, v7: bgMediana(ws, 0.5), v8: bgMediana(ws, 0.9), v9: lista.filter(x => x.mad2).length, v10: lista.filter(x => x.mad2 && x.w !== null && x.w <= 120).length };
+}
+function bgSlaLinhas(d, p) {
+    const agora = Date.now(), out = [];
+    const base = bgAberturasBase(d);
+    const cli = base.map(x => ({ per: p.qual(x.c.dia), x })).filter(o => o.per);
+    // c = clientes da base do SLA (fechadas só com nota ficam fora)
+    const c = cli.filter(o => !o.x.fechadaSemResp).map(({ per, x }) => {
+        const idade = agora - x.c.t;
+        return { periodo: per, canal: 'E-mail', caixa: x.a.produto || String(x.a.conta), ha: x.c.hora, dia: x.c.dia,
+            hc: x.resp ? (x.resp.dia !== x.c.dia ? 99 : x.resp.hora) : null, w: x.w,
+            mad1: idade >= 3600000, mad2: idade >= 7200000, mad24: idade >= 86400000 };
+    });
+    const add = (bloco, periodo, setor, k, m) => out.push(Object.assign({ bloco, periodo, setor, k }, m));
+    const pers = p.comparar ? ['atual', 'anterior'] : ['atual'];
+    const por = (arr, f) => arr.reduce((o, x) => { const k = f(x); (o[k] = o[k] || []).push(x); return o; }, {});
+    for (const per of pers) {
+        const cp = c.filter(x => x.periodo === per);
+        add('canal', per, 'E-mail', null, bgMedidas(cp)); add('canal', per, 'Geral', null, bgMedidas(cp));
+        ['E-mail', 'Geral'].forEach(s => add('robo', per, s, null, { n: cp.length, v1: 0, v2: 0, v3: null, v4: null, v5: null, v6: null, v7: null, v8: null, v9: null, v10: null }));
+        const tp = cli.filter(o => o.per === per);
+        const tipos = { n: tp.length, v1: tp.filter(o => o.x.a.tipo === 'N').length, v2: tp.filter(o => o.x.a.tipo === 'R').length, v3: 0, v4: 0, v5: null, v6: null, v7: null, v8: null, v9: null, v10: null };
+        add('tipos', per, 'E-mail', null, tipos); add('tipos', per, 'Geral', null, Object.assign({}, tipos));
+        Object.entries(por(cp, x => x.caixa)).forEach(([cx, l]) => add('caixa', per, cx, 'E-mail', bgMedidas(l)));
+        const faixa = h => h >= 7 && h <= 8 ? '1 07h-08h' : h >= 9 && h <= 15 ? '2 09h-15h' : h >= 16 && h <= 19 ? '3 16h-19h' : h >= 20 ? '4 20h-23h' : '5 00h-06h';
+        Object.entries(por(cp, x => faixa(x.ha))).forEach(([fx, l]) => { const m = Object.assign(bgMedidas(l), { v7: null, v8: null }); add('periododia', per, 'E-mail', fx, m); add('periododia', per, 'Geral', fx, Object.assign({}, m)); });
+        if (per === 'atual') {
+            Object.entries(por(cp, x => x.ha)).forEach(([h, l]) => { const m = Object.assign(bgMedidas(l), { v7: null, v8: null }); const k = String(h).padStart(2, '0'); add('horachegada', 'atual', 'E-mail', k, m); add('horachegada', 'atual', 'Geral', k, Object.assign({}, m)); });
+            Object.entries(por(cp, x => x.ha + '|' + (x.hc === null ? -1 : x.hc))).forEach(([k, l]) => { add('esperando', 'atual', 'E-mail', k, { n: l.length }); add('esperando', 'atual', 'Geral', k, { n: l.length }); });
+            Object.entries(por(cp, x => x.dia)).forEach(([dia, l]) => add('dia', 'atual', 'Geral', dia, Object.assign(bgMedidas(l), { v7: null, v8: null })));
+        }
+    }
+    // AGORA e FILA ABERTA: tickets abertos neste momento (independem do período)
+    const abertos = bgAbertos(d, agora);
+    Object.entries(por(abertos.filter(t => t.ult === 0), t => t.setor)).forEach(([s, l]) => {
+        add('agora', 'agora', s, '(sem agente)', { n: l.length, v1: l.filter(t => t.espera <= 1440).length, v2: l.filter(t => t.espera > 1440 && t.espera <= 2880).length, v3: l.filter(t => t.espera > 2880).length });
+    });
+    Object.entries(por(abertos, t => t.setor)).forEach(([s, l]) => {
+        const v1 = l.filter(t => !t.temResp && t.velho).length, v2 = l.filter(t => t.temResp && t.ult === 0).length, v3 = l.filter(t => t.ult === 1).length, v4 = l.filter(t => !t.temResp && !t.velho).length;
+        add('fila', 'agora', s, null, { n: l.length, v1, v2, v3, v4, v5: v1, v6: 0, v7: v2, v8: 0, v9: v3, v10: 0 });   // BuyGoods não tem atribuição nem robô: tudo "sem agente / sem robô"
+    });
+    return out.map(r => Object.assign({ n: null, v1: null, v2: null, v3: null, v4: null, v5: null, v6: null, v7: null, v8: null, v9: null, v10: null }, r));
+}
+// tickets abertos agora: quem falou por último, desde quando, se já teve resposta
+function bgAbertos(d, agora) {
+    return (d.tickets || []).filter(t => t.status === 'Aberto' && !bgSim(t.teste)).map(t => {
+        const criado = Date.parse(t.primeira_msg_utc || t.ultima_msg_utc) || agora;
+        const desde = Date.parse(t.aguardando_desde_utc);
+        const temResp = Number(t.respostas) > 0 || !!t.primeira_resp_utc;
+        return { t, setor: bgSetor(t.setor), temResp, ult: isNaN(desde) ? 1 : 0, espera: isNaN(desde) ? null : (agora - desde) / 60000, velho: agora - criado >= 86400000, criado };
+    });
+}
+app.get('/api/bg-recebimento-sla', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const p = bgPeriodo(req, SLA_MAX_DIAS, SLA_MAX_DIAS_COMPARACAO); if (p.erro) return res.status(400).json({ success: false, error: p.erro });
+        const t0 = Date.now(), d = await bgLer(req.query.fresh === '1');
+        res.json(Object.assign({ success: true, fonte: 'buygoods' }, p.cab, { max_dias: SLA_MAX_DIAS, max_dias_comparacao: SLA_MAX_DIAS_COMPARACAO, gerado_em: new Date().toISOString(), ms: Date.now() - t0, atualizado_planilha: bgUltimaFoto(d), linhas: bgSlaLinhas(d, p) }));
+    } catch (error) { console.error('Erro BuyGoods SLA:', error); res.status(500).json({ success: false, error: error.message }); }
+});
+// "Ver tickets" da fila aberta (mesmo formato de /api/recebimento-sla-fila) + link do ticket na BuyGoods
+app.get('/api/bg-recebimento-sla-fila', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const agora = Date.now(), d = await bgLer(req.query.fresh === '1');
+        const tickets = bgAbertos(d, agora).map(o => {
+            const t = o.t, minDesde = iso => { const x = Date.parse(iso); return isNaN(x) ? null : Math.round((agora - x) / 60000); };
+            return { id: t.ticket, estado: !o.temResp ? (o.velho ? 'nunca' : 'novo') : (o.ult === 0 ? 'esperando' : 'followup'),
+                cliente: t.cliente || '', agente: '', caixa: t.produto || '', setor: o.setor, etiquetas: t.tags || '', criado_em: new Date(o.criado).toISOString(),
+                aberto_ha_min: Math.round((agora - o.criado) / 60000), n_cli: Math.max(1, (Number(t.mensagens) || 0) - (Number(t.respostas) || 0) - (Number(t.notas) || 0)), ult_cli_min: o.ult === 0 ? Math.round(o.espera) : null,
+                n_nos: Number(t.respostas) || 0, pri_nos_min: minDesde(t.primeira_resp_utc), ult_nos_min: null, n_robo: 0, ult_robo_min: null,
+                link: t.link || '', assunto: t.assunto || '', tipo: t.tipo || '', lido: t.lido || '' };
+        });
+        res.json({ success: true, fonte: 'buygoods', gerado_em: new Date().toISOString(), tickets });
+    } catch (error) { console.error('Erro BuyGoods fila:', error); res.status(500).json({ success: false, error: error.message }); }
+});
+
+// ---- 👥 Agentes (mesmo formato de /api/recebimento-agentes) + roster (ninguém de fora) + TIMES pela tag do ticket ----
+// Tag de time: "Aline Martins - Ellen Medeiros - Keroline Alves". O mesmo time aparece escrito de jeitos diferentes
+// ("tEllen MedeirostAline Martins..." veio sem o separador; "Karla · Lucas Andrade · Raíssa · Agatha") -> chave = primeiros nomes em ordem.
+function bgTimesDaTag(equipeTag) {
+    return String(equipeTag || '').split(' | ').map(s => s.trim()).filter(Boolean).filter(s => !/reembolso/i.test(s)).map(s => {
+        const limpo = s.replace(/(^|[a-zà-ÿ])t(?=[A-ZÀ-Ý])/g, (m, a) => a ? a + ' · ' : '').replace(/\s+/g, ' ').trim();
+        const nomes = limpo.split(/\s*(?:\s-\s|·|\+|,|\/|\|)\s*|\s-(?=\S)|(?<=\S)-\s/).map(x => x.trim()).filter(x => /[A-Za-zÀ-ÿ]{2,}/.test(x));
+        const primeiros = [...new Set(nomes.map(n => tkNorm(n).split(' ')[0]).filter(Boolean))].sort();
+        return primeiros.length >= 2 ? { chave: primeiros.join('|'), rotulo: limpo, nomes } : null;
+    }).filter(Boolean);
+}
+function bgTimes(d, p) {
+    const times = {};
+    // "Luiza + Patricia Igor + José neto" (LUIZA|PATRICIA|JOSE) está contido em "Igor · Luiza · Patrícia · José Carlos" -> mesmo time
+    const todas = new Set();
+    (d.respostas || []).concat(d.aberturas || []).forEach(x => bgTimesDaTag(x.equipe_tag).forEach(tm => todas.add(tm.chave)));
+    const canon = {};
+    [...todas].forEach(k => { const a = k.split('|'); const maior = [...todas].filter(o => o !== k && a.every(n => o.split('|').includes(n))).sort((x, y) => y.split('|').length - x.split('|').length)[0]; canon[k] = maior || k; });
+    const chaveDe = (k) => { let c = k, n = 0; while (canon[c] && canon[c] !== c && n++ < 5) c = canon[c]; return c; };
+    const pega = (chave) => times[chave] = times[chave] || { chave, rotulos: {}, per: {} };
+    const perDe = (per) => ({ msgs: 0, tickets: new Set(), aberturas: 0, w: [], mad1: 0, ok1: 0, mad2: 0, ok2: 0, mad24: 0, ok24: 0, ag: {} });
+    const agora = Date.now();
+    (d.respostas || []).forEach(r => {
+        if (bgSim(r.teste)) return;
+        const b = bgBR(r.quando_utc); if (!b) return; const per = p.qual(b.dia); if (!per) return;
+        const ag = bgAgente(r.agente);   // sem agente confirmado: a mensagem conta para o TIME (tag do ticket), não para uma pessoa
+        bgTimesDaTag(r.equipe_tag).forEach(tm => {
+            const T = pega(chaveDe(tm.chave)); T.rotulos[tm.rotulo] = (T.rotulos[tm.rotulo] || 0) + 1;
+            const P = T.per[per] = T.per[per] || perDe(per);
+            P.msgs++; P.tickets.add(r.conta + '|' + r.ticket);
+            if (!ag) return;
+            const A = P.ag[ag.nome] = P.ag[ag.nome] || { nome: ag.nome, lider: ag.lider, msgs: 0, tickets: new Set(), w: [] };
+            A.msgs++; A.tickets.add(r.conta + '|' + r.ticket);
+        });
+    });
+    bgAberturasBase(d).forEach(x => {
+        if (x.fechadaSemResp) return;
+        const per = p.qual(x.c.dia); if (!per) return;
+        const idade = agora - x.c.t;
+        bgTimesDaTag(x.a.equipe_tag).forEach(tm => {
+            const T = pega(chaveDe(tm.chave)); T.rotulos[tm.rotulo] = (T.rotulos[tm.rotulo] || 0) + 1;
+            const P = T.per[per] = T.per[per] || perDe(per);
+            P.aberturas++; if (x.w !== null) P.w.push(x.w);
+            if (idade >= 3600000) { P.mad1++; if (x.w !== null && x.w <= 60) P.ok1++; }
+            if (idade >= 7200000) { P.mad2++; if (x.w !== null && x.w <= 120) P.ok2++; }
+            if (idade >= 86400000) { P.mad24++; if (x.w !== null && x.w <= 1440) P.ok24++; }
+            const ag = x.a.agente ? bgAgente(x.a.agente) : null;
+            if (ag && x.w !== null) { const A = P.ag[ag.nome] = P.ag[ag.nome] || { nome: ag.nome, lider: ag.lider, msgs: 0, tickets: new Set(), w: [] }; A.w.push(x.w); }
+        });
+    });
+    return Object.values(times).map(T => {
+        const rotulo = Object.entries(T.rotulos).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0][0];
+        const fecha = (P) => P ? { msgs: P.msgs, tickets: P.tickets.size, aberturas: P.aberturas, respondidas: P.w.length, mediana_min: bgMediana(P.w, 0.5),
+            mad1: P.mad1, ok1: P.ok1, mad2: P.mad2, ok2: P.ok2, mad24: P.mad24, ok24: P.ok24,
+            agentes: Object.values(P.ag).map(A => ({ nome: A.nome, lider: A.lider, msgs: A.msgs, tickets: A.tickets.size, respostas_sla: A.w.length, mediana_min: bgMediana(A.w, 0.5), ate2h: A.w.filter(w => w <= 120).length })).sort((a, b) => b.msgs - a.msgs) } : null;
+        return { chave: T.chave, rotulo, atual: fecha(T.per.atual), anterior: fecha(T.per.anterior) };
+    }).filter(t => t.atual || t.anterior).sort((a, b) => ((b.atual || {}).msgs || 0) - ((a.atual || {}).msgs || 0));
+}
+function bgAgentesLinhas(d, p) {
+    const g = {}, fora = {};
+    (d.respostas || []).forEach(r => {
+        if (bgSim(r.teste)) return;
+        const b = bgBR(r.quando_utc); if (!b) return; const per = p.qual(b.dia); if (!per) return;
+        const ag = bgAgente(r.agente);
+        if (!ag) { fora[r.agente] = (fora[r.agente] || 0) + 1; return; }
+        const tk = r.conta + '|' + r.ticket;
+        [b.hora, null].forEach(h => {
+            const k = [per, ag.id, b.dia, h].join('|');
+            const x = g[k] = g[k] || { periodo: per, id: ag.id, nome: ag.nome, lider: ag.lider, criado_em: null, dia: b.dia, hora: h, msgs: 0, convs: new Set(), ia: false, ambiguo: ag.ambiguo || null };
+            x.msgs++; x.convs.add(tk);
+        });
+    });
+    return { linhas: Object.values(g).map(x => Object.assign(x, { convs: x.convs.size })), fora };
+}
+app.get('/api/bg-recebimento-agentes', async (req, res) => {
+    if (!ehAdminReq(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        const p = bgPeriodo(req, AG_MAX_DIAS, AG_MAX_DIAS_COMPARACAO); if (p.erro) return res.status(400).json({ success: false, error: p.erro });
+        const t0 = Date.now(), d = await bgLer(req.query.fresh === '1');
+        const { linhas, fora } = bgAgentesLinhas(d, p);
+        res.json(Object.assign({ success: true, fonte: 'buygoods' }, p.cab, { max_dias: AG_MAX_DIAS, max_dias_comparacao: AG_MAX_DIAS_COMPARACAO, gerado_em: new Date().toISOString(), ms: Date.now() - t0,
+            atualizado_planilha: bgUltimaFoto(d), linhas, roster: BG_ROSTER, fora_das_equipes: fora, times: bgTimes(d, p) }));
+    } catch (error) { console.error('Erro BuyGoods agentes:', error); res.status(500).json({ success: false, error: error.message }); }
+});
+
+// ---- 🛒 aba BuyGoods do AGENTE (ao lado de Tickets): mesmo formato de /api/tickets (semana seg→dom, meta 400), com TODOS os agentes ----
+// Conta igual ao Chatwoot: cada mensagem ENVIADA ao cliente no dia (00:00–23:59 de Brasília) = 1. Nota interna não conta.
+app.get('/api/bg-tickets', async (req, res) => {
+    try {
+        let ini, fim;
+        if (req.query.since && req.query.until) { ini = unixParaYYYYMMDD(req.query.since); fim = unixParaYYYYMMDD(req.query.until); }
+        else {
+            const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            const day = agora.getDay(); const seg = new Date(agora); seg.setDate(agora.getDate() - (day === 0 ? 6 : day - 1));
+            const dom = new Date(seg); dom.setDate(seg.getDate() + 6); ini = formatarDataSQL(seg); fim = formatarDataSQL(dom);
+        }
+        const _errPer = tkPeriodoValido(ini, fim); if (_errPer) return res.status(400).json({ success: false, error: _errPer });
+        const d = await bgLer(req.query.fresh === '1');
+        const COL = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+        const mapa = {};
+        BG_ROSTER.forEach(a => { mapa[a.nome] = { nome: a.nome, lider: a.lider, seg: 0, ter: 0, qua: 0, qui: 0, sex: 0, sab: 0, dom: 0, total: 0, tickets: new Set() }; });
+        (d.respostas || []).forEach(r => {
+            if (bgSim(r.teste)) return;
+            const b = bgBR(r.quando_utc); if (!b || b.dia < ini || b.dia > fim) return;
+            const ag = bgAgente(r.agente); if (!ag) return;
+            const a = mapa[ag.nome] = mapa[ag.nome] || { nome: ag.nome, lider: ag.lider, seg: 0, ter: 0, qua: 0, qui: 0, sex: 0, sab: 0, dom: 0, total: 0, tickets: new Set() };
+            a[COL[new Date(b.dia + 'T12:00:00Z').getUTCDay()]]++; a.total++; a.tickets.add(r.conta + '|' + r.ticket);
+        });
+        const agentes = Object.values(mapa).map(a => Object.assign(a, { tickets_distintos: a.tickets.size, tickets: undefined, meta: Math.min(Math.round((a.total / 400) * 100), 100) })).sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
+        res.json({ success: true, fonte: 'buygoods', periodo: { inicio: ini, fim }, atualizado_planilha: bgUltimaFoto(d), agentes });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
+// ---- 🛒 Tickets Geral da BuyGoods (aba do agente) — MESMA regra do /api/tickets-geral: colunas por semana a partir do domingo
+// anterior ao início, meta = 400 por semana; padrão = mês atual. Todos os agentes das equipes (zerados inclusive), com a líder.
+app.get('/api/bg-tickets-geral', async (req, res) => {
+    try {
+        let ini, fim;
+        if (req.query.since && req.query.until) { ini = unixParaYYYYMMDD(req.query.since); fim = unixParaYYYYMMDD(req.query.until); }
+        else { const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })); ini = formatarDataSQL(new Date(agora.getFullYear(), agora.getMonth(), 1)); fim = formatarDataSQL(agora); }
+        const _errPer = tkPeriodoValido(ini, fim); if (_errPer) return res.status(400).json({ success: false, error: _errPer });
+        const dIni = new Date(ini + 'T12:00:00Z'), dFim = new Date(fim + 'T12:00:00Z');
+        const domingoBase = new Date(dIni.getTime()); domingoBase.setUTCDate(dIni.getUTCDate() - dIni.getUTCDay());
+        const totalSemanas = Math.floor(((dFim.getTime() - domingoBase.getTime()) / 86400000) / 7) + 1;
+        const metaCalculada = totalSemanas * 400;
+        const d = await bgLer(req.query.fresh === '1');
+        const mapa = {};
+        const novo = (nome, lider) => ({ nome, lider, semanas: new Array(totalSemanas).fill(0), total: 0, tickets: new Set() });
+        BG_ROSTER.forEach(a => { mapa[a.nome] = novo(a.nome, a.lider); });
+        (d.respostas || []).forEach(r => {
+            if (bgSim(r.teste)) return;
+            const b = bgBR(r.quando_utc); if (!b || b.dia < ini || b.dia > fim) return;
+            const ag = bgAgente(r.agente); if (!ag) return;
+            const a = mapa[ag.nome] = mapa[ag.nome] || novo(ag.nome, ag.lider);
+            const idx = Math.floor(Math.round((new Date(b.dia + 'T12:00:00Z').getTime() - domingoBase.getTime()) / 86400000) / 7);
+            if (idx >= 0 && idx < totalSemanas) { a.semanas[idx]++; a.total++; a.tickets.add(r.conta + '|' + r.ticket); }
+        });
+        const agentes = Object.values(mapa).map(a => Object.assign(a, { tickets_distintos: a.tickets.size, tickets: undefined, meta: Math.min(Math.round((a.total / metaCalculada) * 100), 100) }))
+            .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
+        res.json({ success: true, fonte: 'buygoods', periodo: { inicio: ini, fim }, semanas: totalSemanas, atualizado_planilha: bgUltimaFoto(d), agentes });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+});
+
+// ==========================================
 // 15.6 🤖 PERGUNTE AO DASH (14/10/2026) — Fase 1 · SOMENTE ADMIN
 // O gestor pergunta em português. O Claude (API da Anthropic) só ESCOLHE uma consulta pronta deste catálogo e escreve
 // a leitura do resultado: quem calcula é o banco (só leitura, consultas fixas daqui) ou as próprias rotas do Dash
@@ -7167,7 +7557,7 @@ app.get('/api/q3', async (req, res) => {
     if (!ehAdminQ3(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
     try {
         const sheets = sheetsQ3ReadOnly();
-        const sheetId = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
+        const sheetId = QUAL_SHEET_ANTIGA;   // 03/11/2026: o Q3 continua na planilha ANTIGA (RELATORIO_Q3_2026 / BASE DE MÉDIA não existem na nova)
         // valores CRUS (UNFORMATTED) — evita o bug de % já multiplicada e médias vindo como texto
         const resp = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'RELATORIO_Q3_2026'!A1:J220`, valueRenderOption: 'UNFORMATTED_VALUE' });
         const valores = resp.data.values || [];
@@ -7224,7 +7614,7 @@ app.get('/api/q3-produtos', async (req, res) => {
     if (!ehAdminQ3(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
     try {
         const sheets = sheetsQ3ReadOnly();
-        const sheetId = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '1YVu29a_MiqU73_Za_Daj7nmfMJz-phTec2gxX6VKqwk';
+        const sheetId = QUAL_SHEET_ANTIGA;   // 03/11/2026: o Q3 continua na planilha ANTIGA (RELATORIO_Q3_2026 / BASE DE MÉDIA não existem na nova)
         const resp = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'BASE_SINALIZACOES'!A1:L60000` });
         const rows = resp.data.values || [];
         // Cabeçalho: Semana | Analista | Monitoria | Ticket | Item sinalizado | Peso | Tipo | Data | Quantidade | Obs | Feedback | Mês
@@ -7271,6 +7661,116 @@ app.get('/api/q3-produtos', async (req, res) => {
         const produtos = Object.values(prodMap).sort((a, b) => b.sinalizacoes - a.sinalizacoes);
         res.json({ success: true, produtos, tickets_sinalizados: ids.length, tickets_com_produto: comProduto });
     } catch (e) { console.error('[q3-produtos]', e.message); res.status(500).json({ success: false, error: e.message, produtos: [] }); }
+});
+
+// 21.3 — 03/11/2026: PAINEL EXECUTIVO NOVO (planilha "Sistema de Monitoria QA", SÓ LEITURA, ADMIN)
+// Lê numa chamada só as abas da planilha nova e devolve os registros já organizados; a tela calcula por trimestre/mês
+// (pontos perdidos por item, aproveitamento por bloco, reincidência, meta e situação, analistas por líder/status).
+// Mesma regra da Qualidade: célula "Adaptação" vem marcada (adapt) e a tela deixa fora das médias.
+let qaPainelCache = { ts: 0, dados: null };
+app.get('/api/qa-painel', async (req, res) => {
+    if (!ehAdminQ3(req)) return res.status(403).json({ success: false, error: 'Acesso restrito para Administradores.' });
+    try {
+        if (!req.query.fresh && qaPainelCache.dados && Date.now() - qaPainelCache.ts < 120000) return res.json(qaPainelCache.dados);
+        const sheets = sheetsQ3ReadOnly();
+        const sheetId = process.env.GOOGLE_SHEET_ID_QUALIDADE ? process.env.GOOGLE_SHEET_ID_QUALIDADE.trim() : '';
+        if (!sheetId) return res.json({ success: false, error: 'GOOGLE_SHEET_ID_QUALIDADE não configurado.' });
+        const abas = { mon: 'BASE_MONITORIA!A1:L', sin: 'BASE_SINALIZACOES!A1:L', mm: 'MEDIA_MENSAL!A1:L', cad: 'CADASTRO!A1:P', ctl: 'CONTROLE!A1:N', pdca: 'PDCA!A1:I', det: 'DETALHES_MONITORIA!A1:E' };
+        const r = await sheets.spreadsheets.values.batchGet({ spreadsheetId: sheetId, ranges: Object.values(abas).map(a => "'" + a.split('!')[0] + "'!" + a.split('!')[1]), valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'FORMATTED_STRING' });
+        const vr = {}; Object.keys(abas).forEach((k, i) => { vr[k] = ((r.data.valueRanges || [])[i] || {}).values || []; });
+        const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+        const txt = v => String(v == null ? '' : v).trim();
+        const num = v => { if (v === '' || v == null) return null; const n = typeof v === 'number' ? v : parseFloat(String(v).replace('%', '').replace(',', '.')); return isNaN(n) ? null : n; };
+        const mesNum = v => { const m = String(v == null ? '' : v).replace(/[.,]0+$/, '').match(/^(20\d{2})\D?(\d{2})$/); return m ? parseInt(m[1] + m[2], 10) : null; };
+        // acha o cabeçalho (linha com os nomes pedidos) e devolve { linha, col(nome) }
+        const cabec = (rows, ...precisa) => {
+            for (let i = 0; i < Math.min(rows.length, 12); i++) {
+                const n = (rows[i] || []).map(norm);
+                if (precisa.every(p => n.includes(p))) return { linha: i, col: (...nomes) => { for (const x of nomes) { const k = n.indexOf(norm(x)); if (k >= 0) return k; } for (const x of nomes) { const k = n.findIndex(c => c.startsWith(norm(x))); if (k >= 0) return k; } return -1; } };
+            }
+            return null;
+        };
+        const celInfo = (cel, nome) => { const s = String(cel || '').toUpperCase(); return { time: qualSiglaDoSetor(s, normalizeNome(nome)), adapt: s.includes('ADAPTA') }; };
+
+        // BASE_MONITORIA: 1 linha por monitoria
+        const mon = [];
+        const hM = cabec(vr.mon, 'analista', 'mes');
+        if (hM) {
+            const c = { id: hM.col('id'), dt: hM.col('data/hora', 'data'), mes: hM.col('mes'), ciclo: hM.col('ciclo'), nome: hM.col('analista'), cel: hM.col('celula'), link: hM.col('link do atendimento', 'link'), nota: hM.col('nota'), ncg: hM.col('ncg') };
+            vr.mon.slice(hM.linha + 1).forEach(row => {
+                const nome = txt(row[c.nome]), mes = mesNum(row[c.mes]);
+                if (!nome || !mes) return;
+                const ci = celInfo(row[c.cel], nome);
+                mon.push({ id: txt(row[c.id]).replace(/[.,]0+$/, ''), dt: txt(row[c.dt]), mes, ciclo: parseInt(row[c.ciclo]) || 1, nome, cel: txt(row[c.cel]), time: ci.time, adapt: ci.adapt,
+                    nota: num(row[c.nota]), ncg: norm(row[c.ncg]) === 'sim', link: c.link >= 0 ? txt(row[c.link]) : '' });
+            });
+        }
+        // BASE_SINALIZACOES: 1 linha por item sinalizado (linhas sem analista/mês são lixo de fórmula e ficam fora)
+        const sin = [];
+        const hS = cabec(vr.sin, 'analista', 'mes');
+        if (hS) {
+            const c = { id: hS.col('id monitoria', 'id'), mes: hS.col('mes'), ciclo: hS.col('ciclo'), nome: hS.col('analista'), cel: hS.col('celula'), cod: hS.col('codigo'), item: hS.col('item sinalizado', 'item'), bloco: hS.col('bloco'), peso: hS.col('peso'), tipo: hS.col('tipo') };
+            vr.sin.slice(hS.linha + 1).forEach(row => {
+                const nome = txt(row[c.nome]), mes = mesNum(row[c.mes]), item = txt(row[c.item]);
+                if (!nome || !mes || !item) return;
+                const ci = celInfo(row[c.cel], nome);
+                sin.push({ id: txt(row[c.id]).replace(/[.,]0+$/, ''), mes, ciclo: parseInt(row[c.ciclo]) || 1, nome, cel: txt(row[c.cel]), time: ci.time, adapt: ci.adapt,
+                    cod: txt(row[c.cod]), item, bloco: txt(row[c.bloco]), peso: num(row[c.peso]) || 0, tipo: /ncg/i.test(txt(row[c.tipo])) ? 'NCG' : 'Item' });
+            });
+        }
+        // MEDIA_MENSAL: média oficial do mês por analista + Situação (Na meta / Abaixo da meta / Parcial)
+        const mm = [];
+        const hMM = cabec(vr.mm, 'analista', 'mes');
+        if (hMM) {
+            const c = { mes: hMM.col('mes'), nome: hMM.col('analista'), cel: hMM.col('celula'), c1: hMM.col('ciclo 1'), c2: hMM.col('ciclo 2'), c3: hMM.col('ciclo 3'), c4: hMM.col('ciclo 4'), media: hMM.col('media do mes', 'media'), mon: hMM.col('monitorias'), concl: hMM.col('concluido em', 'concluido'), sit: hMM.col('situacao') };
+            vr.mm.slice(hMM.linha + 1).forEach(row => {
+                const nome = txt(row[c.nome]), mes = mesNum(row[c.mes]);
+                if (!nome || !mes) return;
+                const ci = celInfo(row[c.cel], nome);
+                mm.push({ mes, nome, cel: txt(row[c.cel]), time: ci.time, adapt: ci.adapt, ciclos: [c.c1, c.c2, c.c3, c.c4].map(k => k >= 0 ? num(row[k]) : null),
+                    media: num(row[c.media]), mon: num(row[c.mon]) || 0, concl: txt(row[c.concl]), sit: txt(row[c.sit]) });
+            });
+        }
+        // CADASTRO: analistas (status ATIVO/INATIVO), catálogo do checklist (código, item, bloco, peso, tipo) e a meta de nota
+        const cad = [], itens = []; let meta = 80;
+        const hC = cabec(vr.cad, 'analista', 'status');
+        if (hC) {
+            const cN = hC.col('analista'), cCel = hC.col('celula'), cSt = hC.col('status'), cCod = hC.col('codigo'), cIt = hC.col('item (nome curto)', 'item'), cBl = hC.col('bloco'), cPe = hC.col('peso'), cTi = hC.col('tipo');
+            vr.cad.slice(hC.linha + 1).forEach(row => {
+                const nome = txt(row[cN]);
+                if (nome && txt(row[cSt])) { const ci = celInfo(row[cCel], nome); cad.push({ nome, cel: txt(row[cCel]), time: ci.time, adapt: ci.adapt, ativo: norm(row[cSt]) === 'ativo' }); }
+                if (cCod >= 0 && txt(row[cCod]) && txt(row[cIt]) && num(row[cPe]) !== null) itens.push({ cod: txt(row[cCod]), item: txt(row[cIt]), bloco: txt(row[cBl]), peso: num(row[cPe]) || 0, tipo: /ncg/i.test(txt(row[cTi])) ? 'NCG' : 'Item' });
+            });
+        }
+        vr.cad.forEach(row => { (row || []).forEach((v, i) => { if (/meta de nota/i.test(String(v || ''))) { const n = num(row[i + 1]); if (n !== null) meta = n; } }); });
+        // CONTROLE: a liderança de cada analista (a mesma que a Qualidade usa na planilha)
+        const lider = {};
+        const hL = cabec(vr.ctl, 'analista', 'lideranca');
+        if (hL) { const cN = hL.col('analista'), cL = hL.col('lideranca'); vr.ctl.slice(hL.linha + 1).forEach(row => { const n = txt(row[cN]), l = txt(row[cL]); if (n && l && !/^\d/.test(n)) lider[n] = l; }); }
+        // quem saiu não aparece mais no CONTROLE: usa a mesma regra das Notas de Monitoria (QUAL_LIDER_DE_QUEM_SAIU)
+        const nomeLider = { flavia: 'Flávia', adevania: 'Adevânia', camila: 'Camila' };
+        mon.forEach(m => { if (!lider[m.nome]) { const l = QUAL_LIDER_DE_QUEM_SAIU[normalizeNome(m.nome)]; if (l) lider[m.nome] = nomeLider[norm(l)] || l; } });
+        // sinalização sem bloco (linhas antigas sem código): o bloco sai do número do item ("2.4 ..." -> bloco "2. ...")
+        sin.forEach(s => {
+            if (s.bloco) return;
+            const it = itens.find(x => norm(x.item) === norm(s.item)) || (s.item.match(/^(\d)\.\d/) ? itens.find(x => x.tipo === 'Item' && x.bloco.startsWith(s.item.match(/^(\d)\./)[1] + '.')) : null) || (s.tipo === 'NCG' ? itens.find(x => x.tipo === 'NCG') : null);
+            if (it) { s.bloco = it.bloco; if (!s.cod && norm(it.item) === norm(s.item)) s.cod = it.cod; }
+        });
+        // PDCA (plano de ação) e DETALHES_MONITORIA (produto e motivo do contato, resumidos) — usados na etapa 2 do painel
+        const pdca = [];
+        const hP = cabec(vr.pdca, 'analista', 'mes');
+        if (hP) {
+            const c = { mes: hP.col('mes'), nome: hP.col('analista'), lid: hP.col('lideranca'), nota: hP.col('nota'), item: hP.col('item que mais errou', 'item'), acao: hP.col('acao'), st: hP.col('status'), em: hP.col('atualizado em'), por: hP.col('por') };
+            vr.pdca.slice(hP.linha + 1).forEach(row => { const nome = txt(row[c.nome]), mes = mesNum(row[c.mes]); if (nome && mes) pdca.push({ mes, nome, lider: txt(row[c.lid]), nota: num(row[c.nota]), item: txt(row[c.item]), acao: txt(row[c.acao]).slice(0, 300), status: txt(row[c.st]), em: txt(row[c.em]), por: txt(row[c.por]) }); });
+        }
+        const det = {};
+        const hD = cabec(vr.det, 'id', 'produto');
+        if (hD) { const cI = hD.col('id'), cP = hD.col('produto'), cMo = hD.col('motivo do contato', 'motivo'); vr.det.slice(hD.linha + 1).forEach(row => { const id = txt(row[cI]).replace(/[.,]0+$/, ''); if (id) det[id] = { produto: txt(row[cP]), motivo: txt(row[cMo]).slice(0, 160) }; }); }
+
+        const dados = { success: true, gerado: new Date().toISOString(), meta, mon, sin, mm, cad, itens, lider, pdca, det };
+        qaPainelCache = { ts: Date.now(), dados };
+        res.json(dados);
+    } catch (e) { console.error('[qa-painel]', e.message); res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
